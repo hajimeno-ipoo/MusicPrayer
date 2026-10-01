@@ -9,6 +9,7 @@ final class PlayerStore {
     var position: Double = 0
     var duration: Double = 0
     var isPlaying = false
+    var visualizerStyle = VisualizerStyle.ribbons
     var volume: Float = 0.75 { didSet { engine.volume = isMuted ? 0 : volume } }
     var isMuted = false { didSet { engine.volume = isMuted ? 0 : volume } }
     var shuffle = false { didSet { planNext() } }
@@ -241,14 +242,18 @@ final class PlayerStore {
         let sceneIndex = (sampled.section ?? 0) - 1
         let scene = scenes.indices.contains(sceneIndex) ? scenes[sceneIndex] : nil
         var frame = composer.compose(time: previewTime ?? time, audio: audio, moment: sampled, scene: scene, analyzed: analysis != nil, presence: presence, dt: dt)
+        frame.trackID = currentTrack?.id
         if previewTime != nil { visualTransition = nil }
         if let transition = visualTransition {
             frame = transition.frame(incoming: frame, at: uptime)
             if transition.isFinished(at: uptime) { visualTransition = nil }
         }
+        frame.visualizerStyle = visualizerStyle
         visualSource.publish(frame)
         if now.timeIntervalSince(uiTick) >= 0.1 {
-            position = time; moment = sampled; isPlaying = engine.isPlaying; duration = engine.duration
+            position = time
+            if moment != sampled { moment = sampled }
+            isPlaying = engine.isPlaying; duration = engine.duration
             nowPlaying?.update()
             uiTick = now
         }

@@ -3,7 +3,9 @@ import Metal
 
 /// Two textures retain waves between frames; clicks and musical impulses share the same simulation.
 final class WaterSurface {
+    static let activitySampleCount = 512
     private let pipeline: MTLComputePipelineState
+    private let activityPipeline: MTLComputePipelineState
     private var states: [MTLTexture]
     private var current = 0
     private var initialized = false
@@ -22,6 +24,8 @@ final class WaterSurface {
         let library = try device.makeLibrary(source: String(contentsOf: url, encoding: .utf8), options: nil)
         guard let function = library.makeFunction(name: "advanceWater") else { throw RenderFailure.message("水面のMetal関数がありません。") }
         pipeline = try device.makeComputePipelineState(function: function)
+        guard let activityFunction = library.makeFunction(name: "measureWaterActivity") else { throw RenderFailure.message("水面の静止判定用Metal関数がありません。") }
+        activityPipeline = try device.makeComputePipelineState(function: activityFunction)
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg32Float, width: 256, height: 128, mipmapped: false)
         descriptor.storageMode = .private
         descriptor.usage = [.shaderRead, .shaderWrite]
@@ -72,5 +76,25 @@ final class WaterSurface {
             current = destination; initialized = true
         }
         pending.removeAll(keepingCapacity: true)
+    }
+
+    /// Read results only after this command completes; each sample includes both wave heights.
+    func encodeActivityCheck(command: MTLCommandBuffer, result: MTLBuffer) throws {
+        guard result.length >= Self.activitySampleCount * MemoryLayout<Float>.stride else {
+            throw RenderFailure.message("水面の静止判定用bufferが小さすぎます。")
+        }
+        guard let encoder = command.makeComputeCommandEncoder() else {
+            throw RenderFailure.message("水面の静止判定を準備できません。")
+        }
+        var layout = SIMD2<UInt32>(UInt32(Self.activitySampleCount), initialized ? 1 : 0)
+        encoder.label = "Measure remaining water wave activity"
+        encoder.setComputePipelineState(activityPipeline)
+        encoder.setTexture(texture, index: 0)
+        encoder.setBuffer(result, offset: 0, index: 0)
+        encoder.setBytes(&layout, length: MemoryLayout<SIMD2<UInt32>>.stride, index: 1)
+        let width = min(activityPipeline.maxTotalThreadsPerThreadgroup, activityPipeline.threadExecutionWidth)
+        encoder.dispatchThreads(MTLSize(width: Self.activitySampleCount, height: 1, depth: 1),
+                                threadsPerThreadgroup: MTLSize(width: width, height: 1, depth: 1))
+        encoder.endEncoding()
     }
 }

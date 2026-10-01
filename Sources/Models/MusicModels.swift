@@ -45,7 +45,7 @@ struct MusicAnalysis: Codable, Sendable {
     var keys: [KeySpan] = []
 }
 
-struct MusicalMoment: Sendable {
+struct MusicalMoment: Sendable, Equatable {
     var bpm: Float?
     var key: String?
     var section: Int?
@@ -70,7 +70,15 @@ struct MusicalMoment: Sendable {
     var modeBias: Float = 0
 }
 
+enum VisualizerStyle: String, CaseIterable, Identifiable, Sendable {
+    case ribbons, ink
+    var id: Self { self }
+    var title: String { self == .ribbons ? "リボン" : "光るインク" }
+}
+
 struct VisualFrame: Sendable {
+    var visualizerStyle = VisualizerStyle.ribbons
+    var trackID: UUID?
     var camera = CameraPose()
     var time: Float = 0
     var tempo: Float = 1
@@ -119,7 +127,18 @@ final class VisualFrameSource: @unchecked Sendable {
     let waterInteractions = WaterInteractions()
     private let lock = NSLock()
     private var frame = VisualFrame()
-    func publish(_ frame: VisualFrame) { lock.lock(); self.frame = frame; lock.unlock() }
+    private var observer: (() -> Void)?
+    func publish(_ frame: VisualFrame) {
+        lock.lock()
+        self.frame = frame
+        let observer = self.observer
+        lock.unlock()
+        observer?()
+    }
+    func observeFrames(_ observer: @escaping () -> Void) {
+        lock.lock(); defer { lock.unlock() }
+        self.observer = observer
+    }
     func snapshot() -> VisualFrame { lock.lock(); defer { lock.unlock() }; return frame }
 }
 

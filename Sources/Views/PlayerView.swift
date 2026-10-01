@@ -10,6 +10,7 @@ struct PlayerView: View {
     @State private var hideTask: Task<Void, Never>?
     @State private var dropTarget = false
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
+    private var overlayVisible: Bool { engaged || !store.isPlaying }
 
     var body: some View {
         GeometryReader { geometry in
@@ -21,10 +22,16 @@ struct PlayerView: View {
                     if store.tracks.isEmpty { welcome; Spacer(minLength: 30) }
                     VStack(spacing: 18) {
                         trackInformation
+                            .opacity(overlayVisible ? 1 : 0)
+                            .allowsHitTesting(overlayVisible)
+                            .accessibilityHidden(!overlayVisible)
                         if let error = store.playbackError { errorRow(error, retry: nil) }
                         if let error = store.analysisError { errorRow("曲の詳しい解析ができませんでした：\(error)", retry: store.retryAnalysis) }
                         if showAnalysis { AnalysisPanel(analysis: store.analysis, time: store.previewTime ?? store.position, duration: store.duration) }
                         MusicalTimeline(store: store)
+                            .opacity(overlayVisible ? 1 : 0)
+                            .allowsHitTesting(overlayVisible)
+                            .accessibilityHidden(!overlayVisible)
                         controls
                     }
                     .padding(.horizontal, geometry.size.width < 1000 ? 32 : 58)
@@ -56,6 +63,10 @@ struct PlayerView: View {
             return !providers.isEmpty
         }
         .onChange(of: store.isPlaying) { _, _ in revealControls() }
+        .onChange(of: store.visualizerStyle) { _, _ in revealControls() }
+        .onChange(of: store.previewTime) { _, value in
+            if value == nil { revealControls() }
+        }
     }
 
     private var header: some View {
@@ -68,13 +79,27 @@ struct PlayerView: View {
                 iconButton("曲の一覧", "list.bullet", action: { showQueue.toggle() })
                     .popover(isPresented: $showQueue, arrowEdge: .bottom) { QueueView(store: store) }
                 iconButton("詳しい解析", "waveform.path", active: showAnalysis, action: { withAnimation(.easeInOut(duration: 0.3)) { showAnalysis.toggle() } })
+                Menu {
+                    Picker("ビジュアライザー", selection: $store.visualizerStyle) {
+                        ForEach(VisualizerStyle.allCases) { style in
+                            Text(style.title).tag(style)
+                        }
+                    }.pickerStyle(.inline)
+                } label: {
+                    Label(store.visualizerStyle.title, systemImage: "sparkles")
+                        .font(.system(size: 11, weight: .medium)).padding(.horizontal, 8).frame(height: 28)
+                }
+                .menuStyle(.borderlessButton)
+                .accessibilityLabel("ビジュアライザー：\(store.visualizerStyle.title)")
+                .help("リボンと光るインクを切り替えます")
                 iconButton("フルスクリーン", "arrow.up.left.and.arrow.down.right", action: { NSApp.keyWindow?.toggleFullScreen(nil) })
             }
             .padding(6).glassEffect(.regular, in: .capsule)
-            .opacity(engaged || !store.isPlaying ? 1 : 0)
-            .allowsHitTesting(engaged || !store.isPlaying)
         }
         .padding(.trailing, 24).padding(.top, 18)
+        .opacity(overlayVisible ? 1 : 0)
+        .allowsHitTesting(overlayVisible)
+        .accessibilityHidden(!overlayVisible)
     }
 
     private var welcome: some View {
@@ -186,8 +211,8 @@ struct PlayerView: View {
                     .accessibilityLabel("音の出力先：\(store.outputName)")
                 }
                 .padding(.horizontal, 18).padding(.vertical, 16).glassEffect(.regular, in: .capsule)
-                .opacity(engaged || !store.isPlaying ? 1 : 0)
-                .allowsHitTesting(engaged || !store.isPlaying)
+                .opacity(overlayVisible ? 1 : 0)
+                .allowsHitTesting(overlayVisible)
             }
         }
     }
@@ -210,7 +235,7 @@ struct PlayerView: View {
         hideTask?.cancel()
         hideTask = Task {
             try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled, store.isPlaying, !showQueue, !showAnalysis else { return }
+            guard !Task.isCancelled, store.isPlaying, !showQueue, !showAnalysis, store.previewTime == nil else { return }
             withAnimation(.easeInOut(duration: 0.6)) { engaged = false }
         }
     }

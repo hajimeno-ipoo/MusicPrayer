@@ -26,7 +26,7 @@ final class VisualizerHostView: NSView {
         layer?.backgroundColor = NSColor(red: 0.005, green: 0.012, blue: 0.04, alpha: 1).cgColor
         metalView.colorPixelFormat = .bgra8Unorm_srgb
         metalView.framebufferOnly = true
-        metalView.preferredFramesPerSecond = 120
+        metalView.preferredFramesPerSecond = 60
         metalView.isPaused = false
         metalView.enableSetNeedsDisplay = false
         metalView.translatesAutoresizingMaskIntoConstraints = false
@@ -53,6 +53,12 @@ final class VisualizerHostView: NSView {
                 DispatchQueue.main.async { self?.showError(message) }
             }
             metalView.delegate = renderer
+            source.observeFrames { [weak self] in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.renderer?.resumeIfNeeded(in: self.metalView)
+                }
+            }
         } catch { showError(error.localizedDescription) }
     }
 
@@ -87,6 +93,7 @@ private final class WaterInteractiveMetalView: MTKView {
         guard let point = screenUV(for: event) else { return }
         draggingWater = interactions.enqueue(screenUV: point)
         if draggingWater {
+            isPaused = false
             lastDragPoint = point
             lastDragTime = event.timestamp
         } else {
@@ -101,6 +108,7 @@ private final class WaterInteractiveMetalView: MTKView {
         let dx = point.x - previous.x, dy = point.y - previous.y
         guard dx * dx + dy * dy >= 0.000144, event.timestamp - lastDragTime >= 0.025 else { return }
         if interactions.enqueue(screenUV: point, strength: 0.35, radius: 0.018) {
+            isPaused = false
             lastDragPoint = point
             lastDragTime = event.timestamp
         }

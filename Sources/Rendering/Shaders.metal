@@ -209,11 +209,20 @@ fragment float4 compositeFragment(ScreenOut in [[stage_in]], texture2d<float> sc
     } else {
         float distance = uv.y - horizon;
         float depth = distance / (1 - horizon);
-        float ripple = sin(distance * 135 - t * (1.7 + pace * 2.0) + sin(uv.x * 35 + t) * 1.4);
-        ripple += 0.42 * sin(distance * 280 + uv.x * 17 + t * 2.1);
-        float amplitude = (0.0017 + f.clockAudio.w * 0.005) * (0.3 + depth * 2.5)
-                        * mix(0.75, 1.25, water) * (1 + f.bandsBeat.w * 0.12);
-        float2 reflected = float2(uv.x + ripple * amplitude * 3.7, horizon - 0.055 - distance * 1.10 + ripple * amplitude);
+        // Fine crossed waves move the image locally instead of bending whole ribbons.
+        float surfaceX = uv.x * f.viewport.x;
+        float phase = t * (0.6 + pace * 0.5);
+        float rippleX = 0.50 * sin(surfaceX * 110 + depth * 155 - phase)
+                      + 0.30 * sin(surfaceX * -147 + depth * 93 + t * 1.1)
+                      + 0.20 * sin(surfaceX * 73 + depth * 211 - t * 1.3);
+        float rippleY = 0.50 * sin(surfaceX * 89 - depth * 137 + phase * 0.8)
+                      + 0.30 * sin(surfaceX * 131 + depth * 179 - t)
+                      + 0.20 * sin(surfaceX * -167 + depth * 67 + t * 1.2);
+        float amplitude = (0.0006 + clamp(f.clockAudio.w, 0.0, 1.0) * 0.0007)
+                        * (0.25 + depth * 0.75) * mix(0.85, 1.1, water)
+                        * (1 + clamp(f.bandsBeat.w, 0.0, 1.0) * 0.08);
+        float2 reflected = float2(uv.x, horizon - 0.055 - distance * 1.10);
+        float2 distortion = float2(rippleX * 1.5 / f.viewport.x, rippleY * 0.35) * amplitude;
         float2 waterUV = float2(uv.x, depth);
         float2 texel = 1.0 / float2(waves.get_width(), waves.get_height());
         float waveHeight = waves.sample(linearSampler, waterUV).r;
@@ -221,11 +230,14 @@ fragment float4 compositeFragment(ScreenOut in [[stage_in]], texture2d<float> sc
                             - waves.sample(linearSampler, waterUV - float2(texel.x, 0)).r,
                               waves.sample(linearSampler, waterUV + float2(0, texel.y)).r
                             - waves.sample(linearSampler, waterUV - float2(0, texel.y)).r);
-        reflected += slope * float2(0.045 / f.viewport.x, 0.028) * (0.4 + depth);
+        // Strong clicks still ripple, but cannot pull a reflected body into a large waist.
+        float2 waveOffset = slope * float2(0.009 / f.viewport.x, 0.006) * (0.3 + depth * 0.7);
+        float2 limit = float2(0.002 / f.viewport.x, 0.0012);
+        distortion += waveOffset / (1 + abs(waveOffset) / limit);
+        reflected += distortion;
         float attenuation = (0.65 + f.structureColor.w * analysis * 0.12) * pow(1 - depth, 1.15) * mix(0.78, 1.22, water);
-        float waterLines = 0.68 + 0.32 * sin(distance * 340 + sin(uv.x * 38) * 3 + t * 2.0);
         color = (scene.sample(linearSampler, reflected).rgb + bloom.sample(linearSampler, reflected).rgb * (bloomStrength - 0.04))
-              * attenuation * waterLines * presence;
+              * attenuation * 0.68 * presence;
         // Surface normals catch cyan/magenta light, making waves visible even on dark reflection.
         float crest = min(1.0, length(slope) * 2.0 + abs(waveHeight) * 0.06);
         color += mix(float3(0.003, 0.07, 0.14), float3(0.10, 0.005, 0.09), uv.x)

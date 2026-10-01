@@ -30,3 +30,24 @@ kernel void advanceWater(texture2d<float, access::read> previous [[texture(0)]],
     }
     next.write(float4(value, state.x, 0, 0), p);
 }
+
+// Each thread reduces 64 cells of the 256 x 128 surface, without modifying the waves.
+kernel void measureWaterActivity(texture2d<float, access::read> waves [[texture(0)]],
+                                 device float* result [[buffer(0)]],
+                                 constant uint2& layout [[buffer(1)]],
+                                 uint sample [[thread_position_in_grid]]) {
+    if (sample >= layout.x) return;
+    float largest = 0;
+    if (layout.y > 0) {
+        uint width = waves.get_width();
+        uint count = width * waves.get_height();
+        uint cellsPerSample = (count + layout.x - 1) / layout.x;
+        uint end = min(count, (sample + 1) * cellsPerSample);
+        for (uint index = sample * cellsPerSample; index < end; ++index) {
+            float2 state = waves.read(uint2(index % width, index / width)).rg;
+            float magnitude = all(isfinite(state)) ? max(abs(state.x), abs(state.y)) : INFINITY;
+            largest = max(largest, magnitude);
+        }
+    }
+    result[sample] = largest;
+}

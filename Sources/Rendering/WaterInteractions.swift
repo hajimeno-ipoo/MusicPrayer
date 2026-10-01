@@ -51,4 +51,9 @@ final class WaterInteractions: @unchecked Sendable {
         pulses.removeAll(keepingCapacity: true)
         return result
     }
+
+    var hasPendingPulses: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !pulses.isEmpty
+    }
 }

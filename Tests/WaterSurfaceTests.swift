@@ -59,6 +59,66 @@ final class WaterSurfaceTests: XCTestCase {
         XCTAssertLessThan(heightEnergy(late), heightEnergy(early) * 0.5)
     }
 
+    func testActivityMeasuresFlatWaterClickAndPropagatingWave() throws {
+        let (device, queue) = try environment()
+        let surface = try WaterSurface(device: device)
+        XCTAssertEqual(try activity(surface, device: device, queue: queue).max(), 0)
+        try advance(surface, queue: queue, steps: 1)
+        XCTAssertEqual(try activity(surface, device: device, queue: queue).max(), 0)
+
+        try advance(surface, queue: queue, steps: 1,
+                    pulses: [WaterPulse(position: SIMD2(0.5, 0.5), strength: 0.8, radius: 0.025)])
+        let clicked = try activity(surface, device: device, queue: queue)
+        XCTAssertGreaterThan(try XCTUnwrap(clicked.max()), 0.7)
+        try advance(surface, queue: queue, steps: 100)
+        let propagated = try activity(surface, device: device, queue: queue)
+        let field = try read(surface.texture, device: device, queue: queue)
+        XCTAssertTrue(propagated.allSatisfy(\.isFinite))
+        XCTAssertEqual(try XCTUnwrap(propagated.max()), try XCTUnwrap(field.map { abs($0) }.max()))
+        XCTAssertGreaterThan(try XCTUnwrap(propagated.max()), 0.00001)
+    }
+
+    func testActivityIncludesPreviousHeightAtTheLastCell() throws {
+        let (device, queue) = try environment()
+        let surface = try WaterSurface(device: device)
+        try advance(surface, queue: queue, steps: 1)
+        var state = Array(repeating: Float.zero, count: width * height * 2)
+        state[0] = 0.3
+        state[state.count - 1] = -0.75
+        let buffer = try XCTUnwrap(state.withUnsafeBytes {
+            device.makeBuffer(bytes: $0.baseAddress!, length: $0.count, options: .storageModeShared)
+        })
+        let command = try XCTUnwrap(queue.makeCommandBuffer())
+        let blit = try XCTUnwrap(command.makeBlitCommandEncoder())
+        let rowBytes = width * 2 * MemoryLayout<Float>.stride
+        blit.copy(from: buffer, sourceOffset: 0, sourceBytesPerRow: rowBytes, sourceBytesPerImage: rowBytes * height,
+                  sourceSize: MTLSize(width: width, height: height, depth: 1), to: surface.texture,
+                  destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
+        blit.endEncoding()
+        command.commit()
+        command.waitUntilCompleted()
+        XCTAssertEqual(command.status, .completed, command.error?.localizedDescription ?? "Water state upload failed")
+        let samples = try activity(surface, device: device, queue: queue)
+        XCTAssertEqual(samples.first, 0.3)
+        XCTAssertEqual(samples.last, 0.75)
+        XCTAssertEqual(samples.max(), 0.75)
+    }
+
+    func testActivityFallsBelowIdleThresholdAfterLongDamping() throws {
+        let (device, queue) = try environment()
+        let surface = try WaterSurface(device: device)
+        try advance(surface, queue: queue, steps: 1,
+                    pulses: [WaterPulse(position: SIMD2(0.5, 0.5), strength: 0.8, radius: 0.025)])
+        var peak = try XCTUnwrap(activity(surface, device: device, queue: queue).max())
+        XCTAssertGreaterThan(peak, 0.00001)
+        for _ in 0..<10 where peak > 0.00001 {
+            try advance(surface, queue: queue, steps: 1200)
+            peak = try XCTUnwrap(activity(surface, device: device, queue: queue).max())
+        }
+        XCTAssertTrue(peak.isFinite)
+        XCTAssertLessThanOrEqual(peak, 0.00001)
+    }
+
     private func environment() throws -> (MTLDevice, MTLCommandQueue) {
         guard let device = MTLCreateSystemDefaultDevice() else { throw XCTSkip("Metal device unavailable") }
         return (device, try XCTUnwrap(device.makeCommandQueue()))
@@ -80,6 +140,17 @@ final class WaterSurfaceTests: XCTestCase {
             XCTAssertEqual(command.status, .completed, command.error?.localizedDescription ?? "Water compute command failed")
             completedSteps += batch
         }
+    }
+
+    private func activity(_ surface: WaterSurface, device: MTLDevice, queue: MTLCommandQueue) throws -> [Float] {
+        let count = WaterSurface.activitySampleCount
+        let buffer = try XCTUnwrap(device.makeBuffer(length: count * MemoryLayout<Float>.stride, options: .storageModeShared))
+        let command = try XCTUnwrap(queue.makeCommandBuffer())
+        try surface.encodeActivityCheck(command: command, result: buffer)
+        command.commit()
+        command.waitUntilCompleted()
+        XCTAssertEqual(command.status, .completed, command.error?.localizedDescription ?? "Water activity readback failed")
+        return Array(UnsafeBufferPointer(start: buffer.contents().assumingMemoryBound(to: Float.self), count: count))
     }
 
     private func read(_ texture: MTLTexture, device: MTLDevice, queue: MTLCommandQueue) throws -> [Float] {
