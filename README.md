@@ -1,0 +1,33 @@
+# Music Prayer
+
+ローカル音源を再生し、音に反応する立体リボンと水面反射を表示するMacプレイヤーです。
+
+## 必要な環境
+
+- macOS 27以降、Xcode 27（Music Understanding、Now Playingを使用）
+- Metal対応Mac
+- AVFoundationで読み込めるローカル音声ファイル。検証にはMP3、WAVを使用
+
+## 起動
+
+```bash
+./script/build_and_run.sh
+```
+
+CodexのRunボタンも同じスクリプトを使います。アプリは `dist/MusicPrayer.app` に作成されます。`--verify` は起動確認、`--logs` はログ、`--debug` はデバッガ、`--build-only` は起動せずビルドします。
+
+曲を追加ボタンまたはドラッグで読み込み、Spaceで再生・一時停止。Command＋左右矢印で前後の曲へ移動します。シークバーはドラッグ中に映像の雰囲気を確認でき、離すと音声が移動します。曲一覧と解析は右上のボタン、出力先は音量の横のスピーカーボタンで開きます。
+
+詳しい解析中も再生できます。解析失敗は理由と再試行ボタンを表示します。取得できないBPMやキーは作りません。解析はMac内で行い、音源を外へ送信しません。
+
+## 保存
+
+再生する曲、停止位置、音量は `~/Library/Application Support/com.hazimeno.MusicPrayer/queue.json`、解析は同フォルダの `Analysis/` に保存します。解析キャッシュは音源のSHA256とバージョンで照合します。音源自体は変更しません。
+
+## 検証
+
+```bash
+swift test
+```
+
+検証の結果と仕組みは `FOR[hazimeno_ipoo].md` をご覧ください。先に予約した次曲を再生中に変更すると、音声を現在位置から予約し直すため短い途切れが生じる場合があります。120fpsは描画の要求値で、ディスプレイとGPUの実際の性能に応じます。
