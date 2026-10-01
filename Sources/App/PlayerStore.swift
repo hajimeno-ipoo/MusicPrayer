@@ -248,7 +248,6 @@ final class PlayerStore {
             frame = transition.frame(incoming: frame, at: uptime)
             if transition.isFinished(at: uptime) { visualTransition = nil }
         }
-        frame.visualizerStyle = visualizerStyle
         visualSource.publish(frame)
         if now.timeIntervalSince(uiTick) >= 0.1 {
             position = time

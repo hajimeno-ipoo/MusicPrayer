@@ -34,14 +34,13 @@ final class RenderSchedulingTests: XCTestCase {
         XCTAssertFalse(RenderInputs(frame: frame, size: size).matches(presented))
     }
 
-    func testSeekTrackStyleCameraAnalysisAndResizeRequireDrawing() {
+    func testSeekTrackCameraAnalysisAndResizeRequireDrawing() {
         let frame = VisualFrame()
         let size = CGSize(width: 640, height: 360)
         let presented = RenderInputs(frame: frame, size: size)
         let changes: [(inout VisualFrame) -> Void] = [
             { $0.time = 0.000001 },
             { $0.trackID = UUID() },
-            { $0.visualizerStyle = .ink },
             { $0.camera.eye.x += 0.1 },
             { $0.hasAnalysis = 1 },
             { $0.presence = 0.5 },
@@ -88,22 +87,19 @@ final class RenderSchedulingTests: XCTestCase {
         let renderer = try XCTUnwrap(view.delegate as? MetalRenderer)
         XCTAssertEqual(view.preferredFramesPerSecond, 60)
         var frame = VisualFrame()
-        for style in [VisualizerStyle.ribbons, .ink] {
-            frame.visualizerStyle = style
-            let before = renderer.submittedFrameCount
-            source.publish(frame)
-            let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-            while (renderer.submittedFrameCount == before || !view.isPaused), ContinuousClock.now < deadline {
-                try await Task.sleep(for: .milliseconds(10))
-            }
-            XCTAssertGreaterThan(renderer.submittedFrameCount, before)
-            XCTAssertTrue(view.isPaused, "The actual display loop must sleep when inputs and water are static.")
-            let paused = renderer.submittedFrameCount
-            source.publish(frame)
-            try await Task.sleep(for: .milliseconds(80))
-            XCTAssertTrue(view.isPaused)
-            XCTAssertEqual(renderer.submittedFrameCount, paused)
+        let before = renderer.submittedFrameCount
+        source.publish(frame)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while (renderer.submittedFrameCount == before || !view.isPaused), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
         }
+        XCTAssertGreaterThan(renderer.submittedFrameCount, before)
+        XCTAssertTrue(view.isPaused, "The actual display loop must sleep when inputs and water are static.")
+        let paused = renderer.submittedFrameCount
+        source.publish(frame)
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertTrue(view.isPaused)
+        XCTAssertEqual(renderer.submittedFrameCount, paused)
         let beforeSeek = renderer.submittedFrameCount
         frame.time = 2
         source.publish(frame)
@@ -141,23 +137,20 @@ final class RenderSchedulingTests: XCTestCase {
         var error: String?
         renderer.onError = { error = $0 }
         var frame = VisualFrame()
-        for style in [VisualizerStyle.ribbons, .ink] {
-            frame.visualizerStyle = style
-            source.publish(frame)
-            let before = renderer.submittedFrameCount
-            renderer.draw(in: view)
-            try await Task.sleep(for: .milliseconds(100))
-            XCTAssertNil(error)
-            XCTAssertGreaterThan(renderer.submittedFrameCount, before, "The changed scene must acquire a real drawable.")
-            let paused = renderer.submittedFrameCount
-            for _ in 0..<60 { renderer.draw(in: view) }
-            XCTAssertEqual(renderer.submittedFrameCount, paused, "Static frames must submit no GPU work.")
-            frame.time += 1
-            source.publish(frame)
-            renderer.draw(in: view)
-            try await Task.sleep(for: .milliseconds(100))
-            XCTAssertGreaterThan(renderer.submittedFrameCount, paused, "Seeking must redraw.")
-        }
+        source.publish(frame)
+        let before = renderer.submittedFrameCount
+        renderer.draw(in: view)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertNil(error)
+        XCTAssertGreaterThan(renderer.submittedFrameCount, before, "The changed scene must acquire a real drawable.")
+        let paused = renderer.submittedFrameCount
+        for _ in 0..<60 { renderer.draw(in: view) }
+        XCTAssertEqual(renderer.submittedFrameCount, paused, "Static frames must submit no GPU work.")
+        frame.time += 1
+        source.publish(frame)
+        renderer.draw(in: view)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertGreaterThan(renderer.submittedFrameCount, paused, "Seeking must redraw.")
         let beforeClick = renderer.submittedFrameCount
         XCTAssertTrue(source.waterInteractions.enqueue(screenUV: SIMD2(0.5, 0.9)))
         renderer.draw(in: view)

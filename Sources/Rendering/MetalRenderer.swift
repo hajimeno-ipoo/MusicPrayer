@@ -58,7 +58,7 @@ struct RenderInputs {
 
     func matches(_ other: RenderInputs) -> Bool {
         guard size == other.size, frame.time == other.frame.time,
-              frame.trackID == other.frame.trackID, frame.visualizerStyle == other.frame.visualizerStyle,
+              frame.trackID == other.frame.trackID,
               frame.spectrum.count == other.frame.spectrum.count else { return false }
         let tolerance: Float = 0.00001
         return zip(groups, other.groups).allSatisfy { a, b in
@@ -109,8 +109,6 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private let blur: MPSImageGaussianBlur
     private let water: WaterSurface
     private let lightSwarm: LightSwarm
-    private let inkFluid: InkFluid
-    private let inkRenderer: InkRenderer
     private var previousRenderTime: Double?
     private let indexBuffer: MTLBuffer
     private let indexCount: Int
@@ -122,7 +120,6 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private let slots = (0..<3).map { _ in DispatchSemaphore(value: 1) }
     private(set) var submittedFrameCount = 0
     private var scene: MTLTexture?
-    private var inkScene: MTLTexture?
     private var ribbonColors: MTLTexture?
     private var ribbonDepths: MTLTexture?
     private var bright: MTLTexture?
@@ -136,8 +133,6 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         self.queue = queue
         water = try WaterSurface(device: device)
         lightSwarm = try LightSwarm(device: device)
-        inkFluid = try InkFluid(device: device)
-        inkRenderer = try InkRenderer(device: device)
         guard let shaderURL = Bundle.module.url(forResource: "Shaders", withExtension: "metal") else {
             throw RenderFailure.message("Shaders.metalがアプリ内にありません。")
         }
@@ -229,7 +224,6 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         guard size != textureSize else { return }
         let width = max(1, Int(size.width)), height = max(1, Int(size.height))
         scene = try makeTexture(width: width, height: height, format: .rgba16Float, label: "HDR ribbons")
-        inkScene = try makeTexture(width: max(1, width / 2), height: max(1, height / 2), format: .rgba16Float, label: "HDR volumetric ink")
         ribbonColors = try makeTexture(width: width, height: height, format: .rgba16Float, label: "Four ribbon color layers", layers: 4)
         ribbonDepths = try makeTexture(width: width, height: height, format: .depth32Float, label: "Four ribbon depth layers", layers: 4)
         bright = try makeTexture(width: max(1, width / 2), height: max(1, height / 2), format: .rgba16Float, label: "Bright extraction")
@@ -251,7 +245,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         if let previous = lastRenderedInputs, inputs.matches(previous), !source.waterInteractions.hasPendingPulses {
             switch waterActivity.state {
             case .idle:
-                // No drawable acquisition, simulation, ray marching, bloom, or GPU submission.
+                // No drawable acquisition, simulation, bloom, or GPU submission.
                 previousRenderTime = nil
                 view.isPaused = true
                 return
@@ -269,7 +263,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         var committed = false
         defer { if !committed { semaphore.signal() } }
         do { try resize(view.drawableSize) } catch { report(error); return }
-        guard let scene, let inkScene, let ribbonColors, let ribbonDepths, let bright, let bloom,
+        guard let scene, let ribbonColors, let ribbonDepths, let bright, let bloom,
               let command = queue.makeCommandBuffer() else { report(RenderFailure.message("Metalフレームを準備できません。")); return }
         // Do not advance persistent simulations unless this command will be presented.
         guard let drawable = view.currentDrawable, let finalPass = view.currentRenderPassDescriptor else { return }
@@ -277,68 +271,54 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         let elapsed = previousRenderTime.map { max(0, renderTime - $0) } ?? (1.0 / 60)
         previousRenderTime = renderTime
         let aspect = Float(view.drawableSize.width / view.drawableSize.height)
-        var waterFrame = snapshot
-        if snapshot.visualizerStyle == .ink { waterFrame.camera.horizon = InkRenderer.waterHorizon(aspect: aspect) }
-        source.waterInteractions.horizon = waterFrame.camera.horizon
+        source.waterInteractions.horizon = snapshot.camera.horizon
         do {
-            try water.encode(command: command, elapsed: elapsed, pulses: source.waterInteractions.drain(), frame: waterFrame, aspect: aspect)
+            try water.encode(command: command, elapsed: elapsed, pulses: source.waterInteractions.drain(), frame: snapshot, aspect: aspect)
             try water.encodeActivityCheck(command: command, result: waterActivityBuffers[slot])
-            if snapshot.visualizerStyle == .ink {
-                try inkFluid.encode(command: command, frame: snapshot, elapsed: elapsed)
-            } else {
-                try lightSwarm.encodeUpdate(command: command, frame: snapshot, deltaTime: Float(elapsed),
-                                            aspect: aspect, cameraEye: snapshot.camera.eye, cameraTarget: snapshot.camera.target)
-            }
+            try lightSwarm.encodeUpdate(command: command, frame: snapshot, deltaTime: Float(elapsed),
+                                        aspect: aspect, cameraEye: snapshot.camera.eye, cameraTarget: snapshot.camera.target)
         } catch { report(error); return }
         var uniform = RenderUniforms(frame: snapshot, size: view.drawableSize)
         withUnsafeBytes(of: &uniform) { uniforms[slot].contents().copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         let spectrumPointer = spectra[slot].contents().assumingMemoryBound(to: Float.self)
         for index in 0..<64 { spectrumPointer[index] = index < snapshot.spectrum.count ? snapshot.spectrum[index] : 0 }
-        let activeScene = snapshot.visualizerStyle == .ink ? inkScene : scene
-        if snapshot.visualizerStyle == .ink {
-            command.label = "3D ink fluid · Volume lighting · Reflection · Bloom"
-            do { try inkRenderer.encode(command: command, target: inkScene, density: inkFluid.densityTexture,
-                                        frame: snapshot, water: water.texture, aspect: aspect) }
-            catch { report(error); return }
-        } else {
-            command.label = "Ribbon layers · Depth resolve · Bloom · Water"
-            for ribbon in 0..<4 {
-                let layerPass = MTLRenderPassDescriptor()
-                layerPass.colorAttachments[0].texture = ribbonColors
-                layerPass.colorAttachments[0].slice = ribbon
-                layerPass.colorAttachments[0].loadAction = .clear
-                layerPass.colorAttachments[0].storeAction = .store
-                layerPass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0)
-                layerPass.depthAttachment.texture = ribbonDepths
-                layerPass.depthAttachment.slice = ribbon
-                layerPass.depthAttachment.loadAction = .clear
-                layerPass.depthAttachment.storeAction = .store
-                layerPass.depthAttachment.clearDepth = 1
-                guard let ribbonEncoder = command.makeRenderCommandEncoder(descriptor: layerPass) else { report(RenderFailure.message("Ribbon encoderを作成できません。")); return }
-                ribbonEncoder.label = "Cloth layer \(ribbon)"
-                ribbonEncoder.setRenderPipelineState(ribbonPipeline)
-                ribbonEncoder.setDepthStencilState(depthState)
-                ribbonEncoder.setCullMode(.none)
-                ribbonEncoder.setVertexBuffer(uniforms[slot], offset: 0, index: 0)
-                ribbonEncoder.setVertexBuffer(spectra[slot], offset: 0, index: 1)
-                ribbonEncoder.setFragmentBuffer(uniforms[slot], offset: 0, index: 0)
-                ribbonEncoder.drawIndexedPrimitives(type: .triangle, indexCount: indexCount, indexType: .uint32, indexBuffer: indexBuffer, indexBufferOffset: 0, instanceCount: 1, baseVertex: 0, baseInstance: ribbon)
-                ribbonEncoder.endEncoding()
-            }
-            let scenePass = MTLRenderPassDescriptor()
-            scenePass.colorAttachments[0].texture = scene
-            scenePass.colorAttachments[0].loadAction = .dontCare
-            scenePass.colorAttachments[0].storeAction = .store
-            guard let resolveEncoder = command.makeRenderCommandEncoder(descriptor: scenePass) else { report(RenderFailure.message("Ribbon depth resolve encoderを作成できません。")); return }
-            resolveEncoder.label = "Per-pixel depth-sorted transparent ribbons"
-            resolveEncoder.setRenderPipelineState(resolvePipeline)
-            resolveEncoder.setFragmentTexture(ribbonColors, index: 0)
-            resolveEncoder.setFragmentTexture(ribbonDepths, index: 1)
-            resolveEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-            resolveEncoder.endEncoding()
-            do { try lightSwarm.encodeRender(command: command, target: scene, ribbonDepths: ribbonDepths) }
-            catch { report(error); return }
+        command.label = "Ribbon layers · Depth resolve · Bloom · Water"
+        for ribbon in 0..<4 {
+            let layerPass = MTLRenderPassDescriptor()
+            layerPass.colorAttachments[0].texture = ribbonColors
+            layerPass.colorAttachments[0].slice = ribbon
+            layerPass.colorAttachments[0].loadAction = .clear
+            layerPass.colorAttachments[0].storeAction = .store
+            layerPass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0)
+            layerPass.depthAttachment.texture = ribbonDepths
+            layerPass.depthAttachment.slice = ribbon
+            layerPass.depthAttachment.loadAction = .clear
+            layerPass.depthAttachment.storeAction = .store
+            layerPass.depthAttachment.clearDepth = 1
+            guard let ribbonEncoder = command.makeRenderCommandEncoder(descriptor: layerPass) else { report(RenderFailure.message("Ribbon encoderを作成できません。")); return }
+            ribbonEncoder.label = "Cloth layer \(ribbon)"
+            ribbonEncoder.setRenderPipelineState(ribbonPipeline)
+            ribbonEncoder.setDepthStencilState(depthState)
+            ribbonEncoder.setCullMode(.none)
+            ribbonEncoder.setVertexBuffer(uniforms[slot], offset: 0, index: 0)
+            ribbonEncoder.setVertexBuffer(spectra[slot], offset: 0, index: 1)
+            ribbonEncoder.setFragmentBuffer(uniforms[slot], offset: 0, index: 0)
+            ribbonEncoder.drawIndexedPrimitives(type: .triangle, indexCount: indexCount, indexType: .uint32, indexBuffer: indexBuffer, indexBufferOffset: 0, instanceCount: 1, baseVertex: 0, baseInstance: ribbon)
+            ribbonEncoder.endEncoding()
         }
+        let scenePass = MTLRenderPassDescriptor()
+        scenePass.colorAttachments[0].texture = scene
+        scenePass.colorAttachments[0].loadAction = .dontCare
+        scenePass.colorAttachments[0].storeAction = .store
+        guard let resolveEncoder = command.makeRenderCommandEncoder(descriptor: scenePass) else { report(RenderFailure.message("Ribbon depth resolve encoderを作成できません。")); return }
+        resolveEncoder.label = "Per-pixel depth-sorted transparent ribbons"
+        resolveEncoder.setRenderPipelineState(resolvePipeline)
+        resolveEncoder.setFragmentTexture(ribbonColors, index: 0)
+        resolveEncoder.setFragmentTexture(ribbonDepths, index: 1)
+        resolveEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        resolveEncoder.endEncoding()
+        do { try lightSwarm.encodeRender(command: command, target: scene, ribbonDepths: ribbonDepths) }
+        catch { report(error); return }
 
         let brightPass = MTLRenderPassDescriptor()
         brightPass.colorAttachments[0].texture = bright
@@ -346,24 +326,19 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         brightPass.colorAttachments[0].storeAction = .store
         guard let brightEncoder = command.makeRenderCommandEncoder(descriptor: brightPass) else { report(RenderFailure.message("Bloom encoderを作成できません。")); return }
         brightEncoder.setRenderPipelineState(brightPipeline)
-        brightEncoder.setFragmentTexture(activeScene, index: 0)
+        brightEncoder.setFragmentTexture(scene, index: 0)
         brightEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         brightEncoder.endEncoding()
         blur.encode(commandBuffer: command, sourceTexture: bright, destinationTexture: bloom)
 
-        if snapshot.visualizerStyle == .ink {
-            do { try inkRenderer.encodeComposite(command: command, pass: finalPass, scene: inkScene, bloom: bloom) }
-            catch { report(error); return }
-        } else {
-            guard let compositeEncoder = command.makeRenderCommandEncoder(descriptor: finalPass) else { report(RenderFailure.message("Composite encoderを作成できません。")); return }
-            compositeEncoder.setRenderPipelineState(compositePipeline)
-            compositeEncoder.setFragmentTexture(scene, index: 0)
-            compositeEncoder.setFragmentTexture(bloom, index: 1)
-            compositeEncoder.setFragmentTexture(water.texture, index: 2)
-            compositeEncoder.setFragmentBuffer(uniforms[slot], offset: 0, index: 0)
-            compositeEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-            compositeEncoder.endEncoding()
-        }
+        guard let compositeEncoder = command.makeRenderCommandEncoder(descriptor: finalPass) else { report(RenderFailure.message("Composite encoderを作成できません。")); return }
+        compositeEncoder.setRenderPipelineState(compositePipeline)
+        compositeEncoder.setFragmentTexture(scene, index: 0)
+        compositeEncoder.setFragmentTexture(bloom, index: 1)
+        compositeEncoder.setFragmentTexture(water.texture, index: 2)
+        compositeEncoder.setFragmentBuffer(uniforms[slot], offset: 0, index: 0)
+        compositeEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        compositeEncoder.endEncoding()
         command.present(drawable)
         let activity = waterActivity
         let activityBuffer = waterActivityBuffers[slot]

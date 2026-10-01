@@ -91,7 +91,7 @@ struct PlayerView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .accessibilityLabel("ビジュアライザー：\(store.visualizerStyle.title)")
-                .help("リボンと光るインクを切り替えます")
+                .help("ビジュアライザーを選びます")
                 iconButton("フルスクリーン", "arrow.up.left.and.arrow.down.right", action: { NSApp.keyWindow?.toggleFullScreen(nil) })
             }
             .padding(6).glassEffect(.regular, in: .capsule)

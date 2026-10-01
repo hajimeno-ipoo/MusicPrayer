@@ -65,7 +65,6 @@ final class PlayerStoreTransitionTests: XCTestCase {
             }
         }
         store.volume = 0
-        store.visualizerStyle = .ink
         store.tracks = [Track(url: first), Track(url: second)]
         store.select(0)
         let clock = ContinuousClock()
@@ -97,8 +96,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
         XCTAssertGreaterThan(fadingVisual.time, Float(newAudioTime + 0.30), "旧曲の映像を残す間にも新曲の音声時計が進むこと")
         XCTAssertGreaterThan(fadingVisual.presence, 0)
         XCTAssertLessThan(fadingVisual.presence, previousVisual.presence, "旧曲が即座に置き換わらずフェードすること")
-        XCTAssertEqual(fadingVisual.trackID, previousVisual.trackID, "旧インクのGPU状態はフェードアウトが終わるまで保持すること")
-        XCTAssertEqual(fadingVisual.visualizerStyle, .ink)
+        XCTAssertEqual(fadingVisual.trackID, previousVisual.trackID, "旧曲の映像はフェードアウトが終わるまで保持すること")
 
         while selectedAt.duration(to: clock.now).secondsValue < 0.9 {
             try await Task.sleep(for: .milliseconds(10))
@@ -106,7 +104,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
         let newVisual = store.visualSource.snapshot()
         XCTAssertEqual(Double(newVisual.time), store.engine.currentTime, accuracy: 0.06)
         XCTAssertGreaterThan(newVisual.presence, 0.99, "0.8秒の映像遷移後は新曲を通常表示すること")
-        XCTAssertEqual(newVisual.trackID, store.tracks[1].id, "新曲のフェードインからインクをリセットすること")
+        XCTAssertEqual(newVisual.trackID, store.tracks[1].id, "新曲のフェードインから新曲の映像を公開すること")
         XCTAssertEqual(store.currentTrack?.url, second)
         XCTAssertTrue(store.engine.isPlaying)
         // The outcome of Music Understanding is deliberately not an acceptance condition.

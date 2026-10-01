@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS("27.0")],
     products: [.executable(name: "MusicPrayer", targets: ["MusicPrayer"])],
     targets: [
-        .executableTarget(name: "MusicPrayer", path: "Sources", resources: [.copy("Rendering/Shaders.metal"), .copy("Rendering/LightSwarm.metal"), .copy("Rendering/WaterSurface.metal"), .copy("Rendering/InkFluid.metal"), .copy("Rendering/InkRendering.metal")]),
+        .executableTarget(name: "MusicPrayer", path: "Sources", resources: [.copy("Rendering/Shaders.metal"), .copy("Rendering/LightSwarm.metal"), .copy("Rendering/WaterSurface.metal")]),
         .testTarget(name: "MusicPrayerTests", dependencies: ["MusicPrayer"], path: "Tests")
     ],
     swiftLanguageModes: [.v5]
