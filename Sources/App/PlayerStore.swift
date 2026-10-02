@@ -243,11 +243,18 @@ final class PlayerStore {
         let scene = scenes.indices.contains(sceneIndex) ? scenes[sceneIndex] : nil
         var frame = composer.compose(time: previewTime ?? time, audio: audio, moment: sampled, scene: scene, analyzed: analysis != nil, presence: presence, dt: dt)
         frame.trackID = currentTrack?.id
+        frame.duration = engine.duration
+        frame.title = currentTrack?.title ?? "MUSIC PRAYER"
+        frame.artist = currentTrack?.artist ?? ""
+        frame.artwork = currentTrack?.artwork
         if previewTime != nil { visualTransition = nil }
         if let transition = visualTransition {
             frame = transition.frame(incoming: frame, at: uptime)
             if transition.isFinished(at: uptime) { visualTransition = nil }
         }
+        // The fading old track retains its label, but never restores an old menu selection.
+        frame.style = visualizerStyle
+        frame.isPlaying = engine.isPlaying
         visualSource.publish(frame)
         if now.timeIntervalSince(uiTick) >= 0.1 {
             position = time

@@ -59,6 +59,11 @@ struct RenderInputs {
     func matches(_ other: RenderInputs) -> Bool {
         guard size == other.size, frame.time == other.frame.time,
               frame.trackID == other.frame.trackID,
+              frame.style == other.frame.style,
+              frame.duration == other.frame.duration,
+              frame.title == other.frame.title, frame.artist == other.frame.artist,
+              frame.artwork == other.frame.artwork,
+              frame.isPlaying == other.frame.isPlaying,
               frame.spectrum.count == other.frame.spectrum.count else { return false }
         let tolerance: Float = 0.00001
         return zip(groups, other.groups).allSatisfy { a, b in
@@ -109,6 +114,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private let blur: MPSImageGaussianBlur
     private let water: WaterSurface
     private let lightSwarm: LightSwarm
+    private var tape: TapeSceneRenderer?
     private var previousRenderTime: Double?
     private let indexBuffer: MTLBuffer
     private let indexCount: Int
@@ -200,8 +206,10 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
 
     func resumeIfNeeded(in view: MTKView) {
         guard view.isPaused, !hasReportedError else { return }
-        let inputs = RenderInputs(frame: source.snapshot(), size: view.drawableSize)
-        if (lastRenderedInputs.map({ !inputs.matches($0) }) ?? true) || source.waterInteractions.hasPendingPulses {
+        let snapshot = source.snapshot()
+        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize)
+        if (lastRenderedInputs.map({ !inputs.matches($0) }) ?? true) ||
+            (snapshot.style == .ribbons && source.waterInteractions.hasPendingPulses) {
             previousRenderTime = nil
             view.isPaused = false
         }
@@ -242,7 +250,13 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         guard !hasReportedError, view.drawableSize.width > 0, view.drawableSize.height > 0 else { return }
         let snapshot = source.snapshot()
         let inputs = RenderInputs(frame: snapshot, size: view.drawableSize)
+        if snapshot.style == .cassette { _ = source.waterInteractions.drain() }
         if let previous = lastRenderedInputs, inputs.matches(previous), !source.waterInteractions.hasPendingPulses {
+            if snapshot.style == .cassette {
+                previousRenderTime = nil
+                view.isPaused = true
+                return
+            }
             switch waterActivity.state {
             case .idle:
                 // No drawable acquisition, simulation, bloom, or GPU submission.
@@ -267,6 +281,26 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
               let command = queue.makeCommandBuffer() else { report(RenderFailure.message("Metalフレームを準備できません。")); return }
         // Do not advance persistent simulations unless this command will be presented.
         guard let drawable = view.currentDrawable, let finalPass = view.currentRenderPassDescriptor else { return }
+        if snapshot.style == .cassette {
+            // Water and particles are suspended while the cassette is selected.
+            previousRenderTime = nil
+            do {
+                if tape == nil { tape = try TapeSceneRenderer(device: device) }
+                try tape?.encode(command: command, target: scene, frame: snapshot, size: view.drawableSize)
+                try tape?.encodePresentation(command: command, descriptor: finalPass, scene: scene)
+            } catch { report(error); return }
+            command.label = "Cassette · Spectrum · Floor · Depth of field"
+            command.present(drawable)
+            command.addCompletedHandler { [weak self] completed in
+                semaphore.signal()
+                if let error = completed.error { DispatchQueue.main.async { self?.report(error) } }
+            }
+            lastRenderedInputs = inputs
+            submittedFrameCount += 1
+            committed = true
+            command.commit()
+            return
+        }
         let renderTime = ProcessInfo.processInfo.systemUptime
         let elapsed = previousRenderTime.map { max(0, renderTime - $0) } ?? (1.0 / 60)
         previousRenderTime = renderTime

@@ -72,12 +72,19 @@ struct MusicalMoment: Sendable, Equatable {
 
 enum VisualizerStyle: String, CaseIterable, Identifiable, Sendable {
     case ribbons
+    case cassette
     var id: Self { self }
-    var title: String { "リボン" }
+    var title: String { self == .ribbons ? "リボン" : "カセット" }
 }
 
 struct VisualFrame: Sendable {
     var trackID: UUID?
+    var style = VisualizerStyle.ribbons
+    var duration: Double = 0
+    var title = ""
+    var artist = ""
+    var artwork: Data?
+    var isPlaying = false
     var camera = CameraPose()
     var time: Float = 0
     var tempo: Float = 1

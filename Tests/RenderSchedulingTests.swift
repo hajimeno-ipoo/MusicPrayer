@@ -73,6 +73,45 @@ final class RenderSchedulingTests: XCTestCase {
     }
 
     @MainActor
+    func testPausedHostSwitchesCassetteAndBackWithoutWaterKeepingItAwake() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
+        _ = NSApplication.shared
+        let source = VisualFrameSource()
+        let host = VisualizerHostView(source: source)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 384, height: 256),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        let view = try XCTUnwrap(host.subviews.compactMap { $0 as? MTKView }.first)
+        let renderer = try XCTUnwrap(view.delegate as? MetalRenderer)
+        var frame = VisualFrame()
+        frame.style = .cassette
+        frame.title = "静止中の切替"
+        frame.duration = 180
+        XCTAssertTrue(source.waterInteractions.enqueue(screenUV: SIMD2(0.5, 0.9)))
+        source.publish(frame)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while (renderer.submittedFrameCount == 0 || !view.isPaused), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertGreaterThan(renderer.submittedFrameCount, 0)
+        XCTAssertTrue(view.isPaused)
+        XCTAssertFalse(source.waterInteractions.hasPendingPulses)
+        XCTAssertNil(view.toolTip)
+        let cassetteFrames = renderer.submittedFrameCount
+        frame.style = .ribbons
+        source.publish(frame)
+        let ribbonDeadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while (renderer.submittedFrameCount == cassetteFrames || !view.isPaused), ContinuousClock.now < ribbonDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertGreaterThan(renderer.submittedFrameCount, cassetteFrames)
+        XCTAssertTrue(view.isPaused)
+        XCTAssertNotNil(view.toolTip)
+    }
+
+    @MainActor
     func testHostSleepsAndAutomaticallyWakesForPublishedFramesAndResize() async throws {
         guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
         _ = NSApplication.shared

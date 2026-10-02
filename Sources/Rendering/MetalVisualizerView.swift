@@ -20,7 +20,7 @@ final class VisualizerHostView: NSView {
 
     init(source: VisualFrameSource) {
         let device = MTLCreateSystemDefaultDevice()
-        metalView = WaterInteractiveMetalView(device: device, interactions: source.waterInteractions)
+        metalView = WaterInteractiveMetalView(device: device, source: source)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor(red: 0.005, green: 0.012, blue: 0.04, alpha: 1).cgColor
@@ -56,6 +56,7 @@ final class VisualizerHostView: NSView {
             source.observeFrames { [weak self] in
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
+                    (self.metalView as? WaterInteractiveMetalView)?.updateInteractionStyle()
                     self.renderer?.resumeIfNeeded(in: self.metalView)
                 }
             }
@@ -74,15 +75,24 @@ final class VisualizerHostView: NSView {
 
 /// Native pointer handling only receives the uncovered background, below SwiftUI controls.
 private final class WaterInteractiveMetalView: MTKView {
+    private let source: VisualFrameSource
     private let interactions: WaterInteractions
     private var draggingWater = false
     private var lastDragPoint: SIMD2<Float>?
     private var lastDragTime: TimeInterval = 0
 
-    init(device: MTLDevice?, interactions: WaterInteractions) {
-        self.interactions = interactions
+    init(device: MTLDevice?, source: VisualFrameSource) {
+        self.source = source
+        self.interactions = source.waterInteractions
         super.init(frame: .zero, device: device)
-        toolTip = "水面をクリック・ドラッグすると波紋が広がります"
+        updateInteractionStyle()
+    }
+
+    func updateInteractionStyle() {
+        let isWater = source.snapshot().style == .ribbons
+        let hint = isWater ? "水面をクリック・ドラッグすると波紋が広がります" : nil
+        if toolTip != hint { toolTip = hint }
+        if !isWater { draggingWater = false; lastDragPoint = nil }
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -90,6 +100,7 @@ private final class WaterInteractiveMetalView: MTKView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
+        guard source.snapshot().style == .ribbons else { super.mouseDown(with: event); return }
         guard let point = screenUV(for: event) else { return }
         draggingWater = interactions.enqueue(screenUV: point)
         if draggingWater {
@@ -102,6 +113,7 @@ private final class WaterInteractiveMetalView: MTKView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        guard source.snapshot().style == .ribbons else { draggingWater = false; super.mouseDragged(with: event); return }
         guard draggingWater else { super.mouseDragged(with: event); return }
         guard let point = screenUV(for: event) else { return }
         let previous = lastDragPoint ?? point

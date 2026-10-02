@@ -81,6 +81,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
 
         let selectedAt = clock.now
         store.select(1)
+        store.visualizerStyle = .cassette
         let selectionSeconds = selectedAt.duration(to: clock.now).secondsValue
         XCTAssertEqual(store.currentTrack?.url, second)
         XCTAssertNil(store.playbackError)
@@ -97,6 +98,9 @@ final class PlayerStoreTransitionTests: XCTestCase {
         XCTAssertGreaterThan(fadingVisual.presence, 0)
         XCTAssertLessThan(fadingVisual.presence, previousVisual.presence, "旧曲が即座に置き換わらずフェードすること")
         XCTAssertEqual(fadingVisual.trackID, previousVisual.trackID, "旧曲の映像はフェードアウトが終わるまで保持すること")
+        XCTAssertEqual(fadingVisual.style, .cassette, "旧曲がフェード中でも現在の選択を描画へ渡すこと")
+        XCTAssertEqual(fadingVisual.title, previousVisual.title, "旧曲のカセットには旧曲のラベルを保持すること")
+        XCTAssertEqual(fadingVisual.duration, previousVisual.duration)
 
         while selectedAt.duration(to: clock.now).secondsValue < 0.9 {
             try await Task.sleep(for: .milliseconds(10))
@@ -105,6 +109,9 @@ final class PlayerStoreTransitionTests: XCTestCase {
         XCTAssertEqual(Double(newVisual.time), store.engine.currentTime, accuracy: 0.06)
         XCTAssertGreaterThan(newVisual.presence, 0.99, "0.8秒の映像遷移後は新曲を通常表示すること")
         XCTAssertEqual(newVisual.trackID, store.tracks[1].id, "新曲のフェードインから新曲の映像を公開すること")
+        XCTAssertEqual(newVisual.style, .cassette)
+        XCTAssertEqual(newVisual.title, store.tracks[1].title)
+        XCTAssertEqual(newVisual.duration, store.engine.duration, accuracy: 0.001)
         XCTAssertEqual(store.currentTrack?.url, second)
         XCTAssertTrue(store.engine.isPlaying)
         // The outcome of Music Understanding is deliberately not an acceptance condition.
