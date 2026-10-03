@@ -5,7 +5,7 @@ import MusicUnderstanding
 import OSLog
 
 actor MusicAnalyzer {
-    static let cacheVersion = 2
+    static let cacheVersion = 3
     private static let log = Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AnalysisCache")
 
     func analyze(url: URL, force: Bool = false) async throws -> MusicAnalysis {
@@ -61,11 +61,13 @@ actor MusicAnalyzer {
         !analysis.sections.isEmpty || !analysis.segments.isEmpty || !analysis.phrases.isEmpty ||
         !analysis.pace.isEmpty || !analysis.keys.isEmpty || !analysis.vocal.isEmpty ||
         !analysis.drums.isEmpty || !analysis.bass.isEmpty || !analysis.other.isEmpty ||
+        !analysis.instrumentRanges.vocal.isEmpty || !analysis.instrumentRanges.drums.isEmpty ||
+        !analysis.instrumentRanges.bass.isEmpty || !analysis.instrumentRanges.other.isEmpty ||
         !analysis.momentary.isEmpty || !analysis.shortTerm.isEmpty || analysis.integrated != nil || analysis.peak != nil
     }
 
     /// Hash the source bytes so a replaced file cannot reuse stale results.
-    private static func fingerprint(_ url: URL) throws -> String {
+    static func fingerprint(_ url: URL) throws -> String {
         let file = try FileHandle(forReadingFrom: url)
         defer { try? file.close() }
         var hash = SHA256()
@@ -100,6 +102,11 @@ actor MusicAnalyzer {
             analysis.drums = values(instruments.activity[.drum] ?? [])
             analysis.bass = values(instruments.activity[.bass] ?? [])
             analysis.other = values(instruments.activity[.other] ?? [])
+            analysis.instrumentRanges = InstrumentRanges(
+                vocal: (instruments.ranges[.vocal] ?? []).compactMap(span),
+                drums: (instruments.ranges[.drum] ?? []).compactMap(span),
+                bass: (instruments.ranges[.bass] ?? []).compactMap(span),
+                other: (instruments.ranges[.other] ?? []).compactMap(span))
         }
         if let loudness = result.loudness {
             analysis.momentary = values(loudness.momentary)

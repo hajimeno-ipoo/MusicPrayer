@@ -14,7 +14,7 @@ struct AudioFeatures: Sendable {
     var spectrum: [Float] = Array(repeating: 0, count: 64)
 }
 
-struct TimeValue: Codable, Sendable { var time: Double; var value: Float }
+struct TimeValue: Codable, Sendable, Equatable { var time: Double; var value: Float }
 struct TimeSpan: Codable, Sendable {
     var start: Double
     var duration: Double
@@ -23,8 +23,15 @@ struct TimeSpan: Codable, Sendable {
 struct PaceSpan: Codable, Sendable { var range: TimeSpan; var value: Float }
 struct KeySpan: Codable, Sendable { var range: TimeSpan; var label: String; var hue: Float; var minor: Bool }
 
+struct InstrumentRanges: Codable, Sendable {
+    var vocal: [TimeSpan] = []
+    var drums: [TimeSpan] = []
+    var bass: [TimeSpan] = []
+    var other: [TimeSpan] = []
+}
+
 struct MusicAnalysis: Codable, Sendable {
-    var version = 2
+    var version = 3
     var fingerprint: String = ""
     var duration: Double = 0
     var beats: [Double] = []
@@ -38,6 +45,7 @@ struct MusicAnalysis: Codable, Sendable {
     var drums: [TimeValue] = []
     var bass: [TimeValue] = []
     var other: [TimeValue] = []
+    var instrumentRanges = InstrumentRanges()
     var momentary: [TimeValue] = []
     var shortTerm: [TimeValue] = []
     var integrated: Float?
@@ -78,6 +86,7 @@ enum VisualizerStyle: String, CaseIterable, Identifiable, Sendable {
 }
 
 struct VisualFrame: Sendable {
+    var lyrics: LyricPlaybackFrame?
     var trackID: UUID?
     var style = VisualizerStyle.ribbons
     var duration: Double = 0
@@ -118,6 +127,22 @@ struct VisualFrame: Sendable {
     var hasAnalysis: Float = 0
     var presence: Float = 1
     var spectrum: [Float] = Array(repeating: 0, count: 64)
+}
+
+struct LyricPlaybackFrame: Sendable, Equatable {
+    var trackID: UUID?
+    var playbackGeneration: UInt64
+    var audioFingerprint: String?
+    var time: Double
+    var duration: Double
+    var isPlaying: Bool
+    var isPreviewing: Bool
+    var vocal: Float?
+    var beat: Float
+    var beatPhase: Float
+    var barPhase: Float
+    var phraseProgress: Float
+    var sectionProgress: Float
 }
 
 struct SectionScene: Sendable {

@@ -1,9 +1,11 @@
 import AppKit
 import AVFoundation
 import Observation
+import OSLog
 
 @MainActor @Observable
 final class PlayerStore {
+    private static let lyricLogger = Logger(subsystem: "com.hazimeno.MusicPrayer", category: "Lyrics")
     var tracks: [Track] = []
     var currentIndex = 0
     var position: Double = 0
@@ -27,7 +29,29 @@ final class PlayerStore {
         return devices.first { $0.id == outputID }?.name ?? "選択した出力先（未接続）"
     }
     var outputName: String { outputID == 0 ? "Macの既定：\(outputDeviceName)" : outputDeviceName }
-    var previewTime: Double?
+    var previewTime: Double? { didSet { publishLyricEvent() } }
+    var lyricText = ""
+    var lyricTimeline: LyricTimeline?
+    var lyricTimingState = LyricTimingState.unset
+    var lyricTimingError: String?
+    var lyricSaveError: String?
+    var lyricFingerprint: String?
+    var lyricFrameRevision: UInt64 = 0
+    var playbackGeneration: UInt64 = 0
+    var lyricsAcceptingRequests = true
+    var hasPendingLyricSaveFailure = false
+    var lyricTimingStatus: String { lyricTimingState.title }
+    @ObservationIgnored private let lyricStore: LyricStore
+    @ObservationIgnored private let lyricTranscriber: any LyricTranscribing
+    @ObservationIgnored private var lyricLoadTask: Task<Void, Never>?
+    @ObservationIgnored private var lyricTask: Task<Void, Never>?
+    @ObservationIgnored private var restoredLyricTimeline: LyricTimeline?
+    @ObservationIgnored private var lyricRequestGeneration: UInt64 = 0
+    @ObservationIgnored private var lyricSaveSequence: UInt64 = 0
+    @ObservationIgnored private var currentLyricSave: (request: LyricSaveRequest, task: Task<String, Error>)?
+    @ObservationIgnored private var pendingLyricSaves: [UInt64: Task<String, Error>] = [:]
+    @ObservationIgnored private var failedLyricSaves: [UInt64: LyricSaveRequest] = [:]
+    @ObservationIgnored private var latestLyricURLRequest: [String: UInt64] = [:]
     @ObservationIgnored let visualSource = VisualFrameSource()
     @ObservationIgnored let engine = PlayerEngine()
     @ObservationIgnored private let analyzer = MusicAnalyzer()
@@ -46,9 +70,11 @@ final class PlayerStore {
     @ObservationIgnored private var loadedURL: URL?
     var currentTrack: Track? { tracks.indices.contains(currentIndex) ? tracks[currentIndex] : nil }
 
-    init() {
+    init(lyricDirectory: URL? = nil, lyricTranscriber: any LyricTranscribing = AppleLyricTranscriber()) {
+        lyricStore = LyricStore(directory: lyricDirectory)
+        self.lyricTranscriber = lyricTranscriber
         engine.onTrackTransition = { [weak self] url in self?.didTransition(to: url) }
-        engine.onEnd = { [weak self] in self?.isPlaying = false; self?.persist() }
+        engine.onEnd = { [weak self] in self?.isPlaying = false; self?.publishLyricEvent(); self?.persist() }
         engine.onError = { [weak self] error in self?.playbackError = error.localizedDescription }
         engine.volume = volume
         refreshDevices()
@@ -125,12 +151,15 @@ final class PlayerStore {
             try engine.load(url: tracks[index].url)
             loadedURL = tracks[index].url
             currentIndex = index; position = 0; duration = engine.duration
+            resetLyricsForSelection()
             playbackError = nil; previewTime = nil
             visualTransition = TrackVisualTransition(outgoing: outgoing, started: ProcessInfo.processInfo.systemUptime, wasPlaying: wasPlaying)
             analyzeCurrent()
             planNext()
             if autoplay { try engine.play() }
             isPlaying = engine.isPlaying
+            loadCurrentLyrics()
+            publishLyricEvent()
             persist()
         } catch { playbackError = error.localizedDescription; isPlaying = engine.isPlaying }
     }
@@ -142,13 +171,14 @@ final class PlayerStore {
             if engine.isPlaying { engine.pause() }
             else { try engine.play() }
             isPlaying = engine.isPlaying
+            publishLyricEvent()
             persist()
         } catch { playbackError = error.localizedDescription }
     }
     func toggleMute() { isMuted.toggle() }
-    func stop() { visualTransition = nil; engine.stop(); isPlaying = false; position = 0; persist() }
+    func stop() { visualTransition = nil; engine.stop(); isPlaying = false; position = 0; previewTime = nil; publishLyricEvent(); persist() }
     func seek(_ time: Double) {
-        do { try engine.seek(to: min(max(0, time), duration)); position = engine.currentTime; previewTime = nil; visualTransition = nil; planNext(); persist() }
+        do { try engine.seek(to: min(max(0, time), duration)); position = engine.currentTime; previewTime = nil; visualTransition = nil; publishLyricEvent(); planNext(); persist() }
         catch { playbackError = error.localizedDescription }
     }
     func next() { if let plannedIndex { select(plannedIndex) } }
@@ -162,6 +192,7 @@ final class PlayerStore {
         let playing = isPlaying
         tracks.remove(at: index)
         if removingCurrent {
+            resetLyricsForSelection()
             engine.unload(); loadedURL = nil
             visualTransition = nil
             analysisTask?.cancel(); analysis = nil; scenes = []; analyzing = false; analysisError = nil
@@ -172,6 +203,7 @@ final class PlayerStore {
         else if removingCurrent { select(currentIndex, autoplay: playing) }
         else { if index < currentIndex { currentIndex -= 1 }; planNext() }
         persist()
+        if removingCurrent { publishLyricEvent() }
     }
     func chooseOutput(_ id: UInt32) {
         do { try engine.setOutputDevice(id == 0 ? nil : id); outputID = id; refreshDevices(); playbackError = nil }
@@ -184,17 +216,28 @@ final class PlayerStore {
     func retryAnalysis() { analyzeCurrent(force: true) }
 
     private func analyzeCurrent(force: Bool = false) {
+        lyricTask?.cancel(); lyricTimeline = nil
+        if !lyricText.isEmpty { lyricTimingState = .waitingForAnalysis }
         analysisTask?.cancel(); analysis = nil; scenes = []; analysisError = nil; moment = MusicalMoment()
         guard let track = currentTrack else { analyzing = false; return }
         analyzing = true
+        let generation = playbackGeneration
         analysisTask = Task { [weak self, analyzer] in
             do {
                 let result = try await analyzer.analyze(url: track.url, force: force)
-                guard !Task.isCancelled, let self, self.currentTrack?.id == track.id else { return }
+                guard !Task.isCancelled, let self, self.currentTrack?.id == track.id,
+                      self.playbackGeneration == generation else { return }
                 self.analysis = result; self.scenes = SectionScenes.make(result); self.analyzing = false
+                self.alignLyricsIfReady()
+                self.publishLyricEvent()
             } catch {
-                guard !Task.isCancelled, let self, self.currentTrack?.id == track.id else { return }
+                guard !Task.isCancelled, let self, self.currentTrack?.id == track.id,
+                      self.playbackGeneration == generation else { return }
                 self.analysisError = error.localizedDescription; self.analyzing = false
+                if !self.lyricText.isEmpty {
+                    self.lyricTimingState = .failed
+                    self.lyricTimingError = LyricAlignmentError.analysisUnavailable.localizedDescription
+                }
             }
         }
     }
@@ -226,9 +269,11 @@ final class PlayerStore {
         if let plannedIndex, tracks.indices.contains(plannedIndex), tracks[plannedIndex].url == url { currentIndex = plannedIndex }
         else if let i = tracks.firstIndex(where: { $0.url == url }) { currentIndex = i }
         loadedURL = url; duration = engine.duration; position = engine.currentTime
+        resetLyricsForSelection()
         // The previous track already faded over its final 0.4 seconds; keep audio gapless.
         visualTransition = TrackVisualTransition(outgoing: nil, started: ProcessInfo.processInfo.systemUptime, wasPlaying: true)
         analyzeCurrent(); planNext(); persist()
+        loadCurrentLyrics(); publishLyricEvent()
     }
     private func tick() {
         let now = Date()
@@ -255,6 +300,7 @@ final class PlayerStore {
         // The fading old track retains its label, but never restores an old menu selection.
         frame.style = visualizerStyle
         frame.isPlaying = engine.isPlaying
+        frame.lyrics = lyricPlaybackFrame(time: previewTime ?? time, sampled: sampled)
         visualSource.publish(frame)
         if now.timeIntervalSince(uiTick) >= 0.1 {
             position = time
@@ -269,5 +315,311 @@ final class PlayerStore {
         do { try QueuePersistence.save(tracks: tracks, current: currentIndex, time: engine.currentTime, volume: volume) }
         catch { playbackError = "再生位置を保存できませんでした：\(error.localizedDescription)" }
     }
-    func shutdown() { persist(); analysisTask?.cancel(); warmTask?.cancel(); timer?.invalidate(); engine.stop(); openedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
+    func shutdown() { persist(); analysisTask?.cancel(); warmTask?.cancel(); lyricLoadTask?.cancel(); lyricTask?.cancel(); timer?.invalidate(); engine.stop(); openedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
+}
+
+private struct LyricSaveRequest {
+    var sequence: UInt64
+    var url: URL
+    var title: String
+    var text: String?
+    var timeline: LyricTimeline?
+    var trackID: UUID?
+    var playbackGeneration: UInt64
+    var lyricGeneration: UInt64
+}
+
+extension PlayerStore {
+    func retryLyricTiming() {
+        guard lyricsAcceptingRequests, !lyricText.isEmpty else { return }
+        if analysis == nil { retryAnalysis(); return }
+        lyricRequestGeneration &+= 1
+        lyricTask?.cancel()
+        alignLyricsIfReady()
+        publishLyricEvent()
+    }
+
+    func applyLyrics(_ text: String) {
+        guard lyricsAcceptingRequests, let track = currentTrack else { return }
+        if LyricParser.parse(text).isEmpty { clearLyrics(); return }
+        lyricLoadTask?.cancel(); lyricTask?.cancel()
+        lyricRequestGeneration &+= 1
+        lyricText = text; lyricTimeline = nil; restoredLyricTimeline = nil; lyricTimingError = nil
+        lyricTimingState = lyricFingerprint == nil ? .checkingAudio : .waitingForAnalysis
+        let request = makeLyricSaveRequest(track: track, text: text)
+        let task = enqueueLyricSave(request)
+        currentLyricSave = (request, task)
+        alignLyricsIfReady()
+        publishLyricEvent()
+    }
+
+    func clearLyrics() {
+        guard lyricsAcceptingRequests, let track = currentTrack else { return }
+        lyricLoadTask?.cancel(); lyricTask?.cancel()
+        lyricRequestGeneration &+= 1
+        lyricText = ""; lyricTimeline = nil; restoredLyricTimeline = nil; lyricTimingError = nil; lyricTimingState = .unset
+        let request = makeLyricSaveRequest(track: track, text: nil)
+        currentLyricSave = (request, enqueueLyricSave(request))
+        publishLyricEvent()
+    }
+
+    /// Save retries belong to their original audio even after the selected track changes.
+    func retryLyricSave() {
+        let failures = failedLyricSaves.values.sorted { $0.sequence < $1.sequence }
+        for var request in failures {
+            failedLyricSaves.removeValue(forKey: request.sequence)
+            // Retry the original request. A newer request for the same fingerprint must win.
+            if request.url.standardizedFileURL == currentTrack?.url.standardizedFileURL,
+               (request.text ?? "") == lyricText {
+                request.trackID = currentTrack?.id
+                request.playbackGeneration = playbackGeneration
+                request.lyricGeneration = lyricRequestGeneration
+                request.timeline = lyricTimeline
+            }
+            let task = enqueueLyricSave(request)
+            if requestMatchesCurrent(request) { currentLyricSave = (request, task) }
+        }
+        refreshLyricSaveError()
+    }
+
+    var needsLyricSaveBeforeTermination: Bool { !pendingLyricSaves.isEmpty || !failedLyricSaves.isEmpty }
+
+    func finishLyricsBeforeTermination() async -> Bool {
+        lyricsAcceptingRequests = false
+        lyricTask?.cancel()
+        retryLyricSave()
+        // Recognition, alignment and music analysis are not part of this wait.
+        while !pendingLyricSaves.isEmpty {
+            let tasks = Array(pendingLyricSaves.values)
+            for task in tasks { _ = try? await task.value }
+        }
+        let saved = failedLyricSaves.isEmpty
+        if !saved {
+            lyricsAcceptingRequests = true
+            if lyricTimeline == nil { alignLyricsIfReady() }
+        }
+        return saved
+    }
+
+    private func resetLyricsForSelection() {
+        playbackGeneration &+= 1; lyricRequestGeneration &+= 1
+        lyricLoadTask?.cancel(); lyricTask?.cancel()
+        lyricText = ""; lyricTimeline = nil; restoredLyricTimeline = nil; lyricFingerprint = nil
+        lyricTimingError = nil; lyricTimingState = .unset; currentLyricSave = nil
+        refreshLyricSaveError()
+    }
+
+    private func loadCurrentLyrics() {
+        guard let track = currentTrack else { return }
+        let generation = playbackGeneration, requestGeneration = lyricRequestGeneration
+        lyricTimingState = .checkingAudio
+        lyricLoadTask = Task { [weak self, lyricStore] in
+            do {
+                let fingerprint = try await lyricStore.fingerprint(url: track.url)
+                guard !Task.isCancelled, let self, self.currentTrack?.id == track.id,
+                      self.playbackGeneration == generation,
+                      self.lyricRequestGeneration == requestGeneration else { return }
+                let failed = self.failedLyricSaves.values
+                    .filter { $0.url.standardizedFileURL == track.url.standardizedFileURL }
+                    .max { $0.sequence < $1.sequence }
+                let failedIsCurrent: Bool
+                if let failed {
+                    failedIsCurrent = await lyricStore.isCurrentRequest(failed.sequence, url: track.url,
+                                                                         fingerprint: fingerprint)
+                } else { failedIsCurrent = false }
+                let saved = failedIsCurrent ? nil : try await lyricStore.load(fingerprint: fingerprint)
+                guard !Task.isCancelled, self.currentTrack?.id == track.id,
+                      self.playbackGeneration == generation,
+                      self.lyricRequestGeneration == requestGeneration else { return }
+                self.lyricFingerprint = fingerprint
+                // The confirmed edit/deletion survives reselection even if its disk write failed.
+                self.lyricText = failedIsCurrent ? (failed?.text ?? "") : (saved?.sourceText ?? "")
+                // Restored times stay hidden until their analysis digest is checked.
+                self.restoredLyricTimeline = failedIsCurrent ? failed?.timeline : saved?.timeline
+                if let failed, !failedIsCurrent {
+                    self.failedLyricSaves.removeValue(forKey: failed.sequence)
+                    self.refreshLyricSaveError()
+                }
+                self.lyricTimingState = self.lyricText.isEmpty ? .unset : .waitingForAnalysis
+                self.alignLyricsIfReady(); self.publishLyricEvent()
+            } catch {
+                guard !Task.isCancelled, let self, self.currentTrack?.id == track.id,
+                      self.playbackGeneration == generation,
+                      self.lyricRequestGeneration == requestGeneration else { return }
+                self.lyricTimingState = .failed
+                self.lyricTimingError = error.localizedDescription
+                Self.lyricLogger.error("Restore failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func makeLyricSaveRequest(track: Track, text: String?) -> LyricSaveRequest {
+        lyricSaveSequence &+= 1
+        return LyricSaveRequest(sequence: lyricSaveSequence, url: track.url, title: track.title,
+                                text: text, timeline: nil, trackID: track.id,
+                                playbackGeneration: playbackGeneration, lyricGeneration: lyricRequestGeneration)
+    }
+
+    private func requestMatchesCurrent(_ request: LyricSaveRequest) -> Bool {
+        request.trackID == currentTrack?.id && request.playbackGeneration == playbackGeneration &&
+        request.lyricGeneration == lyricRequestGeneration
+    }
+
+    @discardableResult
+    private func enqueueLyricSave(_ request: LyricSaveRequest) -> Task<String, Error> {
+        let urlKey = request.url.standardizedFileURL.absoluteString
+        latestLyricURLRequest[urlKey] = max(latestLyricURLRequest[urlKey] ?? 0, request.sequence)
+        failedLyricSaves = failedLyricSaves.filter {
+            $0.value.url.standardizedFileURL != request.url.standardizedFileURL || $0.key > request.sequence
+        }
+        let task = Task { [weak self, lyricStore] () throws -> String in
+            do {
+                let fingerprint: String
+                if let text = request.text {
+                    fingerprint = try await lyricStore.saveText(url: request.url, text: text, request: request.sequence)
+                    if let timeline = request.timeline {
+                        try await lyricStore.saveTimeline(timeline, request: request.sequence)
+                    }
+                } else {
+                    fingerprint = try await lyricStore.clear(url: request.url, request: request.sequence)
+                }
+                if let self {
+                    self.pendingLyricSaves.removeValue(forKey: request.sequence)
+                    self.failedLyricSaves = self.failedLyricSaves.filter { $0.key > request.sequence || $0.value.url != request.url }
+                    self.refreshLyricSaveError()
+                    if self.requestMatchesCurrent(request) {
+                        self.lyricFingerprint = fingerprint
+                        if !self.lyricTimingState.isGenerating && self.lyricTimeline == nil { self.alignLyricsIfReady() }
+                        self.publishLyricEvent()
+                    }
+                }
+                return fingerprint
+            } catch {
+                if let self {
+                    self.pendingLyricSaves.removeValue(forKey: request.sequence)
+                    if (error as? LyricStoreError) != .staleRequest,
+                       self.latestLyricURLRequest[urlKey] == request.sequence {
+                        self.failedLyricSaves[request.sequence] = request
+                        self.refreshLyricSaveError(reason: error.localizedDescription)
+                        let operation = request.text == nil ? "delete" : "text"
+                        Self.lyricLogger.error("Save failed operation=\(operation, privacy: .public) request=\(request.sequence): \(error.localizedDescription, privacy: .public)")
+                    }
+                }
+                throw error
+            }
+        }
+        pendingLyricSaves[request.sequence] = task
+        refreshLyricSaveError()
+        return task
+    }
+
+    private func refreshLyricSaveError(reason: String? = nil) {
+        hasPendingLyricSaveFailure = !failedLyricSaves.isEmpty
+        if let failed = failedLyricSaves.values.min(by: { $0.sequence < $1.sequence }) {
+            lyricSaveError = "歌詞を保存できませんでした：\(failed.title)" + (reason.map { " — \($0)" } ?? "")
+        } else { lyricSaveError = nil }
+    }
+
+    private func alignLyricsIfReady() {
+        guard lyricsAcceptingRequests, let audioURL = currentTrack?.url else { return }
+        guard !lyricText.isEmpty else { lyricTimingState = .unset; return }
+        if lyricFingerprint == nil, let analysis, !analysis.fingerprint.isEmpty { lyricFingerprint = analysis.fingerprint }
+        guard let fingerprint = lyricFingerprint else { lyricTimingState = .checkingAudio; return }
+        guard let analysis else {
+            if analysisError != nil {
+                lyricTimingState = .failed; lyricTimingError = LyricAlignmentError.analysisUnavailable.localizedDescription
+            } else { lyricTimingState = .waitingForAnalysis }
+            return
+        }
+        guard analysis.fingerprint == fingerprint else {
+            lyricTimeline = nil; lyricTimingState = .failed
+            lyricTimingError = "音源と解析結果の識別情報が一致しません。解析をやり直してください。"
+            return
+        }
+        lyricTask?.cancel()
+        let generation = playbackGeneration, requestGeneration = lyricRequestGeneration
+        let trackID = currentTrack?.id, text = lyricText, cached = lyricTimeline ?? restoredLyricTimeline
+        restoredLyricTimeline = nil
+        let save = currentLyricSave
+        lyricTimeline = nil
+        lyricTimingState = .generating; lyricTimingError = nil
+        let transcriber = lyricTranscriber
+        let updateStatus: @Sendable (LyricTimingState) async -> Void = { [weak self] state in
+            await MainActor.run { [weak self] in
+                guard !Task.isCancelled, let self, self.lyricsAcceptingRequests,
+                      self.playbackGeneration == generation, self.lyricRequestGeneration == requestGeneration,
+                      self.currentTrack?.id == trackID else { return }
+                self.lyricTimingState = state
+            }
+        }
+        lyricTask = Task { [weak self, lyricStore] in
+            let worker = Task.detached(priority: .userInitiated) { () async throws -> LyricTimeline in
+                if let cached, cached.sourceText == text,
+                   (try? LyricAligner.validate(cached, analysis: analysis)) != nil { return cached }
+                let transcription = try await transcriber.transcribe(audioURL: audioURL, sourceText: text, status: updateStatus)
+                try Task.checkCancellation()
+                await updateStatus(.generating)
+                return try LyricAligner.align(sourceText: text, analysis: analysis, transcription: transcription)
+            }
+            let result: LyricTimeline
+            do {
+                result = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+            } catch {
+                guard !Task.isCancelled, let self, self.playbackGeneration == generation,
+                      self.lyricRequestGeneration == requestGeneration, self.currentTrack?.id == trackID else { return }
+                self.lyricTimeline = nil; self.lyricTimingState = .failed; self.lyricTimingError = error.localizedDescription
+                Self.lyricLogger.error("Timing failed generation=\(requestGeneration): \(error.localizedDescription, privacy: .public)")
+                self.publishLyricEvent(); return
+            }
+            guard !Task.isCancelled, let self, self.lyricsAcceptingRequests, self.playbackGeneration == generation,
+                  self.lyricRequestGeneration == requestGeneration, self.currentTrack?.id == trackID,
+                  self.lyricText == result.sourceText, self.lyricFingerprint == result.analysisFingerprint,
+                  self.analysis?.fingerprint == result.analysisFingerprint,
+                  self.analysis?.version == result.analysisVersion else { return }
+            self.lyricTimeline = result
+            self.lyricTimingState = .generated(result.mode); self.publishLyricEvent()
+            if result == cached { return }
+            // Restored text with an obsolete timeline needs a fresh save request too.
+            let saved = save ?? self.currentTrack.map { track -> (request: LyricSaveRequest, task: Task<String, Error>) in
+                var request = self.makeLyricSaveRequest(track: track, text: text)
+                request.timeline = result
+                let task = self.enqueueLyricSave(request)
+                self.currentLyricSave = (request, task)
+                return (request, task)
+            }
+            guard let saved, saved.request.timeline == nil else { return }
+            do {
+                _ = try await saved.task.value
+                guard !Task.isCancelled else { return }
+                try await lyricStore.saveTimeline(result, request: saved.request.sequence)
+            } catch {
+                if (error as? LyricStoreError) != .staleRequest,
+                   self.latestLyricURLRequest[saved.request.url.standardizedFileURL.absoluteString] == saved.request.sequence {
+                    var failed = saved.request; failed.timeline = result
+                    self.failedLyricSaves[failed.sequence] = failed
+                    self.refreshLyricSaveError(reason: error.localizedDescription)
+                    Self.lyricLogger.error("Save failed operation=timeline request=\(failed.sequence): \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    private func lyricPlaybackFrame(time: Double, sampled: MusicalMoment) -> LyricPlaybackFrame {
+        let matching = analysis?.fingerprint == lyricFingerprint && lyricFingerprint != nil
+        return LyricPlaybackFrame(trackID: currentTrack?.id, playbackGeneration: playbackGeneration,
+                                  audioFingerprint: lyricFingerprint, time: time, duration: duration,
+                                  isPlaying: engine.isPlaying, isPreviewing: previewTime != nil,
+                                  vocal: matching ? sampled.vocal : nil, beat: matching ? sampled.beat : 0,
+                                  beatPhase: matching ? sampled.beatPhase : 0, barPhase: matching ? sampled.barPhase : 0,
+                                  phraseProgress: matching ? sampled.phraseProgress : 0,
+                                  sectionProgress: matching ? sampled.sectionProgress : 0)
+    }
+
+    private func publishLyricEvent() {
+        let time = previewTime ?? engine.currentTime
+        var frame = visualSource.snapshot()
+        frame.lyrics = lyricPlaybackFrame(time: time, sampled: TimelineSampler.sample(analysis, at: time))
+        visualSource.publish(frame)
+        lyricFrameRevision &+= 1
+    }
 }

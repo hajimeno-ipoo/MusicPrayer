@@ -6,6 +6,8 @@ struct PlayerView: View {
     @Bindable var store: PlayerStore
     @State private var showQueue = false
     @State private var showAnalysis = false
+    @State private var showLyrics = false
+    @State private var headerHeight: CGFloat = 58
     @State private var engaged = true
     @State private var hideTask: Task<Void, Never>?
     @State private var dropTarget = false
@@ -16,6 +18,7 @@ struct PlayerView: View {
         GeometryReader { geometry in
             ZStack {
                 MetalVisualizerView(source: store.visualSource).ignoresSafeArea()
+                PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight)
                 VStack(spacing: 0) {
                     header
                     Spacer(minLength: 20)
@@ -27,7 +30,11 @@ struct PlayerView: View {
                             .accessibilityHidden(!overlayVisible)
                         if let error = store.playbackError { errorRow(error, retry: nil) }
                         if let error = store.analysisError { errorRow("曲の詳しい解析ができませんでした：\(error)", retry: store.retryAnalysis) }
-                        if showAnalysis { AnalysisPanel(analysis: store.analysis, time: store.previewTime ?? store.position, duration: store.duration) }
+                        if showAnalysis {
+                            AnalysisPanel(analysis: store.analysis, time: store.previewTime ?? store.position,
+                                          duration: store.duration, isPlaying: store.isPlaying)
+                                .frame(height: min(400, max(280, geometry.size.height - 460)))
+                        }
                         MusicalTimeline(store: store)
                             .opacity(overlayVisible ? 1 : 0)
                             .allowsHitTesting(overlayVisible)
@@ -49,7 +56,7 @@ struct PlayerView: View {
                 }
             }
         }
-        .frame(minWidth: 860, minHeight: showAnalysis ? 850 : 660)
+        .frame(minWidth: 860, minHeight: 800)
         .preferredColorScheme(.dark)
         .onContinuousHover { _ in revealControls() }
         .onTapGesture { revealControls() }
@@ -64,6 +71,14 @@ struct PlayerView: View {
         }
         .onChange(of: store.isPlaying) { _, _ in revealControls() }
         .onChange(of: store.visualizerStyle) { _, _ in revealControls() }
+        .onPreferenceChange(PlayerChromeHeightKey.self) { values in
+            if let value = values["header"] { headerHeight = value }
+        }
+        .onChange(of: store.playbackGeneration) { _, _ in showLyrics = false }
+        .onChange(of: showLyrics) { _, _ in revealControls() }
+        .onChange(of: store.lyricsAcceptingRequests, initial: true) { _, accepting in
+            if accepting && store.hasPendingLyricSaveFailure { showLyrics = true; revealControls() }
+        }
         .onChange(of: store.previewTime) { _, value in
             if value == nil { revealControls() }
         }
@@ -79,6 +94,9 @@ struct PlayerView: View {
                 iconButton("曲の一覧", "list.bullet", action: { showQueue.toggle() })
                     .popover(isPresented: $showQueue, arrowEdge: .bottom) { QueueView(store: store) }
                 iconButton("詳しい解析", "waveform.path", active: showAnalysis, action: { withAnimation(.easeInOut(duration: 0.3)) { showAnalysis.toggle() } })
+                iconButton("歌詞", "text.quote", active: showLyrics, action: { showLyrics.toggle() })
+                    .disabled(store.currentTrack == nil)
+                    .popover(isPresented: $showLyrics, arrowEdge: .bottom) { LyricEditorView(store: store) }
                 Menu {
                     Picker("ビジュアライザー", selection: $store.visualizerStyle) {
                         ForEach(VisualizerStyle.allCases) { style in
@@ -100,6 +118,11 @@ struct PlayerView: View {
         .opacity(overlayVisible ? 1 : 0)
         .allowsHitTesting(overlayVisible)
         .accessibilityHidden(!overlayVisible)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: PlayerChromeHeightKey.self, value: ["header": proxy.size.height])
+            }
+        }
     }
 
     private var welcome: some View {
@@ -235,8 +258,30 @@ struct PlayerView: View {
         hideTask?.cancel()
         hideTask = Task {
             try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled, store.isPlaying, !showQueue, !showAnalysis, store.previewTime == nil else { return }
+            guard !Task.isCancelled, store.isPlaying, !showQueue, !showAnalysis, !showLyrics, store.previewTime == nil else { return }
             withAnimation(.easeInOut(duration: 0.6)) { engaged = false }
         }
+    }
+}
+
+/// The second reference image places the lyric centre at 24% of the window height.
+/// The analysis panel is independent of this region.
+struct PlayerLyricRegion: View {
+    let store: PlayerStore
+    let size: CGSize
+    let headerHeight: CGFloat
+
+    var body: some View {
+        LyricMotionView(store: store)
+            .frame(width: size.width, height: max(0, size.height * 0.48 - 2 * headerHeight))
+            .position(x: size.width / 2, y: size.height * 0.24)
+            .allowsHitTesting(false)
+    }
+}
+
+private struct PlayerChromeHeightKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] { [:] }
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }

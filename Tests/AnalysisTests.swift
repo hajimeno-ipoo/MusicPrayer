@@ -70,9 +70,16 @@ final class AnalysisTests: XCTestCase {
         var analysis = MusicAnalysis(fingerprint: "source-sha256", duration: 12)
         analysis.keys = [KeySpan(range: TimeSpan(start: 0, duration: 12), label: "A minor", hue: 0.021, minor: true)]
         analysis.momentary = [TimeValue(time: 0, value: -20), TimeValue(time: 10, value: -12)]
+        analysis.instrumentRanges = InstrumentRanges(vocal: [TimeSpan(start: 2, duration: 8)],
+            drums: [TimeSpan(start: 0, duration: 12)], bass: [TimeSpan(start: 3, duration: 4)],
+            other: [TimeSpan(start: 0, duration: 12)])
         let restored = try JSONDecoder().decode(MusicAnalysis.self, from: JSONEncoder().encode(analysis))
         XCTAssertEqual(restored.fingerprint, "source-sha256")
         XCTAssertEqual(restored.version, MusicAnalyzer.cacheVersion)
+        XCTAssertEqual(restored.instrumentRanges.vocal.first?.start, 2)
+        XCTAssertEqual(restored.instrumentRanges.drums.first?.duration, 12)
+        XCTAssertEqual(restored.instrumentRanges.bass.first?.start, 3)
+        XCTAssertEqual(restored.instrumentRanges.other.first?.duration, 12)
         let moment = TimelineSampler.sample(restored, at: 5)
         XCTAssertEqual(moment.key, "A minor")
         XCTAssertEqual(moment.modeBias, -1)
