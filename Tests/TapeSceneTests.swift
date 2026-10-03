@@ -185,7 +185,8 @@ final class TapeSceneTests: XCTestCase {
         let supplyFull = try render(renderer, device: device, queue: queue, frame: frame)
         frame.duration = 15
         let takeUpFull = try render(renderer, device: device, queue: queue, frame: frame)
-        // Fixed playback time preserves hub rotation, camera, audio and lights.
+        // Fixed playback time preserves camera, audio and lights. Duration also
+        // affects hub angles; the crop excludes both drive apertures.
         // This crop covers the inspection window in the 640x480 control view;
         // changed remaining-time text and the floor progress line are outside it.
         var changed = 0
@@ -288,6 +289,161 @@ final class TapeSceneTests: XCTestCase {
         XCTAssertEqual(values[0].x, values[100].y, accuracy: 0.000001)
         XCTAssertEqual(values[0].y, values[100].x, accuracy: 0.000001)
         XCTAssertEqual(values[50].x, values[50].y, accuracy: 0.000001)
+    }
+
+    @MainActor
+    func testActualTapePathStaysTangentConnectedAndClearOfGuideHoles() throws {
+        let (device, queue) = try environment()
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "TapeScene", withExtension: "metal"))
+        let source = try String(contentsOf: url, encoding: .utf8) + """
+        \n kernel void inspectTapePath(device float4 *out [[buffer(0)]], uint id [[thread_position_in_grid]]) {
+            bool left = id%2 == 0;
+            float2 radii = tapeWindingRadii(float(id/2)/100);
+            float radius = left ? radii.x : radii.y;
+            TapeGuide guide = tapeGuidePoint(left,radius);
+            out[id*5] = float4(guide.reelContact,guide.rollerContact);
+            out[id*5+1] = float4(tapePathPoint(left,radius,1,false),tapePathPoint(left,radius,0,true));
+            out[id*5+2] = float4(tapePathPoint(left,radius,1,true),guide.normal);
+            out[id*5+3] = float4(radii,0,0);
+            out[id*5+4] = float4(tapePathPoint(left,radius,0.5,false),tapePathNormal(left,radius,0.5,true));
+        }
+        """
+        let values = try compute(source, function: "inspectTapePath", count: 202, rows: 5, device: device, queue: queue)
+        for index in 0..<202 {
+            let side: Float = index%2 == 0 ? -1 : 1
+            let center = SIMD2<Float>(side*0.9,-0.1), roller = SIMD2<Float>(side*1.62,1.080)
+            let row = index*5, contacts = values[row]
+            let a = SIMD2(contacts.x,contacts.y), b = SIMD2(contacts.z,contacts.w)
+            let radius = values[row+3][index%2]
+            let direction = simd_normalize(b-a)
+            XCTAssertEqual(simd_length(a-center),radius,accuracy: 0.00001)
+            XCTAssertEqual(simd_length(b-roller),0.12,accuracy: 0.00001)
+            XCTAssertEqual(simd_dot(direction,a-center),0,accuracy: 0.00001)
+            XCTAssertEqual(simd_dot(direction,b-roller),0,accuracy: 0.00001)
+            let join = values[row+1]
+            XCTAssertEqual(join.x,join.z,accuracy: 0.00001)
+            XCTAssertEqual(join.y,join.w,accuracy: 0.00001)
+            let end = values[row+2]
+            XCTAssertEqual(end.x,side*1.62,accuracy: 0.00001)
+            XCTAssertEqual(end.y,1.200,accuracy: 0.00001)
+            XCTAssertEqual(simd_length(SIMD2(end.z,end.w)),1,accuracy: 0.00001)
+            // Check every transport segment against all four through-holes.
+            for x: Float in [-0.91,-0.63,0.63,0.91] {
+                let hole = SIMD2<Float>(x,1.02)
+                let t = min(1,max(0,simd_dot(hole-a,b-a)/simd_length_squared(b-a)))
+                XCTAssertGreaterThan(simd_length(hole-(a+(b-a)*t)),0.075)
+                XCTAssertGreaterThan(simd_length(hole-roller),0.195)
+                XCTAssertGreaterThan(abs(hole.y-1.200),0.075)
+            }
+        }
+    }
+
+    @MainActor
+    func testFrontTapeCoatingMovesThroughSlotsAndHoldsWhilePaused() throws {
+        let (device, queue) = try environment()
+        let renderer = try TapeSceneRenderer(device: device)
+        width = 1440; height = 900
+        defer { width = 640; height = 480 }
+        var frame = musicalFrame()
+        frame.time = 12; frame.duration = 180; frame.tempo = 0; frame.isPlaying = false
+        let before = try render(renderer,device: device,queue: queue,frame: frame)
+        XCTAssertEqual(before,try render(renderer,device: device,queue: queue,frame: frame))
+        frame.time = 12.06; frame.duration = Double(frame.time)*15
+        let after = try render(renderer,device: device,queue: queue,frame: frame)
+        try saveEvidence(before,name: "front-tape-before")
+        try saveEvidence(after,name: "front-tape-after")
+        // Separate crops contain only the five front slots. Tempo zero and
+        // fixed time/duration keep the camera and winding geometry stationary.
+        func isCoating(_ image: [UInt8], _ x: Int, _ y: Int) -> Bool {
+            let i = (y*width+x)*4
+            return Int(image[i+2]) > Int(image[i+1])+2 && Int(image[i+1]) > Int(image[i])+2
+        }
+        for (xs,ys) in [(501..<523,465..<478),(556..<586,485..<501),
+                        (619..<673,509..<534),(708..<740,542..<561),(777..<802,568..<582)] {
+            let samples = ys.flatMap { y in xs.compactMap { x in isCoating(before,x,y) ? (x,y) : nil } }
+            XCTAssertGreaterThan(samples.count,100,"The coating needs readable height inside every front slot.")
+            func error(dx: Int,dy: Int) -> Double {
+                var total = 0.0, count = 0
+                for (x,y) in samples where isCoating(after,x+dx,y+dy) {
+                    let a = (y*width+x)*4, b = ((y+dy)*width+x+dx)*4
+                    for channel in 0..<3 {
+                        let difference = Double(Int(before[a+channel])-Int(after[b+channel]))
+                        total += difference*difference; count += 1
+                    }
+                }
+                return count > 60 ? total/Double(count) : .infinity
+            }
+            let offsets = (-8...8).flatMap { dx in (-4...4).map { dy in (dx,dy,error(dx: dx,dy: dy)) } }
+            let best = try XCTUnwrap(offsets.min { $0.2 < $1.2 })
+            XCTAssertGreaterThan(best.0,0,"Coating must move toward the right take-up reel.")
+            XCTAssertGreaterThan(best.1,0,"World +X projects down/right in this fixed view.")
+            XCTAssertLessThan(best.2,error(dx: 0,dy: 0)*0.4,
+                              "A translated coating must match much better than a stationary pattern.")
+        }
+        frame.time = 12; frame.duration = 180
+        XCTAssertEqual(before,try render(renderer,device: device,queue: queue,frame: frame),
+                       "Seeking back must restore the same coating phase.")
+    }
+
+    @MainActor
+    func testTransportKeepsLinearSpeedWhileReelRatesFollowWindingRadius() throws {
+        let (device, queue) = try environment()
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "TapeScene", withExtension: "metal"))
+        let source = try String(contentsOf: url, encoding: .utf8) + """
+        \n kernel void inspectTapeTransport(device float4 *out [[buffer(0)]], uint id [[thread_position_in_grid]]) {
+            float time = 1+float(id)*1.78;
+            float3 before = tapeTransportAngles(time-0.1,180);
+            float3 after = tapeTransportAngles(time+0.1,180);
+            float2 radii = tapeWindingRadii(time/180);
+            out[id*2] = float4((after-before)/0.2,0);
+            out[id*2+1] = float4(radii,tapeTransportAngles(time,180).xy);
+        }
+        """
+        let values = try compute(source, function: "inspectTapeTransport", count: 101, rows: 2, device: device, queue: queue)
+        for index in 0...100 {
+            let velocity = values[index*2], winding = values[index*2+1]
+            XCTAssertEqual(-velocity.x*winding.x,0.646,accuracy: 0.0002)
+            XCTAssertEqual(-velocity.y*winding.y,0.646,accuracy: 0.0002)
+            XCTAssertEqual(-velocity.z*0.12,0.646,accuracy: 0.0002)
+            XCTAssertLessThan(winding.z,0)
+            XCTAssertLessThan(winding.w,0)
+        }
+        XCTAssertGreaterThan(abs(values[200].x),abs(values[0].x))
+        XCTAssertLessThan(abs(values[200].y),abs(values[0].y))
+    }
+
+    func testFrontSlotsAreSeparatedByShellPillars() {
+        let mesh = TapeMesh.makeVertices()
+        func shellAt(_ x: Float, _ y: Float) -> Bool {
+            stride(from: 0, to: mesh.count, by: 3).contains { start in
+                guard [0,1,2].contains(Int(mesh[start].surface.z)),
+                      (0..<3).allSatisfy({ mesh[start+$0].position.z >= 1.179 }) else { return false }
+                let points = (0..<3).map { SIMD2(mesh[start+$0].position.x,mesh[start+$0].position.y) }
+                return contains(SIMD2(x,y),a: points[0],b: points[1],c: points[2])
+            }
+        }
+        for x: Float in [-1.35,-0.75,0,0.75,1.35] {
+            XCTAssertFalse(shellAt(x,0.24),"Each front slot must open through the shell.")
+        }
+        for x: Float in [-1.08,-0.43,0.43,1.08,1.72] {
+            XCTAssertTrue(shellAt(x,0.24),"The slots need molded separating pillars and closed ends.")
+        }
+    }
+
+    @MainActor
+    private func compute(_ source: String, function: String, count: Int, rows: Int,
+                         device: MTLDevice, queue: MTLCommandQueue) throws -> [SIMD4<Float>] {
+        let library = try device.makeLibrary(source: source, options: nil)
+        let state = try device.makeComputePipelineState(function: XCTUnwrap(library.makeFunction(name: function)))
+        let out = try XCTUnwrap(device.makeBuffer(length: count*rows*MemoryLayout<SIMD4<Float>>.stride, options: .storageModeShared))
+        let command = try XCTUnwrap(queue.makeCommandBuffer())
+        let encoder = try XCTUnwrap(command.makeComputeCommandEncoder())
+        encoder.setComputePipelineState(state); encoder.setBuffer(out,offset: 0,index: 0)
+        encoder.dispatchThreads(MTLSize(width: count,height: 1,depth: 1),
+                                threadsPerThreadgroup: MTLSize(width: min(count,state.maxTotalThreadsPerThreadgroup),height: 1,depth: 1))
+        encoder.endEncoding(); command.commit(); command.waitUntilCompleted()
+        XCTAssertEqual(command.status,.completed,command.error?.localizedDescription ?? "Transport probe failed")
+        return Array(UnsafeBufferPointer(start: out.contents().bindMemory(to: SIMD4<Float>.self,capacity: count*rows),count: count*rows))
     }
 
     private func musicalFrame() -> VisualFrame {

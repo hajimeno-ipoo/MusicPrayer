@@ -7,6 +7,9 @@ struct PlayerView: View {
     @State private var showQueue = false
     @State private var showAnalysis = false
     @State private var showLyrics = false
+    @State private var lyricDraft = ""
+    @State private var lyricFileImportError: String?
+    @State private var lyricDraftGeneration: UInt64?
     @State private var headerHeight: CGFloat = 58
     @State private var engaged = true
     @State private var hideTask: Task<Void, Never>?
@@ -51,7 +54,7 @@ struct PlayerView: View {
                 }
                 if dropTarget {
                     RoundedRectangle(cornerRadius: 24).stroke(cyan, style: StrokeStyle(lineWidth: 2, dash: [8, 8])).padding(14)
-                        .overlay { Label("曲をここへドロップ", systemImage: "music.note").font(.title2).padding(24).glassEffect() }
+                        .overlay { Label("曲・歌詞ファイルをここへドロップ", systemImage: "doc.badge.plus").font(.title2).padding(24).glassEffect() }
                         .allowsHitTesting(false)
                 }
             }
@@ -61,11 +64,22 @@ struct PlayerView: View {
         .onContinuousHover { _ in revealControls() }
         .onTapGesture { revealControls() }
         .onDrop(of: [.fileURL], isTargeted: $dropTarget) { providers in
-            for provider in providers {
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url else { return }
-                    Task { @MainActor in await store.add(urls: [url]) }
+            let generation = store.playbackGeneration
+            Task { @MainActor in
+                var urls: [URL] = []
+                for provider in providers {
+                    let url: URL? = await withCheckedContinuation { continuation in
+                        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                            continuation.resume(returning: url)
+                        }
+                    }
+                    guard let url else {
+                        store.playbackError = "ドロップされたファイルを取得できませんでした。"
+                        return
+                    }
+                    urls.append(url)
                 }
+                await importDroppedFiles(urls, generation: generation)
             }
             return !providers.isEmpty
         }
@@ -74,10 +88,15 @@ struct PlayerView: View {
         .onPreferenceChange(PlayerChromeHeightKey.self) { values in
             if let value = values["header"] { headerHeight = value }
         }
-        .onChange(of: store.playbackGeneration) { _, _ in showLyrics = false }
+        .onChange(of: store.playbackGeneration) { _, generation in
+            if lyricDraftGeneration != generation { showLyrics = false }
+        }
         .onChange(of: showLyrics) { _, _ in revealControls() }
         .onChange(of: store.lyricsAcceptingRequests, initial: true) { _, accepting in
-            if accepting && store.hasPendingLyricSaveFailure { showLyrics = true; revealControls() }
+            if accepting && store.hasPendingLyricSaveFailure {
+                if !showLyrics { openLyricEditor() }
+                revealControls()
+            }
         }
         .onChange(of: store.previewTime) { _, value in
             if value == nil { revealControls() }
@@ -94,9 +113,18 @@ struct PlayerView: View {
                 iconButton("曲の一覧", "list.bullet", action: { showQueue.toggle() })
                     .popover(isPresented: $showQueue, arrowEdge: .bottom) { QueueView(store: store) }
                 iconButton("詳しい解析", "waveform.path", active: showAnalysis, action: { withAnimation(.easeInOut(duration: 0.3)) { showAnalysis.toggle() } })
-                iconButton("歌詞", "text.quote", active: showLyrics, action: { showLyrics.toggle() })
+                iconButton("歌詞", "text.quote", active: showLyrics, action: {
+                    if showLyrics { showLyrics = false }
+                    else { openLyricEditor() }
+                })
                     .disabled(store.currentTrack == nil)
-                    .popover(isPresented: $showLyrics, arrowEdge: .bottom) { LyricEditorView(store: store) }
+                    .popover(isPresented: $showLyrics, arrowEdge: .bottom) {
+                        LyricEditorView(store: store, draft: $lyricDraft, fileImportError: $lyricFileImportError,
+                                        onFileDrop: { urls in
+                            let generation = store.playbackGeneration
+                            Task { @MainActor in await importDroppedFiles(urls, generation: generation) }
+                        })
+                    }
                 Menu {
                     Picker("ビジュアライザー", selection: $store.visualizerStyle) {
                         ForEach(VisualizerStyle.allCases) { style in
@@ -253,6 +281,47 @@ struct PlayerView: View {
         }
         .foregroundStyle(.orange.opacity(0.95)).padding(12).glassEffect(.regular, in: .rect(cornerRadius: 12))
     }
+    private func openLyricEditor() {
+        lyricDraft = LyricInput.clean(store.lyricText)
+        lyricFileImportError = nil
+        lyricDraftGeneration = store.playbackGeneration
+        showLyrics = true
+    }
+
+    @MainActor
+    private func importDroppedFiles(_ urls: [URL], generation: UInt64) async {
+        do {
+            switch try PlayerFileDrop.destination(for: urls) {
+            case .audio(let audio):
+                await store.add(urls: audio)
+            case .songAndLyrics(let audio, let lyrics):
+                guard let text = try await PlayerFileDrop.importPair(audio: audio, lyrics: lyrics,
+                                                                    store: store, generation: generation) else { return }
+                guard store.currentTrack?.url == audio, store.lyricsAcceptingRequests else { return }
+                openLyricEditor()
+                lyricDraft = text
+                revealControls()
+            case .lyrics(let lyrics):
+                guard generation == store.playbackGeneration else { return }
+                guard store.lyricsAcceptingRequests, store.currentTrack != nil else {
+                    store.playbackError = "歌詞を読み込む前に曲を選んでください。"
+                    return
+                }
+                if !showLyrics { openLyricEditor() }
+                do {
+                    lyricDraft = try LyricTextFile.read([lyrics])
+                    lyricFileImportError = nil
+                } catch {
+                    lyricFileImportError = error.localizedDescription
+                }
+                revealControls()
+            }
+        } catch {
+            if showLyrics { lyricFileImportError = error.localizedDescription }
+            else { store.playbackError = error.localizedDescription }
+        }
+    }
+
     private func revealControls() {
         withAnimation(.easeOut(duration: 0.25)) { engaged = true }
         hideTask?.cancel()

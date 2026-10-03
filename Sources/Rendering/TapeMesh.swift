@@ -5,12 +5,17 @@ import simd
 struct TapeVertex {
     var position: SIMD4<Float>
     var normal: SIMD4<Float>
-    /// UV, material ID, reserved. Texture top points toward negative world Z.
+    /// UV, material ID, path section. Texture top points toward negative world Z.
     var surface: SIMD4<Float>
 }
 
 /// A cassette lies on the XZ plane. All apertures are actual mesh openings.
 enum TapeMesh {
+    private static let frontSlots: [ClosedRange<Float>] = [
+        -1.52 ... -1.18, -0.96 ... -0.54, -0.32 ... 0.32,
+        0.54 ... 0.96, 1.18 ... 1.52
+    ]
+
     static func makeVertices() -> [TapeVertex] {
         var mesh = Builder()
         let bottom = caseContour(halfWidth: 1.96, halfDepth: 1.21, radius: 0.19)
@@ -38,7 +43,8 @@ enum TapeMesh {
         mesh.plate(top, holes: [opening] + guideHoles, y: 0.34, material: 0)
         mesh.wall(opening, at: 0.34, recess, at: 0.275, material: 2, inward: true)
         mesh.plate(bottom, holes: [recess] + guideHoles, y: 0.12, material: 0, upward: false)
-        mesh.wall(recess, at: 0.275, recess, at: 0.12, material: 2, inward: true)
+        mesh.cavityWall(recess)
+        mesh.frontSlotInsets()
 
         let reelCenters = [SIMD2<Float>(-0.9, -0.1), SIMD2<Float>(0.9, -0.1)]
         let islandBase = contour(halfWidth: 1.47, halfDepth: 0.365, radius: 0.14, centerZ: -0.1)
@@ -68,7 +74,16 @@ enum TapeMesh {
             let apertureBottom = circle(center: center, radius: 0.292)
             mesh.wall(apertureBottom, at: 0.291, reelHoles[index], at: 0.314, material: 1, inward: true)
             mesh.cylinderWall(center: center, radius: 0.292, bottom: 0.15, top: 0.291, material: 2, inward: true)
-            mesh.annulus(center: center, inner: 0.237, outer: 0.282, y: 0.299, material: hubMaterial)
+            let hubPorts = (0..<12).map { port in
+                let angle = Float(port) * .pi / 6 + .pi / 12
+                return circle(center: center + SIMD2(cos(angle), sin(angle)) * 0.260, radius: 0.006, segments: 16)
+            }
+            mesh.plate(circle(center: center, radius: 0.282),
+                       holes: [circle(center: center, radius: 0.237)] + hubPorts,
+                       y: 0.299, material: hubMaterial)
+            for port in hubPorts {
+                mesh.wall(port, at: 0.17, port, at: 0.299, material: hubMaterial, inward: true)
+            }
             mesh.cylinderWall(center: center, radius: 0.282, bottom: 0.17, top: 0.299, material: hubMaterial)
             mesh.cylinderWall(center: center, radius: 0.237, bottom: 0.17, top: 0.299, material: hubMaterial, inward: true)
             // Six broad, inward-facing drive teeth, with gaps between them.
@@ -97,12 +112,32 @@ enum TapeMesh {
         }
         mesh.roundedPlate(halfWidth: 1.00, halfDepth: 0.10, radius: 0.025,
                           centerZ: 0.755, bottom: 0.365, top: 0.368, material: 7)
-        // Pressure pad, two guide posts and the tape run at the front mouth.
-        mesh.box(minimum: SIMD3(-0.24, 0.17, 1.04), maximum: SIMD3(0.24, 0.205, 1.16), material: 8)
-        mesh.box(minimum: SIMD3(-1.05, 0.21, 1.17), maximum: SIMD3(1.05, 0.249, 1.18), material: 12)
-        for x: Float in [-1.08, 1.08] {
-            mesh.annulus(center: SIMD2(x, 1.095), inner: 0, outer: 0.045, y: 0.255, material: 8, segments: 32)
-            mesh.cylinderWall(center: SIMD2(x, 1.095), radius: 0.045, bottom: 0.15, top: 0.255, material: 8, segments: 32)
+        // A thin spring sits behind the felt pressure pad; its front contacts
+        // the tape rather than protruding through the magnetic coating.
+        mesh.box(minimum: SIMD3(-0.40, 0.17, 1.161), maximum: SIMD3(0.40, 0.257, 1.170), material: 8)
+        mesh.box(minimum: SIMD3(-0.18, 0.17, 1.170), maximum: SIMD3(0.18, 0.257, 1.199), material: 16)
+        mesh.box(minimum: SIMD3(-1.62, 0.16, 1.200), maximum: SIMD3(1.62, 0.257, 1.202), material: 12)
+        for (x, material) in [(Float(-1.62), Float(17)), (Float(1.62), Float(18))] {
+            let center = SIMD2<Float>(x, 1.080)
+            let grooves = [Float(-0.075), Float(0.075)].map { offset in
+                contour(halfWidth: 0.024, halfDepth: 0.006, radius: 0.004, centerZ: center.y)
+                    .map { $0 + SIMD2(center.x + offset, 0) }
+            }
+            mesh.plate(circle(center: center, radius: 0.12),
+                       holes: [circle(center: center, radius: 0.032)] + grooves,
+                       y: 0.260, material: material)
+            mesh.cylinderWall(center: center, radius: 0.12, bottom: 0.15, top: 0.260, material: material, segments: 48)
+            mesh.cylinderWall(center: center, radius: 0.032, bottom: 0.15, top: 0.260, material: material, inward: true, segments: 48)
+            for groove in grooves {
+                mesh.wall(groove, at: 0.15, groove, at: 0.260, material: material, inward: true)
+            }
+            // The fixed axle is independent of the slotted rotating roller.
+            mesh.annulus(center: center, inner: 0, outer: 0.024, y: 0.266, material: 8, segments: 32)
+            mesh.cylinderWall(center: center, radius: 0.024, bottom: 0.15, top: 0.266, material: 8, segments: 32)
+        }
+        for material: Float in [14, 15] {
+            mesh.tapePathTemplate(material: material, section: 0, segments: 1)
+            mesh.tapePathTemplate(material: material, section: 1, segments: 32)
         }
 
         // Four corner fasteners and one centered on the head deck.
@@ -123,9 +158,9 @@ enum TapeMesh {
         return mesh.vertices
     }
 
-    private static func circle(center: SIMD2<Float>, radius: Float) -> [SIMD2<Float>] {
-        (0..<96).map { index in
-            let angle = Float(index) * .pi * 2 / 96
+    private static func circle(center: SIMD2<Float>, radius: Float, segments: Int = 96) -> [SIMD2<Float>] {
+        (0..<segments).map { index in
+            let angle = Float(index) * .pi * 2 / Float(segments)
             return center + SIMD2(cos(angle), sin(angle)) * radius
         }
     }
@@ -143,7 +178,7 @@ enum TapeMesh {
                 }
             }
             if abs(a.y - b.y) < 0.0001 && a.y > halfDepth - 0.001 {
-                for x: Float in [-1.14, 1.14] {
+                for x in frontSlots.flatMap({ [$0.lowerBound, $0.upperBound] }) {
                     let t = (x - a.x) / (b.x - a.x)
                     if t > 0 && t < 1 { fractions.append(t) }
                 }
@@ -202,7 +237,7 @@ enum TapeMesh {
             for index in lower.indices {
                 let next = (index + 1) % lower.count
                 if frontOpening && lower[index].y > 1.19 && lower[next].y > 1.19 &&
-                    abs((lower[index].x + lower[next].x) / 2) < 1.14 { continue }
+                    TapeMesh.frontSlots.contains(where: { $0.contains((lower[index].x + lower[next].x) / 2) }) { continue }
                 let a = SIMD3(lower[index].x, lowY, lower[index].y)
                 let b = SIMD3(lower[next].x, lowY, lower[next].y)
                 let c = SIMD3(upper[next].x, highY, upper[next].y)
@@ -213,6 +248,69 @@ enum TapeMesh {
                 if simd_dot(normal, outward) < 0 { normal = -normal }
                 if inward { normal = -normal }
                 quad(a, b, c, d, normal: normal, material: material)
+            }
+        }
+
+        /// Keep the recess wall except where the reel-to-roller tape passes.
+        /// Split at passage boundaries so the upper and lower casing lips stay.
+        mutating func cavityWall(_ edge: [SIMD2<Float>]) {
+            for index in edge.indices {
+                let a = edge[index], b = edge[(index + 1) % edge.count]
+                var fractions: [Float] = [0, 1]
+                if abs(b.x - a.x) > 0.000001 {
+                    for x: Float in [-1.10, 1.10] {
+                        let t = (x - a.x) / (b.x - a.x)
+                        if t > 0 && t < 1 { fractions.append(t) }
+                    }
+                }
+                if abs(b.y - a.y) > 0.000001 {
+                    let t = (-0.30 - a.y) / (b.y - a.y)
+                    if t > 0 && t < 1 { fractions.append(t) }
+                }
+                fractions.sort()
+                for part in 1..<fractions.count {
+                    let p = a + (b - a) * fractions[part - 1]
+                    let q = a + (b - a) * fractions[part]
+                    let midpoint = (p + q) / 2
+                    let passage = abs(midpoint.x) > 1.10 && midpoint.y > -0.30
+                    let spans: [(Float, Float)] = passage ? [(0.12, 0.16), (0.257, 0.275)] : [(0.12, 0.275)]
+                    let normal = simd_normalize(SIMD3<Float>(-(q.y - p.y), 0, q.x - p.x))
+                    for (bottom, top) in spans {
+                        quad(SIMD3(p.x, bottom, p.y), SIMD3(q.x, bottom, q.y),
+                             SIMD3(q.x, top, q.y), SIMD3(p.x, top, p.y), normal: normal, material: 2)
+                    }
+                }
+            }
+        }
+
+        /// Side jambs and inner faces make each front opening visibly thick.
+        mutating func frontSlotInsets() {
+            for slot in TapeMesh.frontSlots {
+                for (x, direction) in [(slot.lowerBound, Float(1)), (slot.upperBound, Float(-1))] {
+                    quad(SIMD3(x, 0.16, 1.21), SIMD3(x, 0.16, 1.25),
+                         SIMD3(x, 0.296, 1.25), SIMD3(x, 0.296, 1.21),
+                         normal: SIMD3(direction, 0, 0), material: 1)
+                }
+                for (y, direction) in [(Float(0.16), Float(1)), (Float(0.296), Float(-1))] {
+                    quad(SIMD3(slot.lowerBound, y, 1.21), SIMD3(slot.upperBound, y, 1.21),
+                         SIMD3(slot.upperBound, y, 1.25), SIMD3(slot.lowerBound, y, 1.25),
+                         normal: SIMD3(0, direction, 0), material: 1)
+                }
+            }
+        }
+
+        /// The vertex shader replaces XZ with the changing tangent and arc.
+        /// UV encodes path progress/vertical edge and W chooses the section.
+        mutating func tapePathTemplate(material: Float, section: Float, segments: Int) {
+            for segment in 0..<segments {
+                let start = Float(segment) / Float(segments)
+                let end = Float(segment + 1) / Float(segments)
+                for uv in [SIMD2(start, 0), SIMD2(start, 1), SIMD2(end, 0),
+                           SIMD2(end, 0), SIMD2(start, 1), SIMD2(end, 1)] {
+                    vertices.append(TapeVertex(position: SIMD4(0, 0.16 + uv.y * 0.097, 0, 1),
+                                               normal: SIMD4(0, 0, 1, 0),
+                                               surface: SIMD4(uv.x, uv.y, material, section)))
+                }
             }
         }
 

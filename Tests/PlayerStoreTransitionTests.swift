@@ -8,6 +8,74 @@ import XCTest
 
 final class PlayerStoreTransitionTests: XCTestCase {
     @MainActor
+    func testPairedDropSelectsItsSongAndKeepsImportedLyricsUnapplied() async throws {
+        try await withLyricFixture { store, fixture in
+            store.select(0, autoplay: false)
+            let generation = store.playbackGeneration
+            let url = fixture.directory.appendingPathComponent("lyrics.txt")
+            try Data("[Verse]\n同時に読み込む歌詞\n\n[Chorus]\n感謝🌸".utf8).write(to: url)
+            let draft = try await PlayerFileDrop.importPair(audio: fixture.audio[1], lyrics: url,
+                                                            store: store, generation: generation)
+            XCTAssertEqual(store.currentTrack?.url, fixture.audio[1])
+            XCTAssertGreaterThan(store.playbackGeneration, generation)
+            XCTAssertEqual(store.tracks.count, 2, "すでに一覧にある曲を二重に追加しないこと")
+            XCTAssertEqual(draft, "同時に読み込む歌詞\n\n感謝🌸")
+            XCTAssertEqual(store.lyricText, "", "適用前の本文を保存済みの歌詞にしないこと")
+            XCTAssertNil(try fixture.saved(index: 1))
+            XCTAssertFalse(store.isPlaying)
+        }
+    }
+
+    @MainActor
+    func testPairedDropCanAddTheFirstSongToAnEmptyQueue() async throws {
+        try await withLyricFixture { store, fixture in
+            store.tracks = []
+            let url = fixture.directory.appendingPathComponent("lyrics.txt")
+            try Data("最初の歌詞".utf8).write(to: url)
+            let draft = try await PlayerFileDrop.importPair(audio: fixture.audio[0], lyrics: url,
+                                                            store: store, generation: store.playbackGeneration)
+            XCTAssertEqual(store.tracks.count, 1)
+            XCTAssertEqual(store.currentTrack?.url, fixture.audio[0])
+            XCTAssertEqual(draft, "最初の歌詞")
+        }
+    }
+
+    @MainActor
+    func testPairedDropRejectsUnreadableLyricsBeforeAddingOrSelectingAudio() async throws {
+        try await withLyricFixture { store, fixture in
+            store.tracks = [Track(url: fixture.audio[0])]
+            store.select(0, autoplay: false)
+            let generation = store.playbackGeneration
+            let url = fixture.directory.appendingPathComponent("lyrics.txt")
+            try Data([0xFF, 0x80]).write(to: url)
+            do {
+                _ = try await PlayerFileDrop.importPair(audio: fixture.audio[1], lyrics: url,
+                                                       store: store, generation: generation)
+                XCTFail("読めない本文を曲追加より先に拒否すること")
+            } catch LyricTextFile.ImportError.unreadableText {
+                // Expected: neither the queue nor the selected song changes.
+            }
+            XCTAssertEqual(store.tracks.count, 1)
+            XCTAssertEqual(store.currentTrack?.url, fixture.audio[0])
+            XCTAssertEqual(store.playbackGeneration, generation)
+        }
+    }
+
+    @MainActor
+    func testPairedDropFromAnOldSelectionDoesNotImport() async throws {
+        try await withLyricFixture { store, fixture in
+            let generation = store.playbackGeneration
+            store.select(1, autoplay: false)
+            let url = fixture.directory.appendingPathComponent("lyrics.txt")
+            try Data("以前の曲への歌詞".utf8).write(to: url)
+            let draft = try await PlayerFileDrop.importPair(audio: fixture.audio[0], lyrics: url,
+                                                            store: store, generation: generation)
+            XCTAssertNil(draft)
+            XCTAssertEqual(store.currentTrack?.url, fixture.audio[1])
+        }
+    }
+
+    @MainActor
     func testVisualizerUpdatesWhileRunLoopTracksControls() throws {
         _ = NSApplication.shared
         let backup = try FileBackup(QueuePersistence.file)

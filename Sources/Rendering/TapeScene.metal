@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-// Match TapeSceneRenderer.Uniforms: one matrix, nine aligned float4 groups.
+// Match TapeSceneRenderer.Uniforms: one matrix, ten aligned float4 groups.
 struct TapeUniforms {
     float4x4 viewProjection;
     float4 eye;
@@ -13,6 +13,7 @@ struct TapeUniforms {
     float4 layout;
     float4 viewportProgress;
     float4 phasesPresence;
+    float4 transport; // x: track duration; angles are derived below from the same winding radii.
 };
 struct TapeVertex { float4 position; float4 normal; float4 surface; };
 struct TapeVarying {
@@ -25,11 +26,70 @@ float3 tapeHue(float hue) {
     return clamp(abs(fract(hue + float3(0, 2.0/3.0, 1.0/3.0)) * 6 - 3) - 1, 0.0, 1.0);
 }
 float tapeHash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+float tapeTransportDistance(float time, float duration) {
+    float clock = duration > 0 ? clamp(time,0.0,duration) : max(time,0.0);
+    return clock*0.646;
+}
+float3 tapeFrontCoating(float2 surface, float time, float duration) {
+    // Material coordinates move right at the same linear speed as the reels.
+    // Broad variations in the dark coating make motion readable through the slots.
+    float2 q = float2((surface.x-tapeTransportDistance(time,duration))*18,
+                      (surface.y-0.16)*90);
+    float2 cell = floor(q), f = fract(q);
+    f = f*f*(3-2*f);
+    float grain = mix(mix(tapeHash(cell),tapeHash(cell+float2(1,0)),f.x),
+                      mix(tapeHash(cell+float2(0,1)),tapeHash(cell+float2(1,1)),f.x),f.y);
+    return mix(float3(0.018,0.010,0.005),float3(0.11,0.054,0.022),smoothstep(0.18,0.82,grain));
+}
 float2 tapeWindingRadii(float progress) {
     const float core = 0.30, full = 0.76;
     float amount = clamp(progress,0.0,1.0);
     float tapeArea = full*full-core*core;
     return sqrt(float2(full*full-tapeArea*amount,core*core+tapeArea*amount));
+}
+float3 tapeTransportAngles(float time, float duration) {
+    float progress = duration > 0 ? clamp(time/duration,0.0,1.0) : 0;
+    float2 radii = tapeWindingRadii(progress);
+    float2 initialRadii = tapeWindingRadii(0);
+    float distance = tapeTransportDistance(time,duration);
+    // Integrating constant tape speed over the square-root winding radius keeps
+    // angular phase continuous through pauses and seeks as the hub speed changes.
+    return float3(-2*distance/(initialRadii.x+radii.x),
+                  -2*distance/(initialRadii.y+radii.y),
+                  -distance/0.12);
+}
+// The guide contact follows the current winding radius, rather than a fixed strip.
+// Coordinates are in the cassette's x/z plane.
+struct TapeGuide {
+    float2 reelContact;
+    float2 rollerContact;
+    float2 normal;
+};
+TapeGuide tapeGuidePoint(bool left, float radius) {
+    float side = left ? -1.0 : 1.0;
+    float2 center = float2(side * 0.9, -0.1);
+    float2 guide = float2(side * 1.62, 1.080);
+    const float guideRadius = 0.12;
+    float2 delta = guide-center;
+    float distance = length(delta);
+    float2 direction = delta/distance;
+    float k = (radius-guideRadius)/distance;
+    float2 perpendicular = float2(-direction.y,direction.x);
+    float2 normal = k*direction - side*sqrt(1-k*k)*perpendicular;
+    return {center+radius*normal, guide+guideRadius*normal, normal};
+}
+float2 tapePathNormal(bool left, float radius, float t, bool arc) {
+    TapeGuide guide = tapeGuidePoint(left,radius);
+    if (!arc) return guide.normal;
+    // An angle measured from +z gives the short outer arc on both guides.
+    float angle = atan2(guide.normal.x,guide.normal.y)*(1-clamp(t,0.0,1.0));
+    return float2(sin(angle),cos(angle));
+}
+float2 tapePathPoint(bool left, float radius, float t, bool arc) {
+    TapeGuide guide = tapeGuidePoint(left,radius);
+    if (!arc) return mix(guide.reelContact,guide.rollerContact,clamp(t,0.0,1.0));
+    float2 center = float2(left ? -1.62 : 1.62,1.080);
+    return center+0.12*tapePathNormal(left,radius,t,true);
 }
 float tapeRoundedBox(float2 p, float2 halfSize, float radius) {
     float2 q = abs(p) - halfSize + radius;
@@ -64,14 +124,32 @@ vertex TapeVarying tapeMeshVertex(uint id [[vertex_id]], constant TapeUniforms &
         float r = length(local);
         if (r > 0.001) p.xz = center.xz + local/r * (0.30+(r-0.30)*(radius-0.30)/0.46);
     }
+    if (v.surface.z == 14 || v.surface.z == 15) {
+        bool left = v.surface.z == 14;
+        bool arc = v.surface.w > 0.5;
+        float2 radii = tapeWindingRadii(u.viewportProgress.z);
+        float radius = left ? radii.x : radii.y;
+        p.xz = tapePathPoint(left,radius,v.surface.x,arc);
+        float2 outward = tapePathNormal(left,radius,v.surface.x,arc);
+        n = float3(outward.x,0,outward.y);
+    }
     if (v.surface.z == 3 || v.surface.z == 4) {
         float3 center = float3(v.surface.z == 3 ? -0.9 : 0.9, 0, -0.1);
-        float angle = u.clockAudio.x * 0.85;
+        float3 angles = tapeTransportAngles(u.clockAudio.x,u.transport.x);
+        float angle = v.surface.z == 3 ? angles.x : angles.y;
         float c = cos(angle), s = sin(angle);
         p -= center;
         p.xz = float2(c*p.x-s*p.z, s*p.x+c*p.z);
         p += center;
         n.xz = float2(c*n.x-s*n.z, s*n.x+c*n.z);
+    }
+    if (v.surface.z == 17 || v.surface.z == 18) {
+        float2 center = float2(v.surface.z == 17 ? -1.62 : 1.62,1.080);
+        float2 local = p.xz-center;
+        float angle = tapeTransportAngles(u.clockAudio.x,u.transport.x).z;
+        float c = cos(angle), s = sin(angle);
+        p.xz = center+float2(c*local.x-s*local.y,s*local.x+c*local.y);
+        n.xz = float2(c*n.x-s*n.z,s*n.x+c*n.z);
     }
     TapeVarying out;
     out.world = p; out.normal = n; out.surface = v.surface.xyz;
@@ -89,6 +167,7 @@ fragment float4 tapeMeshFragment(TapeVarying in [[stage_in]], constant TapeUnifo
     if (material == 1) { base = float3(0.20, 0.48, 0.51); roughness = 0.20; }
     if (material == 2) { base = float3(0.015, 0.026, 0.032); roughness = 0.53; }
     if (material == 3 || material == 4) { base = float3(0.56, 0.70, 0.72); roughness = 0.40; }
+    if (material == 17 || material == 18) { base = float3(0.12,0.15,0.16); roughness = 0.54; }
     // CGContext bitmap rows already run from the texture's top edge downward.
     float2 uv = in.surface.xy;
     if (material == 5) { base = artwork.sample(sample, uv).rgb; roughness = 0.18; }
@@ -111,7 +190,21 @@ fragment float4 tapeMeshFragment(TapeVarying in [[stage_in]], constant TapeUnifo
         // Matte neutral backing inside the shell, under the clear window.
         return float4(float3(0.10,0.12,0.14),clamp(u.phasesPresence.z,0.0,1.0));
     }
-    if (material == 12) { base = float3(0.075,0.045,0.028); roughness = 0.68; }
+    if (material == 12 || material == 14 || material == 15) {
+        // The transported coating has the same matte dark brown as the winding.
+        // Musical shell lighting must not create a luminous line across the head.
+        float diffuse = max(0.0,dot(normalize(in.normal),normalize(float3(-3.8,7.5,-4.0)-in.world)));
+        float3 coating = material == 12 ? tapeFrontCoating(in.world.xy,u.clockAudio.x,u.transport.x)
+                                       : float3(0.040,0.021,0.010);
+        return float4(coating*(0.42+diffuse*0.68),
+                      clamp(u.phasesPresence.z,0.0,1.0));
+    }
+    if (material == 16) {
+        // The stationary pressure-pad felt sits behind the tape at the head gap.
+        float diffuse = max(0.0,dot(normalize(in.normal),normalize(float3(-3.8,7.5,-4.0)-in.world)));
+        return float4(float3(0.035,0.039,0.042)*(0.46+diffuse*0.35),
+                      clamp(u.phasesPresence.z,0.0,1.0));
+    }
     if (material == 9) {
         float3 view = normalize(u.eye.xyz-in.world);
         float fresnel = pow(1-max(0.0,dot(normalize(in.normal),view)),5.0);

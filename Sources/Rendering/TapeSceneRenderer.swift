@@ -15,6 +15,7 @@ final class TapeSceneRenderer {
         var layout: SIMD4<Float>
         var viewportProgress: SIMD4<Float>
         var phasesPresence: SIMD4<Float>
+        var transport: SIMD4<Float>
         init(frame: VisualFrame, size: CGSize) {
             let breathing = sin(frame.phraseProgress * .pi * 2)
             let barBreathing = (1 - cos(frame.barPhase * .pi * 2)) * 0.008
@@ -44,6 +45,7 @@ final class TapeSceneRenderer {
                                      frame.duration > 0 ? min(1, frame.time / Float(frame.duration)) : 0,
                                      frame.hasAnalysis > 0 ? frame.hue + frame.modeBias * 0.035 : 0.48)
             phasesPresence = SIMD4(frame.beatPhase, frame.barPhase, frame.presence, frame.hasAnalysis)
+            transport = SIMD4(Float(frame.duration), 0, 0, 0)
         }
     }
     private let device: MTLDevice
