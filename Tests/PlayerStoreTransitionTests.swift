@@ -281,6 +281,55 @@ final class PlayerStoreTransitionTests: XCTestCase {
     }
 
     @MainActor
+    func testTimingRetryCleansLegacySavedMetadataAndInvalidatesItsTimeline() async throws {
+        let transcriber = FixtureLyricTranscriber()
+        try await withLyricFixture(lyricTranscriber: transcriber) { store, fixture in
+            let legacy = "[Verse]\n(C)朝の光（君の声）\n(G)星の夢 (I love you)"
+            let expected = "朝の光（君の声）\n星の夢 (I love you)"
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: legacy, request: 1)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("旧本文の時刻を生成して保存すること") {
+                let saved = try fixture.saved(index: 0)
+                return store.lyricTimeline?.sourceText == legacy && saved?.timeline != nil
+            }
+            let oldTimeline = try XCTUnwrap(store.lyricTimeline)
+            XCTAssertEqual(store.lyricText, legacy, "再生成を押す前に旧本文を自動で書き換えないこと")
+
+            store.retryLyricTiming()
+            try await self.waitUntil("再生成で表示欄と同じ除去処理を通し、変更後の本文と時刻を保存すること") {
+                let saved = try fixture.saved(index: 0)
+                return store.lyricText == expected && store.lyricTimeline?.sourceText == expected &&
+                    saved?.sourceText == expected && saved?.timeline?.sourceText == expected
+            }
+            XCTAssertNotEqual(store.lyricTimeline, oldTimeline)
+            XCTAssertEqual(store.lyricTimingState, .generated(.speechRecognition))
+            let calls = await transcriber.callCount
+            XCTAssertEqual(calls, 2, "旧本文のキャッシュを使わず、変更後の本文を1回だけ認識すること")
+        }
+    }
+
+    @MainActor
+    func testTimingRetryOfLegacySavedLyricsRestartsFailedAnalysis() async throws {
+        try await withLyricFixture { store, fixture in
+            let source = "(C)朝の光（君の声）"
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: source, request: 1)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("旧本文の認識と解析を終えること") {
+                store.lyricTimeline?.sourceText == source
+            }
+            store.analysis = nil
+            store.analysisError = "検証用の解析失敗"
+            store.retryLyricTiming()
+            XCTAssertEqual(store.lyricText, "朝の光（君の声）")
+            XCTAssertTrue(store.analyzing, "本文が変わった分岐でも解析再試行を開始すること")
+            XCTAssertNil(store.analysisError)
+            XCTAssertEqual(store.lyricTimingState, .waitingForAnalysis)
+        }
+    }
+
+    @MainActor
     func testCancelledRecognitionCannotPublishOldProgressOrResultsAfterSelectionAndReapply() async throws {
         let oldTrackText = "前の曲の歌詞"
         let currentTrackText = "選んだ曲の歌詞"
@@ -759,6 +808,7 @@ private actor FixtureLyricTranscriber: LyricTranscribing {
     init(heldSources: Set<String> = []) { self.heldSources = heldSources }
 
     func transcribe(audioURL: URL, sourceText: String,
+                    analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
         callCount += 1
         await status(.preparingRecognition)

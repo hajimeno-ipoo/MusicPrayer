@@ -77,6 +77,71 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testOffscreenRowIsReadableAtMusicalEntranceBeforeLateSpeechStart() throws {
+        let store = offscreenStore(source: "歌い出し")
+        defer { store.engine.stop() }
+        var timeline = try XCTUnwrap(store.lyricTimeline)
+        timeline.lines[0].start = 2.2
+        timeline.lines[0].characterTimings = timeline.lines[0].text.map { _ in
+            LyricCharacterTiming(start: 2.2, end: 3)
+        }
+        timeline.frames = [LyricStructureFrame(start: 1, end: 5, section: 0, segment: 0,
+                                               lineOrdinals: [0], support: LyricFrameSupport())]
+        store.lyricTimeline = timeline
+        var analysis = MusicAnalysis(fingerprint: timeline.analysisFingerprint, duration: 10)
+        analysis.bars = [1, 5]
+        analysis.instrumentRanges.vocal = [TimeSpan(start: 1.15, duration: 3.85)]
+        store.analysis = analysis
+        var frame = try XCTUnwrap(store.visualSource.snapshot().lyrics)
+        frame.time = 1.5
+        publish(frame, to: store)
+        XCTAssertGreaterThan(try pixels(renderer(for: store)).litPixels, 30,
+                             "対応するフレーズ・小節・歌声が始まれば認識開始前にも本文を読めること")
+        XCTAssertEqual(LyricMotion.emphasis(time: 1.5, timing: timeline.lines[0].characterTimings[0]), 0)
+        XCTAssertEqual(store.lyricTimeline, timeline, "表示の前倒しで保存用の認識時刻を変えないこと")
+        frame.time = 0.79
+        publish(frame, to: store)
+        XCTAssertEqual(try pixels(renderer(for: store)).litPixels, 0, "対応する表示開始のフェード窓より前には本文を出さないこと")
+    }
+
+    @MainActor
+    func testOffscreenMissingLeadingSpellingColoursBeforeSpeechAndResetsOnSeek() throws {
+        let store = offscreenStore(source: "ああ星の海")
+        defer { store.engine.stop() }
+        var timeline = try XCTUnwrap(store.lyricTimeline)
+        timeline.lines[0].start = 2.2
+        let first = LyricCharacterTiming(start: 2.2, end: 2.4)
+        timeline.lines[0].characterTimings = [first, first, first,
+            .init(start: 2.4, end: 2.6), .init(start: 2.6, end: 3)]
+        timeline.frames = [.init(start: 1, end: 5, section: 0, segment: 0,
+                                  lineOrdinals: [0], support: LyricFrameSupport())]
+        store.lyricTimeline = timeline
+        var analysis = MusicAnalysis(fingerprint: timeline.analysisFingerprint, duration: 10)
+        analysis.bars = [1]
+        analysis.instrumentRanges.vocal = [TimeSpan(start: 1.15, duration: 3.85)]
+        store.analysis = analysis
+        var frame = try XCTUnwrap(store.visualSource.snapshot().lyrics)
+        frame.time = 1.8
+        publish(frame, to: store)
+        let white = try pixels(renderer(for: store))
+        timeline.lines[0].unrecognizedLeadingCharacters = 2
+        store.lyricTimeline = timeline
+        let coloured = try pixels(renderer(for: store))
+        XCTAssertGreaterThan(white.litPixels, 30)
+        XCTAssertFalse(white.bytes == coloured.bytes, "認識から抜けた先頭文字も、行が出た後には色を進めること")
+        let colours = LyricMotion.colourTimings(for: timeline.lines[0], displayStart: 1.15)
+        XCTAssertGreaterThan(LyricMotion.emphasis(time: frame.time, timing: colours[0]), 0)
+        XCTAssertEqual(LyricMotion.emphasis(time: frame.time, timing: colours[2]), 0)
+        frame.time = 1.15
+        publish(frame, to: store)
+        let reset = try pixels(renderer(for: store))
+        timeline.lines[0].unrecognizedLeadingCharacters = nil
+        store.lyricTimeline = timeline
+        XCTAssertEqual(reset.bytes, try pixels(renderer(for: store)).bytes,
+                       "歌唱前へシークした文字は白へ戻ること")
+    }
+
+    @MainActor
     func testOffscreenUnicodeTextKeepsTheUnstyledGlyphLayout() throws {
         _ = NSApplication.shared
         for source in ["遠い夜の向こうから", "Cafe\u{301}", "家族 👨‍👩‍👧‍👦 と音楽 🎵", "office affinity ffi"] {

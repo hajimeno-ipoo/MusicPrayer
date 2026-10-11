@@ -11,6 +11,24 @@ final class LyricTextFileTests: XCTestCase {
         }
     }
 
+    func testImportedMusicMetadataIsRemovedAndOrdinaryParenthesesAndOriginalFileRemain() throws {
+        let source = "[Code progress]\r\n|G#m7b5|A|Bm F#m|E7|C#m|E Amaj7|\r\n\r\n"
+            + "[melody progress]\r\n[[G#4,4], [B4,8], [D5,8], [G#4,4]], \r\n"
+            + "[[E4,4], [G#4,8], [B4,8], [A4,4]]\r\n[, , , ],\r\n\r\n"
+            + "[Verse]\r\n(G#m7b5) 흔들리는 불빛이 (A)\r\n君の（声）（Ｃ＃ｍ７）\r\n(E Amaj7)(I love you)🌸\r\n"
+        for (bom, encoding) in [(Data(), String.Encoding.utf8),
+                                (Data([0xEF, 0xBB, 0xBF]), .utf8),
+                                (Data([0xFF, 0xFE]), .utf16LittleEndian),
+                                (Data([0xFE, 0xFF]), .utf16BigEndian)] {
+            let data = bom + (try XCTUnwrap(source.data(using: encoding)))
+            try withFile(data) { url in
+                XCTAssertEqual(try LyricTextFile.read([url]),
+                               "\r\n\r\n 흔들리는 불빛이 \r\n君の（声）\r\n(I love you)🌸\r\n")
+                XCTAssertEqual(try Data(contentsOf: url), data)
+            }
+        }
+    }
+
     func testUTF8PreservesWhitespaceLineBreaksAndUnicode() throws {
         let source = "  朝の光  \r\n\r\ne\u{301}と🌸\n"
         try withFile(Data(source.utf8)) { url in

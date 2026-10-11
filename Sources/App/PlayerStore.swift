@@ -332,6 +332,12 @@ private struct LyricSaveRequest {
 extension PlayerStore {
     func retryLyricTiming() {
         guard lyricsAcceptingRequests, !lyricText.isEmpty else { return }
+        let cleaned = LyricInput.clean(lyricText)
+        if cleaned != lyricText {
+            applyLyrics(cleaned)
+            if !lyricText.isEmpty, analysis == nil { retryAnalysis() }
+            return
+        }
         if analysis == nil { retryAnalysis(); return }
         lyricRequestGeneration &+= 1
         lyricTask?.cancel()
@@ -556,7 +562,8 @@ extension PlayerStore {
             let worker = Task.detached(priority: .userInitiated) { () async throws -> LyricTimeline in
                 if let cached, cached.sourceText == text,
                    (try? LyricAligner.validate(cached, analysis: analysis)) != nil { return cached }
-                let transcription = try await transcriber.transcribe(audioURL: audioURL, sourceText: text, status: updateStatus)
+                let transcription = try await transcriber.transcribe(audioURL: audioURL, sourceText: text,
+                                                                    analysis: analysis, status: updateStatus)
                 try Task.checkCancellation()
                 await updateStatus(.generating)
                 return try LyricAligner.align(sourceText: text, analysis: analysis, transcription: transcription)

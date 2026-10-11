@@ -2,7 +2,7 @@ import Foundation
 
 enum LyricVersions {
     static let schema = 1
-    static let alignment = 5
+    static let alignment = 8
 }
 
 enum LyricAlignmentMode: String, Codable, Sendable {
@@ -33,12 +33,19 @@ struct TimedLyricLine: Codable, Sendable, Identifiable, Equatable {
     var textWeight: Double
     var confidence: Float
     var characterTimings: [LyricCharacterTiming] = []
+    /// Weighted source characters missing before the first mapped Speech character.
+    /// Optional so stale timelines can still decode and preserve their source text.
+    var unrecognizedLeadingCharacters: Int?
 
     var hasValidCharacterTimings: Bool {
         guard characterTimings.count == text.count, characterTimings.allSatisfy({
             $0.start.isFinite && $0.end.isFinite && $0.start >= start &&
                 $0.end >= $0.start && $0.end <= end
         }) else { return false }
+        if let count = unrecognizedLeadingCharacters {
+            let weightedCount = text.filter { LyricParser.characterWeight($0) > 0 }.count
+            guard count >= 0, count < weightedCount else { return false }
+        }
         var previous = LyricCharacterTiming(start: start, end: start)
         for (character, timing) in zip(text, characterTimings) where LyricParser.characterWeight(character) > 0 {
             guard timing.start >= previous.start, timing.end >= previous.end else { return false }

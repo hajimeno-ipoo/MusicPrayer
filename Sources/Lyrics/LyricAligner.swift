@@ -3,7 +3,7 @@ import CoreFoundation
 import OSLog
 
 /// Matches complete input lines to the final, time-indexed Apple Speech text.
-/// Confidence describes text agreement, not measured synchronization accuracy.
+/// Confidence describes spelling or reading agreement, not synchronization accuracy.
 enum LyricAligner {
     private static let minimumMatchRatio = 0.60
     private static let maximumEditRatio = 0.45
@@ -32,7 +32,12 @@ enum LyricAligner {
         guard !lines.isEmpty else { throw LyricAlignmentError.noFeasiblePath }
         let characters = try prepare(transcription, duration: analysis.duration)
         guard !characters.isEmpty else { throw LyricAlignmentError.noRecognizedWords }
-        let placements = try solve(lines, characters: characters)
+        let placements: [Candidate]
+        do {
+            placements = try solve(lines, characters: characters, useReading: false)
+        } catch LyricAlignmentError.unmatchedLine {
+            placements = try solve(lines, characters: characters, useReading: true)
+        }
         let sourceHash = LyricHash.text(sourceText)
         var recognizedLines = zip(lines, placements).map { line, placement in
             TimedLyricLine(id: LyricHash.lineID(audioFingerprint: analysis.fingerprint,
@@ -42,13 +47,16 @@ enum LyricAligner {
                            start: characters[placement.start].start,
                            end: characters[placement.end - 1].end,
                            textWeight: line.textWeight,
-                           confidence: Float(placement.matches) / Float(placement.sourceCount))
+                           confidence: placement.readingAgreement ??
+                               Float(placement.matches) / Float(placement.sourceCount))
         }
         let music = LyricMusicContext(analysis: analysis)
         let frames = try music.frames(for: recognizedLines)
         for index in lines.indices {
-            recognizedLines[index].characterTimings = try colourTimings(for: lines[index],
+            let colour = try colourTimings(for: lines[index],
                 placement: placements[index], characters: characters, music: music)
+            recognizedLines[index].characterTimings = colour.timings
+            recognizedLines[index].unrecognizedLeadingCharacters = colour.unrecognizedLeadingCharacters
         }
         let confidence = recognizedLines.reduce(Float(0)) { $0 + $1.confidence } / Float(recognizedLines.count)
         let result = LyricTimeline(version: LyricVersions.alignment,
@@ -150,6 +158,7 @@ enum LyricAligner {
     private struct EditScore {
         var edits: Int
         var matches: Int
+        var firstMatch: Int?
 
         func isBetter(than other: Self) -> Bool {
             edits < other.edits || (edits == other.edits && matches > other.matches)
@@ -162,11 +171,13 @@ enum LyricAligner {
         var edits: Int
         var matches: Int
         var sourceCount: Int
+        var firstMatch: Int?
         var readingEdits = 0
+        var readingAgreement: Float?
+        var readingOccurrenceStart: Int?
     }
 
-    /// Reading only breaks otherwise identical spelling scores for Japanese rows.
-    /// The whole row/window is tokenized, so 一つ is read as hitotsu rather than ichi.
+    /// Read whole rows/windows, so 一つ is read as hitotsu rather than ichi.
     private final class ReadingCache {
         private var values: [String: [Character]] = [:]
         private var unavailable: Set<String> = []
@@ -219,13 +230,21 @@ enum LyricAligner {
         return result
     }
 
-    private static func editDistance(_ source: [Character], _ target: [Character]) -> Int {
-        var previous = Array(0...target.count)
+    private static func editScore(_ source: [Character], _ target: [Character]) -> EditScore {
+        var previous = (0...target.count).map { EditScore(edits: $0, matches: 0) }
         for sourceIndex in source.indices {
-            var current = [sourceIndex + 1]
+            var current = [EditScore(edits: sourceIndex + 1, matches: 0)]
             for targetIndex in target.indices {
-                current.append(min(previous[targetIndex + 1] + 1, current[targetIndex] + 1,
-                                   previous[targetIndex] + (source[sourceIndex] == target[targetIndex] ? 0 : 1)))
+                let equal = source[sourceIndex] == target[targetIndex]
+                var best = EditScore(edits: previous[targetIndex].edits + (equal ? 0 : 1),
+                                     matches: previous[targetIndex].matches + (equal ? 1 : 0))
+                let deletion = EditScore(edits: previous[targetIndex + 1].edits + 1,
+                                         matches: previous[targetIndex + 1].matches)
+                if deletion.isBetter(than: best) { best = deletion }
+                let insertion = EditScore(edits: current[targetIndex].edits + 1,
+                                          matches: current[targetIndex].matches)
+                if insertion.isBetter(than: best) { best = insertion }
+                current.append(best)
             }
             previous = current
         }
@@ -233,9 +252,14 @@ enum LyricAligner {
     }
 
     /// Backtrace only the already selected row. It cannot change row placement.
+    private struct ColourAlignment {
+        var timings: [LyricCharacterTiming]
+        var unrecognizedLeadingCharacters: Int
+    }
+
     private static func colourTimings(for line: LyricLine, placement: Candidate,
                                      characters: [AudioCharacter], music: LyricMusicContext) throws
-        -> [LyricCharacterTiming] {
+        -> ColourAlignment {
         let original = Array(line.text)
         let source = original.enumerated().flatMap { index, character in
             normalized(String(character)).map { (owner: index, value: $0) }
@@ -291,6 +315,10 @@ enum LyricAligner {
                 i -= 1; j -= 1
             }
         }
+        // Record missing leading spelling before filling it with a shared interval.
+        // Shared times alone cannot distinguish an omission from a multi-letter token.
+        let weighted = original.indices.filter { LyricParser.characterWeight(original[$0]) > 0 }
+        let unrecognizedLeadingCharacters = weighted.prefix { timings[$0] == nil }.count
         // A missing spelling shares the next recognised interval. Trailing spelling
         // completes with the preceding word; no fabricated intermediate timestamps.
         var next: LyricCharacterTiming?
@@ -303,7 +331,8 @@ enum LyricAligner {
             if let known = timings[index] { previous = known }
             else { timings[index] = LyricCharacterTiming(start: previous.end, end: previous.end) }
         }
-        return timings.map { $0! }
+        return ColourAlignment(timings: timings.map { $0! },
+                               unrecognizedLeadingCharacters: unrecognizedLeadingCharacters)
     }
 
     private static func addReadingEvidence(to candidates: inout [Candidate], line: LyricLine,
@@ -317,19 +346,23 @@ enum LyricAligner {
                 // this third score for the entire row rather than inventing a reading.
                 return
             }
-            distances.append(editDistance(source, target))
+            distances.append(editScore(source, target).edits)
         }
         for index in candidates.indices { candidates[index].readingEdits = distances[index] }
     }
 
     /// Every candidate is one consecutive recognition interval. The bounded edit
     /// window allows spelling errors without joining scattered words across song sections.
-    private static func candidates(for line: LyricLine, characters: [AudioCharacter]) throws -> [Candidate] {
+    private static func candidates(for line: LyricLine, characters: [AudioCharacter],
+                                   cache: ReadingCache, useReading: Bool) throws -> [Candidate] {
         let source = normalized(line.text)
         guard !source.isEmpty else { throw LyricAlignmentError.unmatchedLine(line.ordinal) }
         let sourceCount = source.count
         let editLimit = max(2, Int(floor(Double(sourceCount) * maximumEditRatio)))
-        let windowLimit = Int(ceil(Double(sourceCount) * 1.8)) + 2
+        let sourceReading = useReading && containsJapanese(line.text) ? cache.reading(line.text) : nil
+        let readingLimit = sourceReading.map { max(2, Int(floor(Double($0.count) * maximumEditRatio))) } ?? 0
+        let windowLimit = max(Int(ceil(Double(sourceCount) * 1.8)) + 2,
+                              sourceReading.map { $0.count + readingLimit } ?? 0)
         var result: [Candidate] = []
         for start in characters.indices {
             if start % 64 == 0 { try Task.checkCancellation() }
@@ -342,12 +375,13 @@ enum LyricAligner {
                 for offset in 1...count {
                     let equal = source[sourceIndex] == characters[start + offset - 1].value
                     var best = EditScore(edits: previous[offset - 1].edits + (equal ? 0 : 1),
-                                         matches: previous[offset - 1].matches + (equal ? 1 : 0))
+                                         matches: previous[offset - 1].matches + (equal ? 1 : 0),
+                                         firstMatch: previous[offset - 1].firstMatch ?? (equal ? start + offset - 1 : nil))
                     let deletion = EditScore(edits: previous[offset].edits + 1,
-                                             matches: previous[offset].matches)
+                                             matches: previous[offset].matches, firstMatch: previous[offset].firstMatch)
                     if deletion.isBetter(than: best) { best = deletion }
                     let insertion = EditScore(edits: current[offset - 1].edits + 1,
-                                              matches: current[offset - 1].matches)
+                                              matches: current[offset - 1].matches, firstMatch: current[offset - 1].firstMatch)
                     if insertion.isBetter(than: best) { best = insertion }
                     current.append(best)
                 }
@@ -357,61 +391,109 @@ enum LyricAligner {
                 let end = start + offset
                 if end < characters.count, characters[end - 1].token == characters[end].token { continue }
                 let score = previous[offset]
-                guard score.edits <= editLimit,
-                      Double(score.matches) / Double(sourceCount) + epsilon >= minimumMatchRatio,
-                      characters[end - 1].end - characters[start].start + epsilon >= minimumLineDuration else { continue }
-                result.append(Candidate(start: start, end: end, edits: score.edits,
-                                        matches: score.matches, sourceCount: sourceCount))
+                guard characters[end - 1].end - characters[start].start + epsilon >= minimumLineDuration else { continue }
+                var candidate = Candidate(start: start, end: end, edits: score.edits,
+                                          matches: score.matches, sourceCount: sourceCount,
+                                          firstMatch: score.firstMatch)
+                if score.edits > editLimit ||
+                    Double(score.matches) / Double(sourceCount) + epsilon < minimumMatchRatio {
+                    // A spelling error must still agree with the recognized reading.
+                    // Reuse the same evidence limits; retain Apple's exact time range.
+                    guard let sourceReading,
+                          let targetReading = cache.reading(recognizedText(candidate, characters: characters)) else { continue }
+                    guard abs(sourceReading.count - targetReading.count) <= readingLimit else { continue }
+                    let readingScore = editScore(sourceReading, targetReading)
+                    let agreement = Double(readingScore.matches) / Double(sourceReading.count)
+                    guard readingScore.edits <= readingLimit,
+                          agreement + epsilon >= minimumMatchRatio else { continue }
+                    candidate.readingAgreement = Float(agreement)
+                    // Prefix variants share an occurrence only within connected
+                    // Speech ranges; an earlier, separate voice remains distinct.
+                    if let firstMatch = score.firstMatch {
+                        let prefix = characters[start...firstMatch]
+                        let connected = zip(prefix, prefix.dropFirst()).allSatisfy {
+                            $1.start <= $0.end + epsilon
+                        }
+                        if connected { candidate.readingOccurrenceStart = firstMatch }
+                    }
+                }
+                result.append(candidate)
             }
         }
         return result
     }
 
     private struct PathScore: Equatable {
+        var readingFallbacks: Int
         var edits: Int
         var unmatched: Int
         var readingEdits: Int
 
         func isBetter(than other: Self) -> Bool {
-            edits < other.edits || (edits == other.edits &&
+            if readingFallbacks != other.readingFallbacks {
+                return readingFallbacks < other.readingFallbacks
+            }
+            return edits < other.edits || (edits == other.edits &&
                 (unmatched < other.unmatched || (unmatched == other.unmatched &&
                     readingEdits < other.readingEdits)))
         }
+    }
+
+    /// Interns row occurrences: spelling starts, or the first shared spelling for
+    /// reading-supported prefixes. Their boundary alternatives share one identity.
+    private struct OccurrenceKey: Hashable {
+        let previous: Int
+        let start: Int
     }
 
     private final class Path {
         let candidate: Candidate?
         let previous: Path?
         let score: PathScore
+        let occurrenceID: Int
+        let boundaryDeviation: Int
         let rank: Int
         var end: Int { candidate?.end ?? 0 }
 
-        init(candidate: Candidate?, previous: Path?, score: PathScore, rank: Int) {
+        init(candidate: Candidate?, previous: Path?, score: PathScore,
+             occurrenceID: Int, boundaryDeviation: Int, rank: Int) {
             self.candidate = candidate
             self.previous = previous
             self.score = score
+            self.occurrenceID = occurrenceID
+            self.boundaryDeviation = boundaryDeviation
             self.rank = rank
         }
     }
 
     private static func precedes(_ lhs: Path, _ rhs: Path) -> Bool {
-        lhs.score.isBetter(than: rhs.score) || (lhs.score == rhs.score && lhs.rank < rhs.rank)
+        if lhs.score != rhs.score { return lhs.score.isBetter(than: rhs.score) }
+        if lhs.boundaryDeviation != rhs.boundaryDeviation {
+            return lhs.boundaryDeviation < rhs.boundaryDeviation
+        }
+        return lhs.rank < rhs.rank
     }
 
-    private static func keepBestTwo(_ path: Path, in best: inout [Path]) {
-        best.append(path)
+    private static func keepBestTwoOccurrences(_ path: Path, in best: inout [Path]) {
+        if let index = best.firstIndex(where: { $0.occurrenceID == path.occurrenceID }) {
+            if precedes(path, best[index]) { best[index] = path }
+        } else {
+            best.append(path)
+        }
         best.sort(by: precedes)
         if best.count > 2 { best.removeLast() }
     }
 
-    private static func solve(_ lines: [LyricLine], characters: [AudioCharacter]) throws -> [Candidate] {
+    private static func solve(_ lines: [LyricLine], characters: [AudioCharacter],
+                              useReading: Bool, anchorOnly: Bool = false) throws -> [Candidate] {
         var previous = [Path(candidate: nil, previous: nil,
-                             score: PathScore(edits: 0, unmatched: 0, readingEdits: 0), rank: 0)]
+                             score: PathScore(readingFallbacks: 0, edits: 0, unmatched: 0, readingEdits: 0),
+                             occurrenceID: 0, boundaryDeviation: 0, rank: 0)]
         var nextRank = 1
         let readingCache = ReadingCache()
         for line in lines {
             try Task.checkCancellation()
-            var possible = try candidates(for: line, characters: characters)
+            var possible = try candidates(for: line, characters: characters, cache: readingCache, useReading: useReading)
                 .sorted { $0.start == $1.start ? $0.end < $1.end : $0.start < $1.start }
             guard !possible.isEmpty else { throw LyricAlignmentError.unmatchedLine(line.ordinal) }
             try addReadingEvidence(to: &possible, line: line, characters: characters, cache: readingCache)
@@ -419,16 +501,41 @@ enum LyricAligner {
             var prefix: [Path] = []
             var previousIndex = 0
             var current: [Path] = []
+            var occurrences: [OccurrenceKey: Int] = [:]
             for candidate in possible {
                 while previousIndex < ordered.count, ordered[previousIndex].end <= candidate.start {
-                    keepBestTwo(ordered[previousIndex], in: &prefix)
+                    // Group only parents that can reach this start. A shorter
+                    // ending may be the only one that leaves room for this row.
+                    keepBestTwoOccurrences(ordered[previousIndex], in: &prefix)
                     previousIndex += 1
                 }
                 for parent in prefix {
+                    var occurrenceStart = candidate.readingOccurrenceStart ?? candidate.start
+                    if anchorOnly, let first = candidate.firstMatch,
+                       zip(characters[candidate.start...first],
+                           characters[candidate.start...first].dropFirst()).allSatisfy({
+                               $1.start <= $0.end + epsilon
+                           }) {
+                        occurrenceStart = first
+                    }
+                    let key = OccurrenceKey(previous: parent.occurrenceID,
+                                            start: occurrenceStart)
+                    let occurrenceID: Int
+                    if let existing = occurrences[key] {
+                        occurrenceID = existing
+                    } else {
+                        occurrenceID = occurrences.count
+                        occurrences[key] = occurrenceID
+                    }
                     current.append(Path(candidate: candidate, previous: parent,
-                                        score: PathScore(edits: parent.score.edits + candidate.edits,
+                                        score: PathScore(readingFallbacks: parent.score.readingFallbacks +
+                                            (candidate.readingAgreement == nil ? 0 : 1),
+                                                         edits: parent.score.edits + candidate.edits,
                                                          unmatched: parent.score.unmatched + candidate.sourceCount - candidate.matches,
                                                          readingEdits: parent.score.readingEdits + candidate.readingEdits),
+                                        occurrenceID: occurrenceID,
+                                        boundaryDeviation: parent.boundaryDeviation +
+                                            abs(candidate.end - candidate.start - candidate.sourceCount),
                                         rank: nextRank))
                     nextRank += 1
                 }
@@ -437,8 +544,9 @@ enum LyricAligner {
             previous = current
         }
         var final: [Path] = []
-        for path in previous { keepBestTwo(path, in: &final) }
+        for path in previous { keepBestTwoOccurrences(path, in: &final) }
         guard let best = final.first else { throw LyricAlignmentError.noFeasiblePath }
+        // Length chooses a representative ending, never a different occurrence.
         if final.count == 2, final[1].score == best.score {
             throw LyricAlignmentError.ambiguousMatch
         }
@@ -449,5 +557,27 @@ enum LyricAligner {
             node = current.previous
         }
         return result.reversed()
+    }
+
+    /// Locates remaining-language fragments for a bounded second recognition pass.
+    /// These anchors do not become row or colour times. An omitted leading spelling
+    /// begins at its first matched native token; distinct singing positions still fail.
+    static func recognitionAnchors(fragments: [String], transcription: [RecognizedLyricToken],
+                                   duration: Double) throws -> [LyricCharacterTiming] {
+        let lines = LyricParser.parse(fragments.joined(separator: "\n"))
+        guard lines.count == fragments.count, !lines.isEmpty else {
+            throw LyricAlignmentError.noFeasiblePath
+        }
+        let characters = try prepare(transcription, duration: duration)
+        guard !characters.isEmpty else { throw LyricAlignmentError.noRecognizedWords }
+        let placements: [Candidate]
+        do { placements = try solve(lines, characters: characters, useReading: false, anchorOnly: true) }
+        catch LyricAlignmentError.unmatchedLine {
+            placements = try solve(lines, characters: characters, useReading: true, anchorOnly: true)
+        }
+        return placements.map {
+            LyricCharacterTiming(start: characters[$0.firstMatch ?? $0.start].start,
+                                 end: characters[$0.end - 1].end)
+        }
     }
 }

@@ -13,21 +13,44 @@ struct LyricMotionParameters: Equatable, Sendable {
 }
 
 enum LyricMotion {
-    static func visibleLines(_ timeline: LyricTimeline, at time: Double) -> [TimedLyricLine] {
+    /// Prepare the row for reading within its current musical frame and bar.
+    /// These are presentation times; Speech/character times remain untouched.
+    static func displayStarts(_ timeline: LyricTimeline, analysis: MusicAnalysis?) -> [Int: Double] {
+        guard let analysis, analysis.fingerprint == timeline.analysisFingerprint else { return [:] }
+        var starts: [Int: Double] = [:]
+        var previousEnd = 0.0
+        for line in timeline.lines {
+            defer { previousEnd = line.end }
+            guard let frame = timeline.frames.first(where: {
+                $0.start <= line.start && line.start < $0.end && $0.lineOrdinals.contains(line.ordinal)
+            }), let voice = analysis.instrumentRanges.vocal.first(where: {
+                $0.start <= line.start && line.start < $0.end
+            }), let bar = analysis.bars.last(where: { $0 <= line.start }) else { continue }
+            starts[line.ordinal] = max(frame.start, voice.start, bar, previousEnd)
+        }
+        return starts
+    }
+
+    static func visibleLines(_ timeline: LyricTimeline, at time: Double,
+                             displayStarts: [Int: Double] = [:]) -> [TimedLyricLine] {
         guard time.isFinite else { return [] }
         // Include neighbouring frames for the existing entrance/exit fades.
         let ordinals = Set(timeline.frames.filter {
             $0.start <= time + 0.35 && $0.end >= time - 0.40
         }.flatMap(\.lineOrdinals))
-        return visibleLines(timeline.lines.filter { ordinals.contains($0.ordinal) }, at: time)
+        return select(timeline.lines.filter { ordinals.contains($0.ordinal) }, at: time,
+                      displayStarts: displayStarts)
     }
 
     static func parameters(for line: TimedLyricLine, time: Double, vocal: Float?,
-                           beat: Float, beatPhase: Float, barPhase: Float) -> LyricMotionParameters? {
+                           beat: Float, beatPhase: Float, barPhase: Float,
+                           displayStart: Double? = nil) -> LyricMotionParameters? {
+        let entranceEnd = displayStart ?? line.start
         guard time.isFinite, line.start.isFinite, line.end.isFinite, line.end > line.start,
-              time >= line.start - 0.35, time <= line.end + 0.40 else { return nil }
+              entranceEnd.isFinite, entranceEnd >= 0, entranceEnd <= line.start,
+              time >= entranceEnd - 0.35, time <= line.end + 0.40 else { return nil }
         let progress = clamp((time - line.start) / (line.end - line.start))
-        let entrance = smoothstep((time - line.start + 0.35) / 0.35)
+        let entrance = smoothstep((time - entranceEnd + 0.35) / 0.35)
         let exit = smoothstep((time - line.end) / 0.40)
         let singing = time >= line.start && time < line.end
         let activity = vocal.map { clamp(Double($0)) } ?? 0
@@ -41,21 +64,16 @@ enum LyricMotion {
     }
 
     static func visibleLines(_ lines: [TimedLyricLine], at time: Double) -> [TimedLyricLine] {
+        select(lines, at: time, displayStarts: [:])
+    }
+
+    private static func select(_ lines: [TimedLyricLine], at time: Double,
+                               displayStarts: [Int: Double]) -> [TimedLyricLine] {
         guard time.isFinite else { return [] }
-        // Timelines are validated as ordered, non-overlapping intervals.
-        var lower = 0, upper = lines.count
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2
-            if lines[middle].start <= time + 0.35 { lower = middle + 1 }
-            else { upper = middle }
-        }
         var candidates: [(line: TimedLyricLine, opacity: Double, singing: Bool)] = []
-        var index = lower
-        while index > 0 {
-            index -= 1
-            let line = lines[index]
-            if line.end < time - 0.40 { break }
-            if let motion = parameters(for: line, time: time, vocal: nil, beat: 0, beatPhase: 0, barPhase: 0),
+        for line in lines {
+            if let motion = parameters(for: line, time: time, vocal: nil, beat: 0, beatPhase: 0, barPhase: 0,
+                                       displayStart: displayStarts[line.ordinal]),
                motion.opacity > 0 {
                 candidates.append((line, motion.opacity, time >= line.start && time < line.end))
             }
@@ -71,6 +89,35 @@ enum LyricMotion {
         guard time.isFinite else { return 0 }
         if timing.end == timing.start { return time >= timing.end ? 1 : 0 }
         return clamp((time - timing.start) / (timing.end - timing.start))
+    }
+
+    /// Presentation colour starts with the prepared row; native Speech times stay saved.
+    /// Missing leading spelling uses the pre-Speech gap as one shared interval.
+    static func colourTimings(for line: TimedLyricLine, displayStart: Double?) -> [LyricCharacterTiming] {
+        guard line.hasValidCharacterTimings, let start = displayStart,
+              start.isFinite, start >= 0, start < line.start,
+              let missing = line.unrecognizedLeadingCharacters else { return line.characterTimings }
+        let original = Array(line.text)
+        let weighted = original.indices.filter { LyricParser.characterWeight(original[$0]) > 0 }
+        let firstRecognized = weighted[missing]
+        let first = line.characterTimings[firstRecognized]
+        // Preserve the existing correction for a pause inside a long first token.
+        guard first.start == line.start else { return line.characterTimings }
+        var result = line.characterTimings
+        if missing > 0 {
+            for index in weighted.prefix(missing) {
+                result[index] = LyricCharacterTiming(start: start, end: first.start)
+            }
+            for index in 0..<firstRecognized where LyricParser.characterWeight(original[index]) == 0 {
+                result[index] = LyricCharacterTiming(start: first.start, end: first.start)
+            }
+        } else {
+            // One Speech token can cover several characters. Keep that grouping.
+            for index in weighted.prefix(while: { line.characterTimings[$0] == first }) {
+                result[index].start = start
+            }
+        }
+        return result
     }
 
     static func clamp(_ value: Double) -> Double { value.isFinite ? min(1, max(0, value)) : 0 }
@@ -156,6 +203,7 @@ private struct LyricFittingLayout: Layout {
 
 private struct LyricMotionLineView: View {
     let line: TimedLyricLine
+    let colourTimings: [LyricCharacterTiming]
     let motion: LyricMotionParameters
     let time: Double
     let viewport: CGSize
@@ -164,7 +212,7 @@ private struct LyricMotionLineView: View {
     private var lyricText: Text {
         return line.text.enumerated().reduce(Text("")) { text, element in
             let fragment = Text(String(element.element))
-                .customAttribute(LyricProgressAttribute(timing: line.characterTimings[element.offset]))
+                .customAttribute(LyricProgressAttribute(timing: colourTimings[element.offset]))
             return Text("\(text)\(fragment)")
         }
     }
@@ -203,6 +251,10 @@ struct LyricMotionView: View {
             let viewport = CGSize(width: max(0, geometry.size.width - 48), height: max(0, geometry.size.height - 32))
             if let timeline = store.lyricTimeline, !timeline.lines.isEmpty,
                timeline.lines.allSatisfy(\.hasValidCharacterTimings), viewport.width > 0, viewport.height > 0 {
+                let displayStarts = LyricMotion.displayStarts(timeline, analysis: store.analysis)
+                let colours = Dictionary(uniqueKeysWithValues: timeline.lines.map {
+                    ($0.ordinal, LyricMotion.colourTimings(for: $0, displayStart: displayStarts[$0.ordinal]))
+                })
                 TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !store.isPlaying)) { _ in
                     if let frame = store.visualSource.snapshot().lyrics,
                        frame.trackID == store.currentTrack?.id,
@@ -211,11 +263,13 @@ struct LyricMotionView: View {
                        timeline.analysisFingerprint == fingerprint,
                        frame.time >= 0, frame.time <= frame.duration {
                         ZStack {
-                            ForEach(LyricMotion.visibleLines(timeline, at: frame.time)) { line in
+                            ForEach(LyricMotion.visibleLines(timeline, at: frame.time, displayStarts: displayStarts)) { line in
                                 if let motion = LyricMotion.parameters(for: line, time: frame.time, vocal: frame.vocal,
                                                                        beat: frame.beat, beatPhase: frame.beatPhase,
-                                                                       barPhase: frame.barPhase) {
-                                    LyricMotionLineView(line: line, motion: motion, time: frame.time, viewport: viewport)
+                                                                       barPhase: frame.barPhase,
+                                                                       displayStart: displayStarts[line.ordinal]) {
+                                    LyricMotionLineView(line: line, colourTimings: colours[line.ordinal]!,
+                                                       motion: motion, time: frame.time, viewport: viewport)
                                 }
                             }
                         }

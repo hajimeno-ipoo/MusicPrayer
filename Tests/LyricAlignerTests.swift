@@ -67,6 +67,35 @@ final class LyricAlignerTests: XCTestCase {
                       transcription: tokens("ありがとう", start: 10) + tokens("ありがとう", start: 40))
     }
 
+    func testEqualEndingAlternativesAtOneStartUseTheClosestRecognizedLength() throws {
+        let result = try LyricAligner.align(sourceText: "abcdefghij", analysis: analysis(),
+                                           transcription: tokens("abcdefghxy", start: 10))
+        XCTAssertEqual(result.lines[0].start, 10)
+        XCTAssertEqual(result.lines[0].end, 14, accuracy: 1e-9)
+        XCTAssertEqual(result.lines[0].confidence, 0.8, accuracy: 1e-6)
+    }
+
+    func testEndingAlternativesCannotHideAnEqualMatchAtAnotherStart() {
+        assertFailure(.ambiguousMatch, source: "abcdefghij",
+                      transcription: tokens("abcdefghxy", start: 10) + tokens("abcdefgh", start: 40))
+    }
+
+    func testEarlierStartAmbiguitySurvivesACommonFollowingLine() {
+        assertFailure(.ambiguousMatch, source: "abcdefghij\nklmnop",
+                      transcription: tokens("abcdefghxy", start: 10) + tokens("abcdefghxy", start: 40) +
+                        tokens("klmnop", start: 60))
+    }
+
+    func testShorterEndingRemainsAvailableWhenNeededForTheFollowingLine() throws {
+        let result = try LyricAligner.align(sourceText: "abcdefghij\nxy", analysis: analysis(),
+                                           transcription: tokens("abcdefghxy", start: 10))
+        XCTAssertEqual(result.lines.map(\.text), ["abcdefghij", "xy"])
+        XCTAssertEqual(result.lines[0].start, 10)
+        XCTAssertEqual(result.lines[0].end, 13.2, accuracy: 1e-9)
+        XCTAssertEqual(result.lines[1].start, 13.2, accuracy: 1e-9)
+        XCTAssertEqual(result.lines[1].end, 14, accuracy: 1e-9)
+    }
+
     func testJapaneseReadingResolvesEqualSpellingScoresForAnOmittedKanjiBoundary() throws {
         let result = try LyricAligner.align(sourceText: "ひとつひとつの瞬間が", analysis: analysis(),
                                            transcription: tokens("一つひとつの瞬間が", start: 45.42, step: 0.24))
@@ -89,8 +118,61 @@ final class LyricAlignerTests: XCTestCase {
         XCTAssertEqual(result.confidence, 1)
     }
 
-    func testReadingAloneCannotReplaceRequiredSpellingEvidence() {
-        assertFailure(.unmatchedLine(0), source: "ひとつ", transcription: tokens("一つ", start: 20))
+    func testEquivalentJapaneseReadingCanMatchDifferentSpelling() throws {
+        let result = try LyricAligner.align(sourceText: "ひとつ", analysis: analysis(),
+                                          transcription: tokens("一つ", start: 20))
+        XCTAssertEqual(result.lines[0].start, 20)
+        XCTAssertEqual(result.lines[0].end, 20.8, accuracy: 1e-9)
+        XCTAssertEqual(result.lines[0].text, "ひとつ")
+        XCTAssertEqual(result.confidence, 1)
+    }
+
+    func testMisrecognizedRepeatedChorusesKeepTheirOwnNativeTimes() throws {
+        let source = "花びら舞う空へ\n君と見た夢を放つ"
+        let speech = tokens("花びらの前", start: 10) + tokens("君と見た夢を離す", start: 15) +
+            tokens("花びらまそへ", start: 30) + tokens("君と見た夢を放つ", start: 35) +
+            tokens("花びらう空へ", start: 50) + tokens("君と見た夢を放つ", start: 55)
+        let result = try LyricAligner.align(sourceText: [source, source, source].joined(separator: "\n"),
+                                          analysis: analysis(), transcription: speech)
+        XCTAssertEqual(result.lines.map(\.start), [10, 15, 30, 35, 50, 55])
+        XCTAssertEqual(result.lines[0].end, 12, accuracy: 1e-9)
+        XCTAssertGreaterThanOrEqual(result.lines[0].confidence, 0.6)
+        XCTAssertTrue(result.lines.allSatisfy(\.hasValidCharacterTimings))
+    }
+
+    func testReadingMatchDoesNotChooseBetweenDifferentSingingOccurrences() {
+        assertFailure(.ambiguousMatch, source: "ひとつ",
+                      transcription: tokens("一つ", start: 10) + tokens("一つ", start: 40))
+    }
+
+    func testUnrelatedWordsCannotBeAcceptedByJapaneseReading() {
+        assertFailure(.unmatchedLine(0), source: "花びら舞う空へ", transcription: tokens("知らない言葉", start: 10))
+    }
+
+    func testReadingCandidateWindowAllowsKanjiRecognizedAsLongKana() throws {
+        let result = try LyricAligner.align(sourceText: "交響曲協奏曲", analysis: analysis(),
+            transcription: [.init(text: "こうきょうきょくきょうそうきょく", start: 10, end: 15, confidence: 1)])
+        XCTAssertEqual(result.lines[0].text, "交響曲協奏曲")
+        XCTAssertEqual(result.lines[0].start, 10)
+        XCTAssertEqual(result.lines[0].end, 15)
+        XCTAssertTrue(result.lines[0].hasValidCharacterTimings)
+    }
+
+    func testMisrecognizedPrefixAlternativesAtOneOccurrenceDoNotRejectTimeline() throws {
+        let result = try LyricAligner.align(sourceText: "また会える場所へ", analysis: analysis(),
+                                          transcription: tokens("混ざえる場所", start: 10))
+        XCTAssertEqual(result.lines[0].start, 10)
+        XCTAssertEqual(result.lines[0].end, 12.4, accuracy: 1e-9)
+    }
+
+    func testReadingPrefixAcrossSeparateRecognitionRangesCannotHideStartAmbiguity() {
+        let speech = tokens("混", start: 10) + tokens("ざえる場所", start: 40)
+        assertFailure(.ambiguousMatch, source: "また会える場所へ", transcription: speech)
+    }
+
+    func testReadingAmbiguitySurvivesACommonFollowingLine() {
+        assertFailure(.ambiguousMatch, source: "ひとつ\n夜の星",
+                      transcription: tokens("一つ", start: 10) + tokens("一つ", start: 40) + tokens("夜の星", start: 60))
     }
 
     func testSpellingErrorsAndMissingCharactersRetainRecognizedBoundaryTimes() throws {
