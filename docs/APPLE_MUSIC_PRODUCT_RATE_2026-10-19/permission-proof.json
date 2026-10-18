@@ -1,0 +1,8 @@
+[
+  "AUTHREQ_CTX: msgID=761.1940, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>",
+  "AUTHREQ_RESULT: msgID=761.1940, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),",
+  "AUTHREQ_CTX: msgID=761.1943, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>",
+  "AUTHREQ_RESULT: msgID=761.1943, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),",
+  "AUTHREQ_CTX: msgID=761.1945, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>",
+  "AUTHREQ_RESULT: msgID=761.1945, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+]

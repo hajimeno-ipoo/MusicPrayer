@@ -1,0 +1,12 @@
+{
+  "pair": "actual off24 vs reference with measured high-frequency attenuation only",
+  "pointIntervalSeconds": [
+    3,
+    37.2
+  ],
+  "excludeBounds": true,
+  "meanAbsoluteDifference": 0.00953198353147877,
+  "meanBiasFilteredMinusOff": 0.009531983531478772,
+  "correlation": 0.9998241413152442,
+  "count": 683
+}

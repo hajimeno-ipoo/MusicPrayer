@@ -58,6 +58,9 @@ struct AppleLyricTranscriber: LyricTranscribing {
         guard !primary.isEmpty else { throw LyricAlignmentError.noRecognizedWords }
         Self.logger.info("Recognized locale=\(locale.identifier, privacy: .public) tokens=\(primary.count)")
         await status(.generating)
+        // Recovery supports Latin-script fragments only. PlayerStore performs
+        // final alignment, so do not repeat it when recovery cannot run.
+        guard LyricRecognitionRecovery.containsLatinText(sourceText) else { return primary }
         do {
             _ = try LyricAligner.align(sourceText: sourceText, analysis: analysis, transcription: primary)
             return primary

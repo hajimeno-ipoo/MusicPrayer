@@ -6,10 +6,12 @@ struct MusicPrayerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = PlayerStore()
     @State private var didStartRestore = false
+    @State private var showFontLicenses = false
     var body: some Scene {
         Window("Music Prayer", id: "player") {
             PlayerView(store: store)
                 .modifier(PlayerWindowRecovery(delegate: delegate))
+                .sheet(isPresented: $showFontLicenses) { FontLicensesView() }
                 .task {
                     delegate.store = store
                     guard !didStartRestore else { return }
@@ -20,12 +22,22 @@ struct MusicPrayerApp: App {
         .defaultSize(width: 1160, height: 790)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            CommandGroup(replacing: .newItem) { Button("曲を追加…", action: store.openFiles).keyboardShortcut("o") }
+            CommandGroup(after: .appInfo) {
+                Button("フォントのライセンス…") {
+                    showFontLicenses = true
+                }
+            }
+            CommandGroup(replacing: .newItem) {
+                Button("曲を追加…", action: store.openFiles).keyboardShortcut("o")
+                Button("Apple Music…", action: store.openAppleMusic)
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
+            }
             CommandMenu("再生") {
-                Button(store.isPlaying ? "一時停止" : "再生", action: store.togglePlayback).keyboardShortcut(.space, modifiers: [])
-                Button("停止", action: store.stop).keyboardShortcut(".")
-                Button("前の曲", action: store.previous).keyboardShortcut(.leftArrow, modifiers: .command)
-                Button("次の曲", action: store.next).keyboardShortcut(.rightArrow, modifiers: .command)
+                Button(store.isPlaying ? "一時停止" : "再生", action: store.togglePlayback)
+                    .keyboardShortcut(.space, modifiers: []).disabled(showFontLicenses || store.isAppleMusicBrowserVisible || store.isAppleMusicSearchVisible || !store.canTogglePlayback)
+                Button("停止", action: store.stop).keyboardShortcut(".").disabled(store.isAppleMusicBrowserVisible || store.isAppleMusicSearchVisible || !store.canTogglePlayback)
+                Button("前の曲", action: store.previous).keyboardShortcut(.leftArrow, modifiers: .command).disabled(store.isAppleMusicBrowserVisible || store.isAppleMusicSearchVisible || !store.canSkipPrevious)
+                Button("次の曲", action: store.next).keyboardShortcut(.rightArrow, modifiers: .command).disabled(store.isAppleMusicBrowserVisible || store.isAppleMusicSearchVisible || !store.canSkipNext)
             }
         }
     }
@@ -51,18 +63,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let modifiers = event.modifierFlags.intersection([.command, .option, .control])
             guard event.keyCode == 49, modifiers.isEmpty, let window = NSApp.keyWindow,
-                  !(window is NSPanel), window.attachedSheet == nil,
-                  !(window.firstResponder is NSTextView), let store = self?.store else { return event }
+                  !(window is NSPanel), window.attachedSheet == nil, window.sheetParent == nil,
+                  !(window.firstResponder is NSTextView), let store = self?.store,
+                  !store.isAppleMusicBrowserVisible, !store.isAppleMusicSearchVisible, store.canTogglePlayback else { return event }
             store.togglePlayback()
             return nil
         }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let store, store.needsLyricSaveBeforeTermination else { return .terminateNow }
+        guard let store, store.needsLyricSaveBeforeTermination || store.appleMusic.needsStorageBeforeTermination else { return .terminateNow }
         if lyricTerminationTask == nil {
             lyricTerminationTask = Task { @MainActor [weak self] in
                 let saved = await store.finishLyricsBeforeTermination()
+                if saved { await store.appleMusic.finishStorageBeforeTermination() }
                 self?.lyricTerminationTask = nil
                 sender.reply(toApplicationShouldTerminate: saved)
                 if !saved { self?.reopenPlayer?(); sender.activate(ignoringOtherApps: true) }

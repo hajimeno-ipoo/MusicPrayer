@@ -72,9 +72,18 @@ actor LyricStore {
     }
 
     @discardableResult
-    func clear(url: URL, request: UInt64) throws -> String {
+    func clear(url: URL, request: UInt64, fingerprint knownFingerprint: String? = nil,
+               retainingAudioAt remainingURLs: [URL] = []) throws -> String {
         try acceptURL(url, request: request)
-        let fingerprint = try MusicAnalyzer.fingerprint(url)
+        let fingerprint = try knownFingerprint ?? MusicAnalyzer.fingerprint(url)
+        _ = try fileURL(fingerprint: fingerprint)
+        // Identical audio at another queue URL shares this lyric file.
+        let sourceSize = knownFingerprint == nil ? try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize : nil
+        for remaining in remainingURLs {
+            let remainingSize = try? remaining.resourceValues(forKeys: [.fileSizeKey]).fileSize
+            guard sourceSize == nil || remainingSize == sourceSize else { continue }
+            if (try? MusicAnalyzer.fingerprint(remaining)) == fingerprint { return fingerprint }
+        }
         try acceptFingerprint(fingerprint, request: request)
         let file = try fileURL(fingerprint: fingerprint)
         do { try FileManager.default.removeItem(at: file) }

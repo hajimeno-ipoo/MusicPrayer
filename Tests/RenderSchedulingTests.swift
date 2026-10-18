@@ -9,7 +9,7 @@ final class RenderSchedulingTests: XCTestCase {
     func testPausedStoreDoesNotInvalidateUnchangedAnalysisDisplay() async throws {
         let manager = FileManager.default
         let saved = manager.fileExists(atPath: QueuePersistence.file.path) ? try Data(contentsOf: QueuePersistence.file) : nil
-        let store = PlayerStore()
+        let store = PlayerStore(appleMusicAnalysisDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("MusicPrayerAnalysisTests-" + UUID().uuidString))
         defer {
             store.shutdown()
             do {
@@ -73,6 +73,95 @@ final class RenderSchedulingTests: XCTestCase {
     }
 
     @MainActor
+    func testStoppedCityStoreSettlesAnalysisTailAndWakesForAnalysisAndPreviewSeek() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
+        _ = NSApplication.shared
+        let manager = FileManager.default
+        let saved = manager.fileExists(atPath: QueuePersistence.file.path) ? try Data(contentsOf: QueuePersistence.file) : nil
+        let store = PlayerStore(appleMusicAnalysisDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("MusicPrayerAnalysisTests-" + UUID().uuidString))
+        defer {
+            store.shutdown()
+            do {
+                if let saved { try saved.write(to: QueuePersistence.file, options: .atomic) }
+                else if manager.fileExists(atPath: QueuePersistence.file.path) { try manager.removeItem(at: QueuePersistence.file) }
+            } catch { XCTFail("再生状態の復元に失敗しました：\(error.localizedDescription)") }
+        }
+        let analysis = MusicAnalysis(duration: 12, beats: [0, 1, 2, 3, 4, 5],
+                                     sections: [TimeSpan(start: 0, duration: 12)],
+                                     vocal: [TimeValue(time: 0, value: 0.8), TimeValue(time: 12, value: 0.8)])
+        store.visualizerStyle = .cassette
+        store.previewTime = 1.25
+        store.analysis = analysis
+        try await Task.sleep(for: .milliseconds(120))
+        let unsettled = store.visualSource.snapshot()
+        XCTAssertGreaterThan(unsettled.vocal, 0)
+        XCTAssertLessThan(unsettled.vocal, 0.8, "The setup must include an unfinished smoothing tail.")
+
+        let host = VisualizerHostView(source: store.visualSource)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 384, height: 256),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        let view = try XCTUnwrap(host.subviews.compactMap { $0 as? MTKView }.first)
+        let renderer = try XCTUnwrap(view.delegate as? MetalRenderer)
+        var error: String?
+        renderer.onError = { error = $0 }
+        func waitForDrawAndSleep(after count: Int, time: Float, vocal: Float) async throws {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(12))
+            while (renderer.submittedFrameCount == count || !view.isPaused ||
+                   store.visualSource.snapshot().time != time || abs(store.visualSource.snapshot().vocal - vocal) > 0.000005),
+                  ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertGreaterThan(renderer.submittedFrameCount, count)
+            XCTAssertTrue(view.isPaused)
+            XCTAssertEqual(store.visualSource.snapshot().time, time)
+            XCTAssertEqual(store.visualSource.snapshot().vocal, vocal, accuracy: 0.000005)
+            XCTAssertNil(error)
+        }
+
+        let beforeCity = renderer.submittedFrameCount
+        store.visualizerStyle = .spectrumCity
+        try await waitForDrawAndSleep(after: beforeCity, time: 1.25, vocal: 0.8)
+        let paused = renderer.submittedFrameCount
+        let presented = RenderInputs(frame: store.visualSource.snapshot(), size: view.drawableSize)
+        try await Task.sleep(for: .milliseconds(180))
+        XCTAssertEqual(renderer.submittedFrameCount, paused, "After the existing smoothing tail settles, the real store's repeated ticks must submit no GPU work.")
+        XCTAssertTrue(RenderInputs(frame: store.visualSource.snapshot(), size: view.drawableSize).matches(presented))
+
+        store.analysis = nil
+        try await waitForDrawAndSleep(after: paused, time: 1.25, vocal: 0)
+        let beforeAnalysis = renderer.submittedFrameCount
+        store.analysis = analysis
+        try await waitForDrawAndSleep(after: beforeAnalysis, time: 1.25, vocal: 0.8)
+        let analyzed = store.visualSource.snapshot()
+        XCTAssertEqual(analyzed.hasAnalysis, 1)
+        XCTAssertEqual(analyzed.beatPhase, 0.25)
+
+        let beforeSeek = renderer.submittedFrameCount
+        store.previewTime = 4.5
+        try await waitForDrawAndSleep(after: beforeSeek, time: 4.5, vocal: 0.8)
+        XCTAssertEqual(store.visualSource.snapshot().beatPhase, 0.5)
+        XCTAssertEqual(store.visualSource.snapshot().sectionProgress, 4.5 / 12)
+        let beforeResize = renderer.submittedFrameCount
+        view.drawableSize = CGSize(width: 512, height: 320)
+        try await waitForDrawAndSleep(after: beforeResize, time: 4.5, vocal: 0.8)
+        let beforeStop = renderer.submittedFrameCount
+        store.stop()
+        try await waitForDrawAndSleep(after: beforeStop, time: 0, vocal: 0.8)
+        let stopped = renderer.submittedFrameCount
+        try await Task.sleep(for: .milliseconds(180))
+        XCTAssertEqual(renderer.submittedFrameCount, stopped)
+        for style in [VisualizerStyle.cassette, .ribbons, .spectrumCity] {
+            let beforeSwitch = renderer.submittedFrameCount
+            store.visualizerStyle = style
+            try await waitForDrawAndSleep(after: beforeSwitch, time: 0, vocal: 0.8)
+            XCTAssertEqual(view.toolTip != nil, style == .ribbons)
+        }
+    }
+
+    @MainActor
     func testPausedHostSwitchesCassetteAndBackWithoutWaterKeepingItAwake() async throws {
         guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
         _ = NSApplication.shared
@@ -109,6 +198,62 @@ final class RenderSchedulingTests: XCTestCase {
         XCTAssertGreaterThan(renderer.submittedFrameCount, cassetteFrames)
         XCTAssertTrue(view.isPaused)
         XCTAssertNotNil(view.toolTip)
+    }
+
+    @MainActor
+    func testCitySleepsWakesForSeekAndResizeAndSwitchesToExistingStyles() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
+        _ = NSApplication.shared
+        let source = VisualFrameSource()
+        let host = VisualizerHostView(source: source)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 384, height: 256),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        let view = try XCTUnwrap(host.subviews.compactMap { $0 as? MTKView }.first)
+        let renderer = try XCTUnwrap(view.delegate as? MetalRenderer)
+        var error: String?
+        renderer.onError = { error = $0 }
+        var frame = VisualFrame()
+        frame.style = .spectrumCity
+        frame.spectrum = Array(repeating: 0.5, count: 64)
+        XCTAssertTrue(source.waterInteractions.enqueue(screenUV: SIMD2(0.5, 0.9)))
+
+        func waitForDrawAndSleep(after count: Int) async throws {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(4))
+            while (renderer.submittedFrameCount == count || !view.isPaused), ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertGreaterThan(renderer.submittedFrameCount, count)
+            XCTAssertTrue(view.isPaused)
+            XCTAssertNil(error)
+        }
+
+        let before = renderer.submittedFrameCount
+        source.publish(frame)
+        try await waitForDrawAndSleep(after: before)
+        XCTAssertFalse(source.waterInteractions.hasPendingPulses)
+        XCTAssertNil(view.toolTip)
+        let paused = renderer.submittedFrameCount
+        source.publish(frame)
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(renderer.submittedFrameCount, paused, "The paused city must submit no unchanged GPU frames.")
+
+        frame.time = 24
+        source.publish(frame)
+        try await waitForDrawAndSleep(after: paused)
+        let beforeResize = renderer.submittedFrameCount
+        view.drawableSize = CGSize(width: 512, height: 320)
+        try await waitForDrawAndSleep(after: beforeResize)
+
+        for style in [VisualizerStyle.cassette, .ribbons, .spectrumCity] {
+            let previous = renderer.submittedFrameCount
+            frame.style = style
+            source.publish(frame)
+            try await waitForDrawAndSleep(after: previous)
+            XCTAssertEqual(view.toolTip != nil, style == .ribbons)
+        }
     }
 
     @MainActor

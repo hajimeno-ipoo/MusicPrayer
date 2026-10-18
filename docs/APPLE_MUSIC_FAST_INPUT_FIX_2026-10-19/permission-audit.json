@@ -1,0 +1,25 @@
+[
+  {
+    "processPID": 37524,
+    "messages": [
+      "AUTHREQ_CTX: msgID=761.1787, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>",
+      "AUTHREQ_RESULT: msgID=761.1787, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),",
+      "AUTHREQ_CTX: msgID=761.1790, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>",
+      "AUTHREQ_PROMPTING: msgID=761.1790, service=kTCCServiceAudioCapture, subject=Sub:{com.hazimeno.MusicPrayer}Resp:{TCCDProcess: identifier=com.hazimeno.MusicPrayer, pid=37524, auid=501, euid=501, binary_path=/private/tmp/music-prayer-fast-fix/Verify.app/Contents/MacOS/FastFix},"
+    ]
+  },
+  {
+    "processPID": 38038,
+    "messages": [
+      "AUTHREQ_CTX: msgID=761.1803, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>",
+      "AUTHREQ_RESULT: msgID=761.1803, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+    ]
+  },
+  {
+    "processPID": 38466,
+    "messages": [
+      "AUTHREQ_CTX: msgID=761.1814, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>",
+      "AUTHREQ_RESULT: msgID=761.1814, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+    ]
+  }
+]

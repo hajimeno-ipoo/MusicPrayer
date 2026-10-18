@@ -1,0 +1,145 @@
+{
+  "intervalSeconds": [
+    3,
+    37.2
+  ],
+  "gridStep": 0.05,
+  "note": "Numerical activity units are framework scores, not measured vocal sound level or error percentage. Exclude first/final three seconds for padding/edge context.",
+  "metrics": {
+    "off24_2BCC05": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.4567082788585608,
+      "interiorMean": 0.4892812466759124,
+      "interiorBias": -0.23874146382043795,
+      "interiorMAE": 0.23874146382043795,
+      "interiorCorrelation": 0.6166395792581798,
+      "pointCount": 806
+    },
+    "off24_89056B": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.4567082788585608,
+      "interiorMean": 0.4892812466759124,
+      "interiorBias": -0.23874146382043795,
+      "interiorMAE": 0.23874146382043795,
+      "interiorCorrelation": 0.6166395792581798,
+      "pointCount": 806
+    },
+    "off48_12B48D": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.46027012625062036,
+      "interiorMean": 0.4946802287270073,
+      "interiorBias": -0.23334248176934305,
+      "interiorMAE": 0.23334248176934305,
+      "interiorCorrelation": 0.6279762403290151,
+      "pointCount": 806
+    },
+    "offFiltered_94F22E": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.3536616579491315,
+      "interiorMean": 0.3792160925805839,
+      "interiorBias": -0.34880661791576645,
+      "interiorMAE": 0.34880661791576645,
+      "interiorCorrelation": 0.513238369805309,
+      "pointCount": 806
+    },
+    "offInverted_AF137D": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.456692489926799,
+      "interiorMean": 0.48927157890656936,
+      "interiorBias": -0.23875113158978103,
+      "interiorMAE": 0.23875113158978103,
+      "interiorCorrelation": 0.6166160999248093,
+      "pointCount": 806
+    },
+    "offLeft_A56144": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.35036443884119106,
+      "interiorMean": 0.38332118562627737,
+      "interiorBias": -0.344701524870073,
+      "interiorMAE": 0.344701524870073,
+      "interiorCorrelation": 0.5171487164908687,
+      "pointCount": 806
+    },
+    "offMono_87B674": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.456692489926799,
+      "interiorMean": 0.48927157890656936,
+      "interiorBias": -0.23875113158978103,
+      "interiorMAE": 0.23875113158978103,
+      "interiorCorrelation": 0.6166160999248093,
+      "pointCount": 806
+    },
+    "offRight_93C879": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.3920579819683623,
+      "interiorMean": 0.4227368652532847,
+      "interiorBias": -0.3052858452430657,
+      "interiorMAE": 0.3052858452430657,
+      "interiorCorrelation": 0.5150145096877012,
+      "pointCount": 806
+    },
+    "reference24_793341": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.7206580351029777,
+      "interiorMean": 0.7280227104963504,
+      "interiorBias": 0.0,
+      "interiorMAE": 0.0,
+      "interiorCorrelation": 1.0,
+      "pointCount": 806
+    },
+    "reference48_8AD2D7": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.7207871864171216,
+      "interiorMean": 0.728305343839416,
+      "interiorBias": 0.00028263334306569447,
+      "interiorMAE": 0.0009701475912408758,
+      "interiorCorrelation": 0.9999514814177437,
+      "pointCount": 806
+    },
+    "referenceFiltered_BA3C52": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.5237872025459057,
+      "interiorMean": 0.5560697455284671,
+      "interiorBias": -0.1719529649678832,
+      "interiorMAE": 0.17195581617956204,
+      "interiorCorrelation": 0.6901384629062833,
+      "pointCount": 806
+    },
+    "referenceInverted_0A5324": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.7206681494540943,
+      "interiorMean": 0.7280392836788321,
+      "interiorBias": 1.657318248175199e-05,
+      "interiorMAE": 0.00010496249635036557,
+      "interiorCorrelation": 0.999998413724771,
+      "pointCount": 806
+    },
+    "referenceLeft_A96D83": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.7286920666129032,
+      "interiorMean": 0.7372007941167883,
+      "interiorBias": 0.009178083620437958,
+      "interiorMAE": 0.011601669518248175,
+      "interiorCorrelation": 0.9938677383641485,
+      "pointCount": 806
+    },
+    "referenceMono_AA047C": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.7206681494540943,
+      "interiorMean": 0.7280392836788321,
+      "interiorBias": 1.657318248175199e-05,
+      "interiorMAE": 0.00010496249635036557,
+      "interiorCorrelation": 0.999998413724771,
+      "pointCount": 806
+    },
+    "referenceRight_6E7FC9": {
+      "duration": 40.26533333333333,
+      "fullMean": 0.7274138046093052,
+      "interiorMean": 0.7361823535474452,
+      "interiorBias": 0.008159643051094892,
+      "interiorMAE": 0.011883411459854014,
+      "interiorCorrelation": 0.9945077896024392,
+      "pointCount": 806
+    }
+  }
+}

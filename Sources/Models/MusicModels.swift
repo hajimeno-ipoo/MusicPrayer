@@ -81,8 +81,15 @@ struct MusicalMoment: Sendable, Equatable {
 enum VisualizerStyle: String, CaseIterable, Identifiable, Sendable {
     case ribbons
     case cassette
+    case spectrumCity
     var id: Self { self }
-    var title: String { self == .ribbons ? "リボン" : "カセット" }
+    var title: String {
+        switch self {
+        case .ribbons: return "リボン"
+        case .cassette: return "カセット"
+        case .spectrumCity: return "スペクトラム都市"
+        }
+    }
 }
 
 struct VisualFrame: Sendable {
@@ -181,10 +188,19 @@ struct Track: Identifiable, Sendable {
     var album: String
     var duration: Double
     var artwork: Data?
+    var appleMusicSong: AppleMusicSong?
+    var isAppleMusic: Bool { appleMusicSong != nil }
     init(url: URL, title: String? = nil, artist: String = "", album: String = "", duration: Double = 0, artwork: Data? = nil) {
         self.id = UUID(); self.url = url
         self.title = title ?? url.deletingPathExtension().lastPathComponent
         self.artist = artist; self.album = album; self.duration = duration; self.artwork = artwork
+        self.appleMusicSong = nil
+    }
+    init(appleMusicSong song: AppleMusicSong) {
+        self.id = UUID()
+        self.url = URL(string: "https://music.apple.com/jp/song/")!.appendingPathComponent(song.id)
+        self.title = song.title; self.artist = song.artist; self.album = song.album
+        self.duration = song.duration; self.artwork = nil; self.appleMusicSong = song
     }
 }
 

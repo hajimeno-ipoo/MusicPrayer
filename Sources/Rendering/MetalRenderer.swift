@@ -115,6 +115,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private let water: WaterSurface
     private let lightSwarm: LightSwarm
     private var tape: TapeSceneRenderer?
+    private var city: CitySceneRenderer?
     private var previousRenderTime: Double?
     private let indexBuffer: MTLBuffer
     private let indexCount: Int
@@ -250,9 +251,9 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         guard !hasReportedError, view.drawableSize.width > 0, view.drawableSize.height > 0 else { return }
         let snapshot = source.snapshot()
         let inputs = RenderInputs(frame: snapshot, size: view.drawableSize)
-        if snapshot.style == .cassette { _ = source.waterInteractions.drain() }
+        if snapshot.style != .ribbons { _ = source.waterInteractions.drain() }
         if let previous = lastRenderedInputs, inputs.matches(previous), !source.waterInteractions.hasPendingPulses {
-            if snapshot.style == .cassette {
+            if snapshot.style != .ribbons {
                 previousRenderTime = nil
                 view.isPaused = true
                 return
@@ -276,6 +277,27 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         guard semaphore.wait(timeout: .now()) == .success else { return }
         var committed = false
         defer { if !committed { semaphore.signal() } }
+        if snapshot.style == .spectrumCity {
+            // The city owns its targets; no ribbon layers, water, or particles are submitted.
+            guard let command = queue.makeCommandBuffer(), let drawable = view.currentDrawable,
+                  let finalPass = view.currentRenderPassDescriptor else { return }
+            previousRenderTime = nil
+            do {
+                if city == nil { city = try CitySceneRenderer(device: device) }
+                try city?.encode(command: command, descriptor: finalPass, frame: snapshot, size: view.drawableSize)
+            } catch { report(error); return }
+            command.label = "Spectrum city · 64 towers · Quarter-resolution bloom"
+            command.present(drawable)
+            command.addCompletedHandler { [weak self] completed in
+                semaphore.signal()
+                if let error = completed.error { DispatchQueue.main.async { self?.report(error) } }
+            }
+            lastRenderedInputs = inputs
+            submittedFrameCount += 1
+            committed = true
+            command.commit()
+            return
+        }
         do { try resize(view.drawableSize) } catch { report(error); return }
         guard let scene, let ribbonColors, let ribbonDepths, let bright, let bloom,
               let command = queue.makeCommandBuffer() else { report(RenderFailure.message("Metalフレームを準備できません。")); return }

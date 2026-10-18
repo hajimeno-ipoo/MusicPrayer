@@ -1,0 +1,19 @@
+{
+  "reproducedCondition": "page resets rate to 1 or replaces media after initial rate=2 command",
+  "before": {
+    "testCases": 1,
+    "failedAssertions": 3
+  },
+  "after": {
+    "testCases": 22,
+    "failures": 0
+  },
+  "productionControlChanged": true,
+  "newElapsedAndRateUIChange": "withdrawn_before_packaging",
+  "build": "passed",
+  "signature": "passed",
+  "bundledBridgeMatchesSource": true,
+  "bridgeSHA256": "1293e347dd3b2d403601d506e2f14eefe23ab419b213f8c7e4cee4dbc42644a3",
+  "additionalPlayerLaunched": false,
+  "reportedFiveMinuteCaseRetested": false
+}

@@ -1,0 +1,170 @@
+{
+  "date": "2026-10-19",
+  "status": "implemented_validated_packaged_and_launched",
+  "route": {
+    "playbackRate": 2,
+    "preservesPitch": true,
+    "captureSampleRate": "unchanged",
+    "timeExpansionRate": 0.5,
+    "timeExpansionPitch": 0,
+    "analyzer": "existing MusicUnderstandingSession and MusicAnalyzer.convert",
+    "audioStorage": "RAM only"
+  },
+  "tests": {
+    "passed": 74,
+    "failed": 0,
+    "log": "APPLE_MUSIC_FAST_INPUT_FIX_2026-10-19/product-tests-final.log"
+  },
+  "releaseBuild": "passed",
+  "distributionAppUpdated": true,
+  "liveShortComparison": "completed_two_captures_and_same_input_smoothness_comparison",
+  "liveWholeSong": "completed_at_smoothness3",
+  "measuredWholeSongElapsedSeconds": 110.62954902648926,
+  "permissionAttemptsExcludedFromMethodEvaluation": true,
+  "measuredCaptureSeconds": 105.38349902629852,
+  "shortMetrics": {
+    "duration": 40.29066666666667,
+    "referenceBPM": 119.4,
+    "correctedBPM": 119.4,
+    "metrics": {
+      "vocal": {
+        "referenceMean": 0.7219123173573201,
+        "correctedMean": 0.6821234541687345,
+        "correlation": 0.963239436911861,
+        "meanAbsoluteDifference": 0.05523848229528536
+      },
+      "drums": {
+        "referenceMean": 0.6629425873895781,
+        "correctedMean": 0.29773108256526054,
+        "correlation": 0.4390908072295024,
+        "meanAbsoluteDifference": 0.36521150482431763
+      },
+      "bass": {
+        "referenceMean": 0.607332820955335,
+        "correctedMean": 0.4001357693424318,
+        "correlation": 0.29115854021370724,
+        "meanAbsoluteDifference": 0.20719705161290322
+      },
+      "other": {
+        "referenceMean": 0.6029544957568238,
+        "correctedMean": 0.6666023502853599,
+        "correlation": 0.8207356722242026,
+        "meanAbsoluteDifference": 0.06409372924317618
+      },
+      "momentary": {
+        "referenceMean": -9.589299764837905,
+        "correctedMean": -11.286514681296758,
+        "correlation": 0.7632400586705574,
+        "meanAbsoluteDifference": 1.7010093054862843
+      }
+    },
+    "beats": {
+      "referenceCount": 80,
+      "correctedCount": 80
+    },
+    "bars": {
+      "referenceCount": 20,
+      "correctedCount": 20
+    },
+    "sections": {
+      "referenceCount": 4,
+      "correctedCount": 4
+    },
+    "segments": {
+      "referenceCount": 6,
+      "correctedCount": 6
+    },
+    "phrases": {
+      "referenceCount": 10,
+      "correctedCount": 10
+    },
+    "pace": {
+      "referenceCount": 1,
+      "correctedCount": 1
+    },
+    "spectrumDb": {
+      "987.0149282610821": -1.8845204638145052,
+      "3948.0597130443284": -1.2682177667674486,
+      "7896.119426088657": -2.4521109760996183,
+      "8610.779292198036": -2.3373531297038905,
+      "9122.802873757073": -2.1393217905478124,
+      "9390.121402415833": -2.3965844480977476,
+      "9665.272961860543": -2.425844366972545,
+      "9948.487077412921": -2.4262790476125704,
+      "10848.90208623918": -2.324518933856544
+    }
+  },
+  "launchedPID": 40998,
+  "selectedSmoothness": 3,
+  "fullRunCommand": {
+    "action": "full",
+    "smoothness": 3
+  },
+  "sameAsNormalSpeedAnalysis": false,
+  "remainingDifferences": "instrument scores and minor rhythm/pace differences; timing is not sample-exact",
+  "actualQueueAddToCacheUIFlow": "not_observed_this_turn",
+  "startupFrameTrim": "unit_tested_known_media_interval_suffix",
+  "signatureVerification": "passed",
+  "queuePreserved": true,
+  "adoptedShortMetrics": {
+    "bpm": 119.6031,
+    "metrics": {
+      "vocal": {
+        "referenceMean": 0.7222803185987654,
+        "candidateMean": 0.6994264957506173,
+        "correlation": 0.9699719682510911,
+        "meanAbsoluteDifference": 0.033958001712345684
+      },
+      "drums": {
+        "referenceMean": 0.6586753379098765,
+        "candidateMean": 0.5813352019037037,
+        "correlation": 0.8603103478742274,
+        "meanAbsoluteDifference": 0.08113727612962962
+      },
+      "bass": {
+        "referenceMean": 0.6074417682839506,
+        "candidateMean": 0.5022242415185185,
+        "correlation": 0.8213983553128319,
+        "meanAbsoluteDifference": 0.10524766750617284
+      },
+      "other": {
+        "referenceMean": 0.6000774621481482,
+        "candidateMean": 0.5974508781419753,
+        "correlation": 0.8444366490966543,
+        "meanAbsoluteDifference": 0.03422900552469136
+      },
+      "momentary": {
+        "referenceMean": -9.573827550374064,
+        "candidateMean": -11.053926651620948,
+        "correlation": 0.793660382154508,
+        "meanAbsoluteDifference": 1.4827481336658355
+      }
+    },
+    "ranges": {
+      "bass": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ],
+      "drums": [
+        {
+          "duration": 39.9,
+          "start": 0.6
+        }
+      ],
+      "other": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ],
+      "vocal": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ]
+    }
+  }
+}

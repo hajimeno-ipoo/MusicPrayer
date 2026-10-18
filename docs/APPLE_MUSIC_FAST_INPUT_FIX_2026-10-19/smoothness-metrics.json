@@ -1,0 +1,124 @@
+{
+  "corrected": {
+    "bpm": 119.4,
+    "metrics": {
+      "vocal": {
+        "referenceMean": 0.7222803185987654,
+        "candidateMean": 0.696882384691358,
+        "correlation": 0.9591578574781153,
+        "meanAbsoluteDifference": 0.04417129280864198
+      },
+      "drums": {
+        "referenceMean": 0.6586753379098765,
+        "candidateMean": 0.34764374130864195,
+        "correlation": 0.5971262712854093,
+        "meanAbsoluteDifference": 0.3110315966012346
+      },
+      "bass": {
+        "referenceMean": 0.6074417682839506,
+        "candidateMean": 0.5073901524259259,
+        "correlation": 0.7851741043378205,
+        "meanAbsoluteDifference": 0.10042295069753086
+      },
+      "other": {
+        "referenceMean": 0.6000774621481482,
+        "candidateMean": 0.6317952472839506,
+        "correlation": 0.9180952406054935,
+        "meanAbsoluteDifference": 0.03754943091358025
+      },
+      "momentary": {
+        "referenceMean": -9.573827550374064,
+        "candidateMean": -11.217210643391521,
+        "correlation": 0.7749928427250119,
+        "meanAbsoluteDifference": 1.6452542351620947
+      }
+    },
+    "ranges": {
+      "bass": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ],
+      "drums": [
+        {
+          "duration": 39.35,
+          "start": 1.15
+        }
+      ],
+      "other": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ],
+      "vocal": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ]
+    }
+  },
+  "smoothness3": {
+    "bpm": 119.6031,
+    "metrics": {
+      "vocal": {
+        "referenceMean": 0.7222803185987654,
+        "candidateMean": 0.6994264957506173,
+        "correlation": 0.9699719682510911,
+        "meanAbsoluteDifference": 0.033958001712345684
+      },
+      "drums": {
+        "referenceMean": 0.6586753379098765,
+        "candidateMean": 0.5813352019037037,
+        "correlation": 0.8603103478742274,
+        "meanAbsoluteDifference": 0.08113727612962962
+      },
+      "bass": {
+        "referenceMean": 0.6074417682839506,
+        "candidateMean": 0.5022242415185185,
+        "correlation": 0.8213983553128319,
+        "meanAbsoluteDifference": 0.10524766750617284
+      },
+      "other": {
+        "referenceMean": 0.6000774621481482,
+        "candidateMean": 0.5974508781419753,
+        "correlation": 0.8444366490966543,
+        "meanAbsoluteDifference": 0.03422900552469136
+      },
+      "momentary": {
+        "referenceMean": -9.573827550374064,
+        "candidateMean": -11.053926651620948,
+        "correlation": 0.793660382154508,
+        "meanAbsoluteDifference": 1.4827481336658355
+      }
+    },
+    "ranges": {
+      "bass": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ],
+      "drums": [
+        {
+          "duration": 39.9,
+          "start": 0.6
+        }
+      ],
+      "other": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ],
+      "vocal": [
+        {
+          "duration": 40.05,
+          "start": 0.45
+        }
+      ]
+    }
+  }
+}

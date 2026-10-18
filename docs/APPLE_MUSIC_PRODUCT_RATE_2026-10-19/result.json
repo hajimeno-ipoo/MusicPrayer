@@ -1,0 +1,19 @@
+{
+  "songID": "75073758",
+  "title": "DEPARTURES",
+  "duration": 323.109,
+  "measurement": {
+    "actualRate": 2.0000739412903266,
+    "date": "2026-10-18T18:47:48Z",
+    "event": "actualRate",
+    "mediaSeconds": 61.14477041532567,
+    "wallSeconds": 30.57125496864319
+  },
+  "usesProductionPlayerStoreAndAppleMusicStore": true,
+  "usesProductionPlayerViewAndMetalRendering": true,
+  "testPersistenceIsolated": true,
+  "wholeSongRetested": false,
+  "reportedFiveMinuteCause": "not_identified",
+  "productCodeChangedForRateInvestigation": false,
+  "verificationAppExited": true
+}

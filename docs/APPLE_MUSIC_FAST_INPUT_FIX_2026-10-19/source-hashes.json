@@ -1,0 +1,12 @@
+{
+  "Sources/AppleMusic/AppleMusicTimeExpansion.swift": "8afa89d38127ad680815599c75b3bd1e0be2c5a103f27482a8ebf8d87797e196",
+  "Sources/AppleMusic/AppleMusicPCMRecording.swift": "7130fc874e041dbc776d0165c19f897f98c476650e22ce9e448aa78a6654fb0b",
+  "Sources/AppleMusic/AppleMusicAnalysis.swift": "770097681ea9e7d9c687b95fa40da8b5d73ab3002187ff25300f2100910439ff",
+  "Sources/AppleMusic/AppleMusicAudioCapture.swift": "d7fd39ea3bd8fc48624dfd7645f8eda03b15c1cf79271407955e4023002bba8a",
+  "Sources/AppleMusic/AppleMusicStore.swift": "877f9ec3e4233d489ac13d84a63e4a6f71653e3a5cf43c69194b499c2a9aa4c7",
+  "Sources/AppleMusic/AppleMusicBridge.js": "e74919df1f8545f77be9b6e100ceef7cff0dcbd92ea8401400d5a2dcf4e55fbc",
+  "Sources/AppleMusic/AppleMusicPlayback.swift": "073fae3baa4879ca1a27488d778bafdf1d28af3b3445a012d60a04b94d0ae28e",
+  "Tests/AppleMusicFastInputTests.swift": "36f0e8e9b48b548892dcbcb1c28063b24460ec9e08765a38a4f648a28cc6793c",
+  "Tests/AppleMusicAnalysisTests.swift": "588fc6a924b4af340c51f059fa7be936bc222e907ae09083d9dda5dcbf1a07e4",
+  "Tests/AppleMusicBridgeTests.swift": "4c7f95f9a1f7914e01714810814715ebd6369dfce085877e5ac23dff0b318ee5"
+}

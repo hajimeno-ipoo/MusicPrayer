@@ -48,7 +48,7 @@ final class NowPlayingController {
 
     func update() {
         guard let store else { return }
-        let track = store.currentTrack
+        let track = store.currentQueueTrack
         let duration = store.duration.isFinite && store.duration > 0 ? store.duration : (track?.duration ?? 0)
         if let track {
             let key = MetadataKey(id: track.id, title: track.title, artist: track.artist,
@@ -110,7 +110,7 @@ final class NowPlayingController {
         model.commands = [
             .play { [weak store] in
                 await MainActor.run {
-                    guard let store, store.currentTrack != nil, !store.isPlaying else { return }
+                    guard let store, store.currentQueueTrack != nil, !store.isPlaying else { return }
                     store.togglePlayback()
                 }
             }.enabled(state.hasTrack),
@@ -122,7 +122,7 @@ final class NowPlayingController {
             }.enabled(state.hasTrack),
             .togglePlayPause { [weak store] in
                 await MainActor.run {
-                    guard let store, store.currentTrack != nil else { return }
+                    guard let store, store.currentQueueTrack != nil else { return }
                     store.togglePlayback()
                 }
             }.enabled(state.hasTrack),

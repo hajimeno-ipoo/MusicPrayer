@@ -1,0 +1,964 @@
+{
+  "date": "2026-10-18",
+  "scope": {
+    "task": "Apple Music addition-time silent analysis feasibility, timing, acceleration",
+    "concurrentListening": "excluded by user; not tested",
+    "productFeatureImplemented": false,
+    "audioPersisted": false,
+    "screenCaptureUsed": false
+  },
+  "track": {
+    "catalogID": "1403236244",
+    "title": "愛が止まらない ~Turn it into love~ (Remastered 2018)",
+    "artist": "Wink",
+    "durationSeconds": 208.941
+  },
+  "normalRun": [
+    {
+      "event": "start"
+    },
+    {
+      "authorized": true,
+      "event": "ready",
+      "view": 1
+    },
+    {
+      "event": "mutedReady",
+      "processes": [
+        {
+          "id": 116,
+          "pid": 14865,
+          "running": true
+        }
+      ],
+      "readback": 1,
+      "setupSeconds": 41.2755469083786
+    },
+    {
+      "after": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "protected": true,
+        "rate": 1,
+        "ready": 4,
+        "time": 7.829645061017732,
+        "volume": 0.12
+      },
+      "apply": [
+        {
+          "assigned": true,
+          "name": "sdk",
+          "readback": 1
+        },
+        {
+          "assigned": true,
+          "name": "media",
+          "readback": 1
+        }
+      ],
+      "before": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "protected": true,
+        "rate": 1,
+        "ready": 4,
+        "time": 2.8256386866575225,
+        "volume": 0.12
+      },
+      "effectiveRate": 0.9999357280127482,
+      "event": "rate",
+      "mediaAdvance": 5.00400637436021,
+      "requested": 1,
+      "rms": 0.07533032447099686,
+      "wallSeconds": 5.004328012466431
+    },
+    {
+      "after": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "protected": true,
+        "rate": 2,
+        "ready": 4,
+        "time": 23.428343463986817,
+        "volume": 0.12
+      },
+      "apply": [
+        {
+          "assigned": true,
+          "name": "sdk",
+          "readback": 2
+        },
+        {
+          "assigned": true,
+          "name": "media",
+          "readback": 2
+        }
+      ],
+      "before": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "protected": true,
+        "rate": 2,
+        "ready": 4,
+        "time": 8.611763964665528,
+        "volume": 0.12
+      },
+      "effectiveRate": 1.9999912997839082,
+      "event": "rate",
+      "mediaAdvance": 14.81657949932129,
+      "requested": 2,
+      "rms": 0.15924347937107086,
+      "wallSeconds": 7.408321976661682
+    },
+    {
+      "after": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "protected": true,
+        "rate": 1,
+        "ready": 4,
+        "time": 24.833966328688522,
+        "volume": 0.12
+      },
+      "apply": [
+        {
+          "assigned": true,
+          "name": "sdk",
+          "readback": 1
+        },
+        {
+          "assigned": true,
+          "name": "media",
+          "readback": 1
+        }
+      ],
+      "before": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "protected": true,
+        "rate": 1,
+        "ready": 4,
+        "time": 23.83245566267625,
+        "volume": 0.12
+      },
+      "effectiveRate": 1.0000425411583795,
+      "event": "rate",
+      "mediaAdvance": 1.0015106660122726,
+      "requested": 1,
+      "rms": 0.18070973455905914,
+      "wallSeconds": 1.0014680624008179
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 0,
+      "media": 0,
+      "pcmSeconds": 0,
+      "rms": 0,
+      "wall": 0.07423102855682373
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 298,
+      "media": 29.750513148669324,
+      "pcmSeconds": 29.887999999998836,
+      "rms": 0.280752032995224,
+      "wall": 30.007737040519714
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 598,
+      "media": 59.758676190332324,
+      "pcmSeconds": 59.89333333332887,
+      "rms": 0.2528665363788605,
+      "wall": 60.01595199108124
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 898,
+      "media": 89.76679164800355,
+      "pcmSeconds": 89.8986666666589,
+      "rms": 0.09788359701633453,
+      "wall": 90.024453997612
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 1199,
+      "media": 119.77682564899497,
+      "pcmSeconds": 119.91466666665559,
+      "rms": 0.11502762138843536,
+      "wall": 120.03439700603485
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 1498,
+      "media": 149.75816489964845,
+      "pcmSeconds": 149.88800000001478,
+      "rms": 0.19255448877811432,
+      "wall": 150.01578104496002
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 1799,
+      "media": 179.7684629416557,
+      "pcmSeconds": 179.90400000005147,
+      "rms": 0.19000400602817535,
+      "wall": 180.0265130996704
+    },
+    {
+      "bars": 104,
+      "bass": 4184,
+      "beats": 416,
+      "bpm": 119.48357391357422,
+      "drums": 4184,
+      "ended": true,
+      "event": "silentFullResult",
+      "finalProcessingSeconds": 1.7202839851379395,
+      "inputValid": true,
+      "keys": [
+        "E major"
+      ],
+      "loudnessCount": 2092,
+      "momentary": 2081,
+      "muteReadback": 1,
+      "nonzeroSnapshots": 4730,
+      "other": 4184,
+      "pace": 5,
+      "pcmOrigin": 1e-06,
+      "pcmSeconds": 209.18400000008725,
+      "sections": 15,
+      "snapshots": 4757,
+      "totalSeconds": 211.02271401882172,
+      "vocal": 4184,
+      "wallToEnd": 209.30243003368378
+    },
+    {
+      "event": "done"
+    }
+  ],
+  "fastRun": [
+    {
+      "event": "start"
+    },
+    {
+      "authorized": true,
+      "event": "ready",
+      "view": 1
+    },
+    {
+      "event": "mutedReady",
+      "processes": [
+        {
+          "id": 115,
+          "pid": 14995,
+          "running": true
+        }
+      ],
+      "readback": 1,
+      "setupSeconds": 94.10817193984985
+    },
+    {
+      "event": "fastConfiguration",
+      "mediaInfo": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": false,
+        "protected": true,
+        "rate": 2,
+        "ready": 4,
+        "time": 0,
+        "volume": 0.12
+      }
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 0,
+      "media": 1e-06,
+      "pcmSeconds": 0,
+      "rms": 0,
+      "wall": 0.05565202236175537
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 0,
+      "media": 59.57243893801563,
+      "pcmSeconds": 0,
+      "rms": 0,
+      "wall": 30.000709056854248
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 0,
+      "media": 119.65373685396418,
+      "pcmSeconds": 0,
+      "rms": 0,
+      "wall": 60.04104697704315
+    },
+    {
+      "event": "analyzing",
+      "loudnessCount": 0,
+      "media": 179.6379905227035,
+      "pcmSeconds": 0,
+      "rms": 0,
+      "wall": 90.03385901451111
+    },
+    {
+      "description": "insufficientAudio",
+      "error": "The operation couldn’t be completed. (MusicUnderstanding.KeyAnalyzerError error 3.)",
+      "event": "failure"
+    }
+  ],
+  "integrity": {
+    "Sources/AppleMusic/AppleMusicAudioCapture.swift": {
+      "before": "79a996530ebe4a6ad9d132aa049bb84aadac105db26b9b15b851a60a9165c76d",
+      "after": "79a996530ebe4a6ad9d132aa049bb84aadac105db26b9b15b851a60a9165c76d",
+      "unchanged": true
+    },
+    "Sources/AppleMusic/AppleMusicAnalysis.swift": {
+      "before": "f478829d5d7f9b6635f574c2f1118b4db91d2d689b4842bbed1f38ff258ac419",
+      "after": "f478829d5d7f9b6635f574c2f1118b4db91d2d689b4842bbed1f38ff258ac419",
+      "unchanged": true
+    },
+    "Sources/AppleMusic/AppleMusicStore.swift": {
+      "before": "d5a4243164484ba20c2439ae3a2241297b6a53910897b0fae409d96fd7f4353e",
+      "after": "d5a4243164484ba20c2439ae3a2241297b6a53910897b0fae409d96fd7f4353e",
+      "unchanged": true
+    },
+    "Sources/AppleMusic/AppleMusicBridge.js": {
+      "before": "8e33e85e13ce96f7dfc2e1ca26175df58daff1f5ce1743fa10067ac166535670",
+      "after": "8e33e85e13ce96f7dfc2e1ca26175df58daff1f5ce1743fa10067ac166535670",
+      "unchanged": true
+    },
+    "Sources/App/PlayerStore.swift": {
+      "before": "c931757b10ad4152f7504114858d5b95d9ed3f952c8fb951889162b1132c9ffa",
+      "after": "c931757b10ad4152f7504114858d5b95d9ed3f952c8fb951889162b1132c9ffa",
+      "unchanged": true
+    },
+    "Sources/App/MusicPrayerApp.swift": {
+      "before": "cc1a40ab96750e15f754a22deeeb0d543179d68463f39fab47e4611243e9ed59",
+      "after": "cc1a40ab96750e15f754a22deeeb0d543179d68463f39fab47e4611243e9ed59",
+      "unchanged": true
+    },
+    "dist/MusicPrayer.app/Contents/MacOS/MusicPrayer": {
+      "before": "a9c30412a622d2be02732fe73ef72e22f5af85f3bfd7774ea3bb35a4b3d97979",
+      "after": "a9c30412a622d2be02732fe73ef72e22f5af85f3bfd7774ea3bb35a4b3d97979",
+      "unchanged": true
+    },
+    "/Users/apple/Library/Application Support/com.hazimeno.MusicPrayer/queue.json": {
+      "before": "adc3002d8c558ad4365eaefd00947b3a2d5a743f63300ab8a07720bac6f31aa4",
+      "after": "adc3002d8c558ad4365eaefd00947b3a2d5a743f63300ab8a07720bac6f31aa4",
+      "unchanged": true
+    }
+  },
+  "limits": [
+    "Physical speaker silence was not measured with a microphone. CoreAudio mute readback and nonzero captured PCM were verified.",
+    "One protected Apple Music track tested. General catalog reliability and fast full analysis are not established.",
+    "Setup and full analysis timing are separate; intervening rate experiments are excluded from analysis time.",
+    "Correction: the failed runs were missing verification of macOS AudioCapture authorization; their negative interpretation is withdrawn."
+  ],
+  "recheckRun": [
+    {
+      "event": "start"
+    },
+    {
+      "authorized": true,
+      "event": "ready",
+      "view": 1
+    },
+    {
+      "event": "mutedReady",
+      "processes": [
+        {
+          "id": 115,
+          "pid": 15162,
+          "running": false
+        }
+      ],
+      "readback": 1,
+      "setupSeconds": 94.96091198921204
+    },
+    {
+      "event": "preflight",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "ready": 4,
+        "time": 5.026663413991803,
+        "volume": 0.12
+      },
+      "processes": [
+        {
+          "id": 115,
+          "pid": 15162,
+          "running": true
+        }
+      ],
+      "rms": 0
+    },
+    {
+      "description": "Error Domain=Probe.noPCMAtNormalSpeed Code=1 \"(null)\"",
+      "error": "The operation couldn’t be completed. (Probe.noPCMAtNormalSpeed error 1.)",
+      "event": "failure"
+    },
+    {
+      "event": "restored",
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "ready": 4,
+        "time": 5.044860705667991,
+        "volume": 0.12
+      }
+    }
+  ],
+  "conclusions": {
+    "silentNormalFullAnalysis": "succeeded again in the permission-verified retest",
+    "normalCaptureRepeatability": "1x control completed in the same permission-verified process as the 2x run",
+    "doubleSpeedPlayback": "measured 1.9999913x with nonzero tapped audio",
+    "doubleSpeedFullAnalysis": "execution and timing succeeded for one track; validation design is insufficient to establish fidelity or justify method selection"
+  },
+  "permissionAudit": {
+    "date": "2026-10-18",
+    "source": "macOS unified log: tccd, 17:45-17:58 JST",
+    "events": [
+      {
+        "timestamp": "2026-10-18 17:46:10.762653+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1533, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:10.763036+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1533, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:10.763693+0900",
+        "message": "Failed to match existing code requirement for subject com.hazimeno.MusicPrayer and service kTCCServiceAudioCapture\n\tcdhash H\"9db83be1048c7cdbfbcf7808317468f0556a8eb4\"\n\tcdhash H\"cab3c6e04c0a5b84811512aa26182caa1ab1ec44\""
+      },
+      {
+        "timestamp": "2026-10-18 17:46:10.763776+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1533, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:14.910526+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1536, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:14.911528+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1536, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:14.912256+0900",
+        "message": "Failed to match existing code requirement for subject com.hazimeno.MusicPrayer and service kTCCServiceAudioCapture\n\tcdhash H\"9db83be1048c7cdbfbcf7808317468f0556a8eb4\"\n\tcdhash H\"cab3c6e04c0a5b84811512aa26182caa1ab1ec44\""
+      },
+      {
+        "timestamp": "2026-10-18 17:46:52.023569+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1536, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:52.129072+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1538, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:52.129742+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1538, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 17:46:52.130219+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1538, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 17:51:33.533401+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1545, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 17:51:33.533762+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1545, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 17:51:33.534206+0900",
+        "message": "Failed to match existing code requirement for subject com.hazimeno.MusicPrayer and service kTCCServiceAudioCapture\n\tcdhash H\"cab3c6e04c0a5b84811512aa26182caa1ab1ec44\"\n\tcdhash H\"a1f50f0e989367c2a97364023f95ed628a69fb3f\""
+      },
+      {
+        "timestamp": "2026-10-18 17:51:33.534266+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1545, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 17:51:37.604628+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1548, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 17:51:37.605676+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1548, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 17:51:37.606439+0900",
+        "message": "Failed to match existing code requirement for subject com.hazimeno.MusicPrayer and service kTCCServiceAudioCapture\n\tcdhash H\"cab3c6e04c0a5b84811512aa26182caa1ab1ec44\"\n\tcdhash H\"a1f50f0e989367c2a97364023f95ed628a69fb3f\""
+      },
+      {
+        "timestamp": "2026-10-18 17:56:11.879159+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1551, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 17:56:11.879512+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1551, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 17:56:11.879958+0900",
+        "message": "Failed to match existing code requirement for subject com.hazimeno.MusicPrayer and service kTCCServiceAudioCapture\n\tcdhash H\"cab3c6e04c0a5b84811512aa26182caa1ab1ec44\"\n\tcdhash H\"05e7c94597b8f05137cfb01c9ae1b215f8541dfa\""
+      },
+      {
+        "timestamp": "2026-10-18 17:56:11.880031+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1551, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+      }
+    ],
+    "findings": [
+      "The successful Check.app run received AudioCapture authValue=2 at 17:46:52.023569+0900.",
+      "Fast.app at 17:51:33 and Recheck.app at 17:56:11 failed the existing AudioCapture code requirement after ad-hoc rebuilding; preflight authValue=1, authReason=0. No subsequent AudioCapture grant was found for either run in this time window.",
+      "The bridge authorized=true field is MusicKit isAuthorized, not macOS AudioCapture authorization.",
+      "The failed runs did not establish the required macOS audio authorization condition. They cannot be used to judge capture repeatability or accelerated full analysis.",
+      "Setup timings include macOS permission waits and cannot be presented as ordinary connection setup cost."
+    ]
+  },
+  "permissionVerifiedRetest": {
+    "date": "2026-10-18",
+    "events": [
+      {
+        "date": "2026-10-18T11:13:35Z",
+        "event": "start",
+        "pid": 17792
+      },
+      {
+        "authorized": true,
+        "date": "2026-10-18T11:13:37Z",
+        "event": "musicKitReady"
+      },
+      {
+        "date": "2026-10-18T11:13:44Z",
+        "event": "tapReady",
+        "mute": 1,
+        "processID": 115,
+        "processPID": 17813
+      },
+      {
+        "advance": 5.0581914613464205,
+        "after": {
+          "id": "1403236244",
+          "paused": false,
+          "playing": true,
+          "preservesPitch": true,
+          "protected": true,
+          "rate": 1,
+          "time": 5.058192461346421,
+          "volume": 0.12
+        },
+        "before": {
+          "id": "1403236244",
+          "paused": false,
+          "playing": true,
+          "preservesPitch": true,
+          "protected": true,
+          "rate": 1,
+          "time": 1e-06,
+          "volume": 0.12
+        },
+        "callbackDelta": 490,
+        "date": "2026-10-18T11:13:50Z",
+        "effectiveRate": 0.9668632511921053,
+        "event": "pcmCheck",
+        "mute": 1,
+        "nonzero": 38,
+        "rms": 0.12697289884090424,
+        "speed": 1,
+        "wall": 5.231547951698303
+      },
+      {
+        "date": "2026-10-18T11:13:50Z",
+        "event": "waitingPermissionAudit"
+      },
+      {
+        "date": "2026-10-18T11:14:32Z",
+        "event": "permissionAuditConfirmed"
+      },
+      {
+        "advance": 10.13029975999136,
+        "after": {
+          "id": "1403236244",
+          "paused": false,
+          "playing": true,
+          "preservesPitch": false,
+          "protected": true,
+          "rate": 2,
+          "time": 15.19308167999136,
+          "volume": 0.12
+        },
+        "before": {
+          "id": "1403236244",
+          "paused": false,
+          "playing": true,
+          "preservesPitch": false,
+          "protected": true,
+          "rate": 2,
+          "time": 5.06278192,
+          "volume": 0.12
+        },
+        "callbackDelta": 490,
+        "date": "2026-10-18T11:14:38Z",
+        "effectiveRate": 1.9382717554014572,
+        "event": "pcmCheck",
+        "mute": 1,
+        "nonzero": 48,
+        "rms": 0.19047173857688904,
+        "speed": 2,
+        "wall": 5.226459980010986
+      },
+      {
+        "date": "2026-10-18T11:14:38Z",
+        "event": "progress",
+        "loudness": 0,
+        "media": 0,
+        "pcmSeconds": 0,
+        "speed": 2,
+        "wall": 0.10233592987060547
+      },
+      {
+        "date": "2026-10-18T11:15:08Z",
+        "event": "progress",
+        "loudness": 597,
+        "media": 59.50955561202399,
+        "pcmSeconds": 59.75466666666434,
+        "speed": 2,
+        "wall": 30.02054798603058
+      },
+      {
+        "date": "2026-10-18T11:15:38Z",
+        "event": "progress",
+        "loudness": 1197,
+        "media": 119.48876778000597,
+        "pcmSeconds": 119.72266666665774,
+        "speed": 2,
+        "wall": 60.01106095314026
+      },
+      {
+        "date": "2026-10-18T11:16:08Z",
+        "event": "progress",
+        "loudness": 1797,
+        "media": 179.48881186200464,
+        "pcmSeconds": 179.7333333333178,
+        "speed": 2,
+        "wall": 90.01067399978638
+      },
+      {
+        "bars": 105,
+        "bass": 4191,
+        "beats": 417,
+        "bpm": 119.47593688964844,
+        "date": "2026-10-18T11:16:25Z",
+        "drums": 4191,
+        "ended": true,
+        "event": "result",
+        "finalProcessing": 1.6901960372924805,
+        "info": {
+          "id": "",
+          "paused": true,
+          "playing": false,
+          "preservesPitch": false,
+          "protected": true,
+          "rate": 2,
+          "time": 0,
+          "volume": 0.12
+        },
+        "inputValid": true,
+        "keys": [
+          "E major"
+        ],
+        "loudness": 2096,
+        "momentary": 2084,
+        "mute": 1,
+        "nonzero": 2381,
+        "other": 4191,
+        "pace": 6,
+        "pcmOrigin": 0.08847183332545683,
+        "pcmSeconds": 209.51466666664786,
+        "sections": 15,
+        "speed": 2,
+        "total": 106.59841299057007,
+        "vocal": 4191,
+        "wallToEnd": 104.90821695327759
+      },
+      {
+        "date": "2026-10-18T11:16:26Z",
+        "event": "progress",
+        "loudness": 0,
+        "media": 0,
+        "pcmSeconds": 0,
+        "speed": 1,
+        "wall": 1.2664600610733032
+      },
+      {
+        "date": "2026-10-18T11:16:55Z",
+        "event": "progress",
+        "loudness": 287,
+        "media": 28.623794546008618,
+        "pcmSeconds": 28.714666666665632,
+        "speed": 1,
+        "wall": 30.019012093544006
+      },
+      {
+        "date": "2026-10-18T11:17:25Z",
+        "event": "progress",
+        "loudness": 587,
+        "media": 58.62866579733012,
+        "pcmSeconds": 58.719999999995665,
+        "speed": 1,
+        "wall": 60.023951053619385
+      },
+      {
+        "date": "2026-10-18T11:17:55Z",
+        "event": "progress",
+        "loudness": 887,
+        "media": 88.61629983835665,
+        "pcmSeconds": 88.70399999999236,
+        "speed": 1,
+        "wall": 90.01213300228119
+      },
+      {
+        "date": "2026-10-18T11:18:25Z",
+        "event": "progress",
+        "loudness": 1186,
+        "media": 118.61095700534015,
+        "pcmSeconds": 118.69866666665573,
+        "speed": 1,
+        "wall": 120.0067640542984
+      },
+      {
+        "date": "2026-10-18T11:18:55Z",
+        "event": "progress",
+        "loudness": 1487,
+        "media": 148.61930592134854,
+        "pcmSeconds": 148.70400000001334,
+        "speed": 1,
+        "wall": 150.01475608348846
+      },
+      {
+        "date": "2026-10-18T11:19:25Z",
+        "event": "progress",
+        "loudness": 1786,
+        "media": 178.6145512136779,
+        "pcmSeconds": 178.69866666671666,
+        "speed": 1,
+        "wall": 180.0108700990677
+      },
+      {
+        "date": "2026-10-18T11:19:55Z",
+        "event": "progress",
+        "loudness": 2087,
+        "media": 208.64424663032995,
+        "pcmSeconds": 208.7360000000867,
+        "speed": 1,
+        "wall": 210.04070007801056
+      },
+      {
+        "bars": 104,
+        "bass": 4183,
+        "beats": 416,
+        "bpm": 119.48403930664062,
+        "date": "2026-10-18T11:19:57Z",
+        "drums": 4183,
+        "ended": true,
+        "event": "result",
+        "finalProcessing": 1.6529710292816162,
+        "info": {
+          "id": "",
+          "paused": true,
+          "playing": false,
+          "preservesPitch": true,
+          "protected": true,
+          "rate": 1,
+          "time": 0,
+          "volume": 0.12
+        },
+        "inputValid": true,
+        "keys": [
+          "E major"
+        ],
+        "loudness": 2092,
+        "momentary": 2082,
+        "mute": 1,
+        "nonzero": 4750,
+        "other": 4183,
+        "pace": 3,
+        "pcmOrigin": 0.016986208356684074,
+        "pcmSeconds": 209.14133333342053,
+        "sections": 15,
+        "speed": 1,
+        "total": 212.100879073143,
+        "vocal": 4183,
+        "wallToEnd": 210.4479080438614
+      },
+      {
+        "date": "2026-10-18T11:19:57Z",
+        "event": "done"
+      },
+      {
+        "date": "2026-10-18T11:19:57Z",
+        "event": "restored",
+        "info": {
+          "id": "",
+          "paused": true,
+          "playing": false,
+          "preservesPitch": true,
+          "protected": true,
+          "rate": 1,
+          "time": 0,
+          "volume": 0.12
+        }
+      }
+    ],
+    "permissionAudit": {
+      "pid": 17792,
+      "cdhash": "4923c90b0bd5a2681dda948f0aeceb3a41dde218",
+      "audioCaptureGranted": true,
+      "pcmAndMuteVerified": true,
+      "events": [
+        {
+          "timestamp": "2026-10-18 20:13:35.802135+0900",
+          "message": "AUTHREQ_CTX: msgID=761.1588, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:35.802550+0900",
+          "message": "AUTHREQ_SUBJECT: msgID=761.1588, subject=com.hazimeno.MusicPrayer,"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:35.803063+0900",
+          "message": "AUTHREQ_RESULT: msgID=761.1588, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:40.390865+0900",
+          "message": "AUTHREQ_CTX: msgID=761.1591, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:40.391438+0900",
+          "message": "AUTHREQ_SUBJECT: msgID=761.1591, subject=com.hazimeno.MusicPrayer,"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:44.479193+0900",
+          "message": "AUTHREQ_RESULT: msgID=761.1591, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:44.582977+0900",
+          "message": "AUTHREQ_CTX: msgID=761.1593, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:44.583402+0900",
+          "message": "AUTHREQ_SUBJECT: msgID=761.1593, subject=com.hazimeno.MusicPrayer,"
+        },
+        {
+          "timestamp": "2026-10-18 20:13:44.583819+0900",
+          "message": "AUTHREQ_RESULT: msgID=761.1593, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+        }
+      ]
+    },
+    "integrity": {
+      "Sources/AppleMusic/AppleMusicAudioCapture.swift": {
+        "before": "79a996530ebe4a6ad9d132aa049bb84aadac105db26b9b15b851a60a9165c76d",
+        "after": "79a996530ebe4a6ad9d132aa049bb84aadac105db26b9b15b851a60a9165c76d",
+        "unchanged": true
+      },
+      "Sources/AppleMusic/AppleMusicAnalysis.swift": {
+        "before": "f478829d5d7f9b6635f574c2f1118b4db91d2d689b4842bbed1f38ff258ac419",
+        "after": "f478829d5d7f9b6635f574c2f1118b4db91d2d689b4842bbed1f38ff258ac419",
+        "unchanged": true
+      },
+      "Sources/AppleMusic/AppleMusicPlayback.swift": {
+        "before": "b59e5920376d27e7960eb340024c2a0650f7e1f6ec3210fdd50c430b1f8451c2",
+        "after": "b59e5920376d27e7960eb340024c2a0650f7e1f6ec3210fdd50c430b1f8451c2",
+        "unchanged": true
+      },
+      "Sources/AppleMusic/AppleMusicBridge.js": {
+        "before": "8e33e85e13ce96f7dfc2e1ca26175df58daff1f5ce1743fa10067ac166535670",
+        "after": "8e33e85e13ce96f7dfc2e1ca26175df58daff1f5ce1743fa10067ac166535670",
+        "unchanged": true
+      },
+      "Sources/App/PlayerStore.swift": {
+        "before": "c931757b10ad4152f7504114858d5b95d9ed3f952c8fb951889162b1132c9ffa",
+        "after": "c931757b10ad4152f7504114858d5b95d9ed3f952c8fb951889162b1132c9ffa",
+        "unchanged": true
+      },
+      "dist/MusicPrayer.app/Contents/MacOS/MusicPrayer": {
+        "before": "a9c30412a622d2be02732fe73ef72e22f5af85f3bfd7774ea3bb35a4b3d97979",
+        "after": "a9c30412a622d2be02732fe73ef72e22f5af85f3bfd7774ea3bb35a4b3d97979",
+        "unchanged": true
+      },
+      "/Users/apple/Library/Application Support/com.hazimeno.MusicPrayer/queue.json": {
+        "before": "adc3002d8c558ad4365eaefd00947b3a2d5a743f63300ab8a07720bac6f31aa4",
+        "after": "79893023cf3199ccb531a9b7db880d7b523113c69bc0169e380f8ff87d9eed66",
+        "unchanged": false
+      }
+    },
+    "method": {
+      "oneFrozenSignedBinary": true,
+      "speedPreservesPitch": {
+        "1": true,
+        "2": false
+      },
+      "analysisSampleRateFactor": {
+        "1": 1,
+        "2": 0.5
+      },
+      "audioPersisted": false,
+      "concurrentListeningTested": false
+    },
+    "comparison": {
+      "normalTotalSeconds": 212.100879073143,
+      "fastTotalSeconds": 106.59841299057007,
+      "speedup": 1.9897189190978473,
+      "differenceSeconds": 105.50246608257294
+    }
+  },
+  "validationAdequacyReview": {
+    "status": "execution-and-timing evidence only; insufficient for fidelity evaluation and method selection",
+    "facts": {
+      "normalPaceCountsAcrossRecordedRuns": [
+        5,
+        3
+      ],
+      "sameInputReproducibilityControlled": false,
+      "factorEffectsIsolated": false,
+      "fullPerTimeOutputComparisonSaved": false,
+      "inputOriginSeconds": {
+        "normal": 0.016986208356684074,
+        "fast": 0.08847183332545683
+      },
+      "inputLengthSeconds": {
+        "normal": 209.14133333342053,
+        "fast": 209.51466666664786
+      },
+      "additionalPlaybackOrExperimentPerformedInReview": false
+    },
+    "neededComparison": [
+      "Verify baseline output for identical input and settings.",
+      "Investigate feasibility of faster delivery without changing source audio before selecting playback transformation.",
+      "Control capture range, sample format, and compare one change at a time.",
+      "Compare per-beat times, interval boundaries, activity and loudness values, not only counts."
+    ],
+    "alternativeMethodConfirmed": false
+  },
+  "controlledComparison": {
+    "report": "APPLE_MUSIC_CONTROLLED_COMPARISON_2026-10-18.md",
+    "evidence": "APPLE_MUSIC_CONTROLLED_COMPARISON_2026-10-18/verification.json",
+    "status": "completed for one track; three identical-PCM results match exactly; both tested 2x paths differ from normal-input analysis"
+  }
+}

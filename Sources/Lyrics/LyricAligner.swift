@@ -182,7 +182,7 @@ enum LyricAligner {
         private var values: [String: [Character]] = [:]
         private var unavailable: Set<String> = []
 
-        func reading(_ text: String) -> [Character]? {
+        func reading(_ text: String) throws -> [Character]? {
             if let value = values[text] { return value }
             if unavailable.contains(text) { return nil }
             let locale = CFLocaleCreate(nil, CFLocaleIdentifier(rawValue: "ja_JP" as CFString))
@@ -195,6 +195,7 @@ enum LyricAligner {
             }
             var characters: [Character] = []
             while CFStringTokenizerAdvanceToNextToken(tokenizer).rawValue != 0 {
+                try Task.checkCancellation()
                 guard let latin = CFStringTokenizerCopyCurrentTokenAttribute(tokenizer,
                     kCFStringTokenizerAttributeLatinTranscription) as? String else {
                     unavailable.insert(text)
@@ -230,23 +231,42 @@ enum LyricAligner {
         return result
     }
 
-    private static func editScore(_ source: [Character], _ target: [Character]) -> EditScore {
-        var previous = (0...target.count).map { EditScore(edits: $0, matches: 0) }
-        for sourceIndex in source.indices {
-            var current = [EditScore(edits: sourceIndex + 1, matches: 0)]
-            for targetIndex in target.indices {
-                let equal = source[sourceIndex] == target[targetIndex]
-                var best = EditScore(edits: previous[targetIndex].edits + (equal ? 0 : 1),
-                                     matches: previous[targetIndex].matches + (equal ? 1 : 0))
-                let deletion = EditScore(edits: previous[targetIndex + 1].edits + 1,
-                                         matches: previous[targetIndex + 1].matches)
+    private static func editScore(_ source: [Character], _ target: [Character],
+                                  maximumEdits: Int? = nil) throws -> EditScore {
+        let limit = maximumEdits ?? max(source.count, target.count)
+        let rejected = EditScore(edits: limit + 1, matches: 0)
+        guard abs(source.count - target.count) <= limit else { return rejected }
+        if source.isEmpty { return EditScore(edits: target.count, matches: 0) }
+        if target.isEmpty { return EditScore(edits: source.count, matches: 0) }
+        var previous = (0...target.count).map { $0 <= limit ? EditScore(edits: $0, matches: 0) : rejected }
+        var current = Array(repeating: rejected, count: target.count + 1)
+        var sourceIndex = 0
+        while sourceIndex < source.count {
+            try Task.checkCancellation()
+            let first = max(1, sourceIndex + 1 - limit)
+            let last = min(target.count, sourceIndex + 1 + limit)
+            current[first - 1] = first == 1 && sourceIndex + 1 <= limit
+                ? EditScore(edits: sourceIndex + 1, matches: 0) : rejected
+            if last < target.count { current[last + 1] = rejected }
+            var rowMinimum = current[first - 1].edits
+            var column = first
+            while column <= last {
+                let equal = source[sourceIndex] == target[column - 1]
+                var best = EditScore(edits: previous[column - 1].edits + (equal ? 0 : 1),
+                                     matches: previous[column - 1].matches + (equal ? 1 : 0))
+                let deletion = EditScore(edits: previous[column].edits + 1,
+                                         matches: previous[column].matches)
                 if deletion.isBetter(than: best) { best = deletion }
-                let insertion = EditScore(edits: current[targetIndex].edits + 1,
-                                          matches: current[targetIndex].matches)
+                let insertion = EditScore(edits: current[column - 1].edits + 1,
+                                          matches: current[column - 1].matches)
                 if insertion.isBetter(than: best) { best = insertion }
-                current.append(best)
+                current[column] = best.edits <= limit ? best : rejected
+                rowMinimum = min(rowMinimum, current[column].edits)
+                column += 1
             }
-            previous = current
+            guard rowMinimum <= limit else { return rejected }
+            swap(&previous, &current)
+            sourceIndex += 1
         }
         return previous[target.count]
     }
@@ -337,16 +357,16 @@ enum LyricAligner {
 
     private static func addReadingEvidence(to candidates: inout [Candidate], line: LyricLine,
                                            characters: [AudioCharacter], cache: ReadingCache) throws {
-        guard containsJapanese(line.text), let source = cache.reading(line.text) else { return }
+        guard containsJapanese(line.text), let source = try cache.reading(line.text) else { return }
         var distances: [Int] = []
         for candidate in candidates {
             try Task.checkCancellation()
-            guard let target = cache.reading(recognizedText(candidate, characters: characters)) else {
+            guard let target = try cache.reading(recognizedText(candidate, characters: characters)) else {
                 // An unavailable reading must not favor another candidate. Disable
                 // this third score for the entire row rather than inventing a reading.
                 return
             }
-            distances.append(editScore(source, target).edits)
+            distances.append(try editScore(source, target).edits)
         }
         for index in candidates.indices { candidates[index].readingEdits = distances[index] }
     }
@@ -359,7 +379,8 @@ enum LyricAligner {
         guard !source.isEmpty else { throw LyricAlignmentError.unmatchedLine(line.ordinal) }
         let sourceCount = source.count
         let editLimit = max(2, Int(floor(Double(sourceCount) * maximumEditRatio)))
-        let sourceReading = useReading && containsJapanese(line.text) ? cache.reading(line.text) : nil
+        let sourceReading = useReading && containsJapanese(line.text) ? try cache.reading(line.text) : nil
+        let readingFrequency = sourceReading?.reduce(into: [Character: Int]()) { $0[$1, default: 0] += 1 } ?? [:]
         let readingLimit = sourceReading.map { max(2, Int(floor(Double($0.count) * maximumEditRatio))) } ?? 0
         let windowLimit = max(Int(ceil(Double(sourceCount) * 1.8)) + 2,
                               sourceReading.map { $0.count + readingLimit } ?? 0)
@@ -390,6 +411,7 @@ enum LyricAligner {
             for offset in 1...count {
                 let end = start + offset
                 if end < characters.count, characters[end - 1].token == characters[end].token { continue }
+                try Task.checkCancellation()
                 let score = previous[offset]
                 guard characters[end - 1].end - characters[start].start + epsilon >= minimumLineDuration else { continue }
                 var candidate = Candidate(start: start, end: end, edits: score.edits,
@@ -400,9 +422,20 @@ enum LyricAligner {
                     // A spelling error must still agree with the recognized reading.
                     // Reuse the same evidence limits; retain Apple's exact time range.
                     guard let sourceReading,
-                          let targetReading = cache.reading(recognizedText(candidate, characters: characters)) else { continue }
+                          let targetReading = try cache.reading(recognizedText(candidate, characters: characters)) else { continue }
                     guard abs(sourceReading.count - targetReading.count) <= readingLimit else { continue }
-                    let readingScore = editScore(sourceReading, targetReading)
+                    // Character frequency bounds any alignment's matches from above
+                    // and its edits from below. Reject only impossible readings.
+                    var used: [Character: Int] = [:]
+                    var common = 0
+                    for character in targetReading {
+                        let count = used[character, default: 0]
+                        if count < readingFrequency[character, default: 0] { common += 1 }
+                        used[character] = count + 1
+                    }
+                    guard Double(common) / Double(sourceReading.count) + epsilon >= minimumMatchRatio,
+                          max(sourceReading.count, targetReading.count) - common <= readingLimit else { continue }
+                    let readingScore = try editScore(sourceReading, targetReading, maximumEdits: readingLimit)
                     let agreement = Double(readingScore.matches) / Double(sourceReading.count)
                     guard readingScore.edits <= readingLimit,
                           agreement + epsilon >= minimumMatchRatio else { continue }

@@ -1,0 +1,184 @@
+Building for debugging...
+[3 / 13] MusicPrayer-product
+[9 / 19] MusicPrayer-product
+[20 / 33] MusicPrayer-product
+[23 / 35] MusicPrayer
+[26 / 38] MusicPrayer-product
+[29 / 41] MusicPrayer-product
+[29 / 41] MusicPrayer
+[31 / 41] MusicPrayer-product
+[33 / 43] MusicPrayer-product
+[38 / 49] MusicPrayerTests-product
+[39 / 55]
+[44 / 55] MusicPrayerTests-product
+[48 / 54] MusicPrayerTests-product
+[50 / 54] MusicPrayerTests-product
+Build complete! (9.16秒)
+Test Suite 'Selected tests' started at 2026-10-19 04:28:36.265.
+Test Suite 'MusicPrayerTests.xctest' started at 2026-10-19 04:28:36.267.
+Test Suite 'AppleMusicBridgeTests' started at 2026-10-19 04:28:36.267.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisKeepsFastRateAfterPageResetsRateOrReplacesMedia]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisKeepsFastRateAfterPageResetsRateOrReplacesMedia]' passed (0.018 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisRatePreservesPitchAndRestoresNormalPlayback]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisRatePreservesPitchAndRestoresNormalPlayback]' passed (0.002 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testBridgeRejectsOtherOriginsAndMissingPlayerWithoutReadingPageState]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testBridgeRejectsOtherOriginsAndMissingPlayerWithoutReadingPageState]' passed (0.002 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testExpiredSelectionDoesNotStartPlaybackAfterQueueCompletes]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testExpiredSelectionDoesNotStartPlaybackAfterQueueCompletes]' passed (0.002 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesSelectedSongRelationshipAndKeepsTTML]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesSelectedSongRelationshipAndKeepsTTML]' passed (0.002 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesWordTimingResourceBeforeLineTimingInIncludedResults]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesWordTimingResourceBeforeLineTimingInIncludedResults]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsWithoutResourceReturnsNoLyricsAndRejectsInvalidID]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsWithoutResourceReturnsNoLyricsAndRejectsInvalidID]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testMediaEndStaysVisibleAfterOfficialPlayerClearsCurrentItem]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testMediaEndStaysVisibleAfterOfficialPlayerClearsCurrentItem]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testOfficialPageBridgeReadsMetadataAndControlsExistingPlayer]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testOfficialPageBridgeReadsMetadataAndControlsExistingPlayer]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testPreparingRegisteredSongDoesNotAutoplayAndUsesAppQueuePolicy]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testPreparingRegisteredSongDoesNotAutoplayAndUsesAppQueuePolicy]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSearchPassesQueryAsDataAndMapsCatalogResults]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSearchPassesQueryAsDataAndMapsCatalogResults]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSelectedCatalogSongSetsQueueBeforePlayAndRejectsInvalidID]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSelectedCatalogSongSetsQueueBeforePlayAndRejectsInvalidID]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSnapshotUsesFractionalMediaClockForContinuousMotion]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSnapshotUsesFractionalMediaClockForContinuousMotion]' passed (0.001 seconds).
+Test Suite 'AppleMusicBridgeTests' passed at 2026-10-19 04:28:36.302.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.034 (0.035) seconds
+Test Suite 'AppleMusicPlaybackPolicyTests' started at 2026-10-19 04:28:36.302.
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testCachedPreanalysisUsesExistingConnectionWithoutStartingMedia]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testCachedPreanalysisUsesExistingConnectionWithoutStartingMedia]' passed (1.472 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testNativePlayerConnectionCanStartAudioWithoutClickingWebPage]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testNativePlayerConnectionCanStartAudioWithoutClickingWebPage]' passed (0.354 seconds).
+Test Suite 'AppleMusicPlaybackPolicyTests' passed at 2026-10-19 04:28:38.128.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 1.826 (1.827) seconds
+Test Suite 'AppleMusicPreanalysisTests' started at 2026-10-19 04:28:38.128.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testActiveStatusFollowsPreparationCaptureAndFinalAnalysisWithoutMovingOtherSongs]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testActiveStatusFollowsPreparationCaptureAndFinalAnalysisWithoutMovingOtherSongs]' passed (0.013 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testDoesNotStartUntilBackgroundWorkIsAllowed]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testDoesNotStartUntilBackgroundWorkIsAllowed]' passed (0.007 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testFailedSongIsNotRetriedEveryTickAndRemovalAllowsFreshAttempt]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testFailedSongIsNotRetriedEveryTickAndRemovalAllowsFreshAttempt]' passed (0.013 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testRemovingActiveSongCancelsItAndMovesToNextRetainedSong]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testRemovingActiveSongCancelsItAndMovesToNextRetainedSong]' passed (0.013 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSelectingTheSongBeingAnalyzedDoesNotCancelOrRestartIt]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSelectingTheSongBeingAnalyzedDoesNotCancelOrRestartIt]' passed (0.013 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSongsRunSeriallyAndDuplicateRegistrationsDoNotRunTwice]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSongsRunSeriallyAndDuplicateRegistrationsDoNotRunTwice]' passed (0.012 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSuccessfulSongsRemainCompletedAcrossQueueRefreshAndIdleEligibilityChanges]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSuccessfulSongsRemainCompletedAcrossQueueRefreshAndIdleEligibilityChanges]' passed (0.020 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testYieldWaitsForCleanupBeforeForegroundPlaybackAndCanResumeLater]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testYieldWaitsForCleanupBeforeForegroundPlaybackAndCanResumeLater]' passed (0.040 seconds).
+Test Suite 'AppleMusicPreanalysisTests' passed at 2026-10-19 04:28:38.261.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.132 (0.132) seconds
+Test Suite 'PlayerStoreTransitionTests' started at 2026-10-19 04:28:38.261.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testAddingAppleMusicSongOnlyRegistersInSameQueueAndDeduplicates]' started.
+2026-10-19 04:28:38.361 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testAddingAppleMusicSongOnlyRegistersInSameQueueAndDeduplicates]' passed (0.133 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testAppliedTextDuringFingerprintWaitPersistsAfterTrackChanges]' started.
+2026-10-19 04:28:38.444 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testAppliedTextDuringFingerprintWaitPersistsAfterTrackChanges]' passed (0.076 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testCancelledRecognitionCannotPublishOldProgressOrResultsAfterSelectionAndReapply]' started.
+2026-10-19 04:28:38.518 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testCancelledRecognitionCannotPublishOldProgressOrResultsAfterSelectionAndReapply]' passed (0.189 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testFailedDeleteStaysClearedWhenTrackIsSelectedAgainAndRetryDeletesFile]' started.
+2026-10-19 04:28:38.708 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testFailedDeleteStaysClearedWhenTrackIsSelectedAgainAndRetryDeletesFile]' passed (0.136 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testLocalTrackEndAdvancesToAppleMusicEntry]' started.
+2026-10-19 04:28:38.844 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testLocalTrackEndAdvancesToAppleMusicEntry]' passed (2.258 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testLyricsUseIncomingTrackClockDuringOutgoingMetalFade]' started.
+2026-10-19 04:28:41.113 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testLyricsUseIncomingTrackClockDuringOutgoingMetalFade]' passed (0.107 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testManualSelectionStartsNewAudioWhilePreviousVisualStillFades]' started.
+2026-10-19 04:28:41.211 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testManualSelectionStartsNewAudioWhilePreviousVisualStillFades]' passed (1.778 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testNextAndPreviousNavigateMixedQueueWithoutManualModeSwitch]' started.
+2026-10-19 04:28:42.988 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testNextAndPreviousNavigateMixedQueueWithoutManualModeSwitch]' passed (0.146 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testOpeningSearchAndSignInKeepsLocalPlaybackAndSelection]' started.
+2026-10-19 04:28:43.137 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testOpeningSearchAndSignInKeepsLocalPlaybackAndSelection]' passed (0.135 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testOpeningSearchDuringRestoreKeepsSavedLocalSongAndPosition]' started.
+2026-10-19 04:28:43.270 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testOpeningSearchDuringRestoreKeepsSavedLocalSongAndPosition]' passed (0.064 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropCanAddTheFirstSongToAnEmptyQueue]' started.
+2026-10-19 04:28:43.333 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropCanAddTheFirstSongToAnEmptyQueue]' passed (0.059 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropFromAnOldSelectionDoesNotImport]' started.
+2026-10-19 04:28:43.392 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropFromAnOldSelectionDoesNotImport]' passed (0.058 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropRejectsUnreadableLyricsBeforeAddingOrSelectingAudio]' started.
+2026-10-19 04:28:43.451 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropRejectsUnreadableLyricsBeforeAddingOrSelectingAudio]' passed (0.059 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropSelectsItsSongAndKeepsImportedLyricsUnapplied]' started.
+2026-10-19 04:28:43.509 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testPairedDropSelectsItsSongAndKeepsImportedLyricsUnapplied]' passed (0.061 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingCurrentTrackLoadsRemainingTracksOwnLyrics]' started.
+2026-10-19 04:28:43.571 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingCurrentTrackLoadsRemainingTracksOwnLyrics]' passed (0.084 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingLastTrackDeletesLyricsAndReaddingDoesNotRestoreThem]' started.
+2026-10-19 04:28:43.654 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingLastTrackDeletesLyricsAndReaddingDoesNotRestoreThem]' passed (0.082 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingMissingCurrentAudioUsesItsKnownLyricFingerprint]' started.
+2026-10-19 04:28:43.738 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingMissingCurrentAudioUsesItsKnownLyricFingerprint]' passed (0.081 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingOneCopyKeepsLyricsForIdenticalAudioStillInQueue]' started.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingOneCopyKeepsLyricsForIdenticalAudioStillInQueue]' passed (0.067 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingReplacedAudioKeepsLyricsForItsOriginalCopy]' started.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingReplacedAudioKeepsLyricsForItsOriginalCopy]' passed (0.053 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingTrackImmediatelyAfterApplyingLyricsDoesNotLeaveASave]' started.
+2026-10-19 04:28:43.939 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingTrackImmediatelyAfterApplyingLyricsDoesNotLeaveASave]' passed (0.072 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingTrackReportsDeleteFailureAndRetryRemovesLyrics]' started.
+2026-10-19 04:28:44.011 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingTrackReportsDeleteFailureAndRetryRemovesLyrics]' passed (0.094 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingUnselectedTrackDeletesOnlyItsLyrics]' started.
+2026-10-19 04:28:44.104 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRemovingUnselectedTrackDeletesOnlyItsLyrics]' passed (0.084 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRepeatAllWrapsFromAppleMusicEntryToFirstLocalSong]' started.
+2026-10-19 04:28:44.189 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRepeatAllWrapsFromAppleMusicEntryToFirstLocalSong]' passed (0.168 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRestoredTimelineStaysHiddenUntilAnalysisValidationAndOldDigestRegenerates]' started.
+2026-10-19 04:28:44.359 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRestoredTimelineStaysHiddenUntilAnalysisValidationAndOldDigestRegenerates]' passed (1.078 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRestoreKeepsAppleMusicEntrySelectedWithoutAutoplay]' started.
+2026-10-19 04:28:45.436 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testRestoreKeepsAppleMusicEntrySelectedWithoutAutoplay]' passed (0.066 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testSelectingRegisteredAppleMusicPausesLocalAndClearsItsAnalysisAndLyrics]' started.
+2026-10-19 04:28:45.503 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testSelectingRegisteredAppleMusicPausesLocalAndClearsItsAnalysisAndLyrics]' passed (0.196 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testSelectingSameTrackAgainStartsNewLyricGenerationAndRestoresSavedText]' started.
+2026-10-19 04:28:45.704 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testSelectingSameTrackAgainStartsNewLyricGenerationAndRestoresSavedText]' passed (0.104 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testStoppedSeekPreviewAndStopPublishLyricRevisionWithoutPeriodicRevisionUpdates]' started.
+2026-10-19 04:28:45.802 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testStoppedSeekPreviewAndStopPublishLyricRevisionWithoutPeriodicRevisionUpdates]' passed (0.132 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTerminationRetryOfFailedAliasNeverReplacesNewerSavedText]' started.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTerminationRetryOfFailedAliasNeverReplacesNewerSavedText]' passed (0.078 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTerminationSaveFailureReopensRequestsAndRetryCanFinish]' started.
+2026-10-19 04:28:46.012 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTerminationSaveFailureReopensRequestsAndRetryCanFinish]' passed (0.095 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTerminationSavesConfirmedTextWithoutWaitingForRecognition]' started.
+2026-10-19 04:28:46.109 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTerminationSavesConfirmedTextWithoutWaitingForRecognition]' passed (0.114 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTimingRetryCleansLegacySavedMetadataAndInvalidatesItsTimeline]' started.
+2026-10-19 04:28:46.223 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTimingRetryCleansLegacySavedMetadataAndInvalidatesItsTimeline]' passed (0.119 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTimingRetryOfLegacySavedLyricsRestartsFailedAnalysis]' started.
+2026-10-19 04:28:46.342 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testTimingRetryOfLegacySavedLyricsRestartsFailedAnalysis]' passed (0.075 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testUnwrittenConfirmedTextSurvivesTrackReselectionAndRetry]' started.
+2026-10-19 04:28:46.416 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testUnwrittenConfirmedTextSurvivesTrackReselectionAndRetry]' passed (0.133 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testValidSavedSpeechTimelineRestoresWithoutStartingRecognition]' started.
+2026-10-19 04:28:46.550 xctest[51862:5166936] Audio files cannot be non-interleaved. Ignoring setting AVLinearPCMIsNonInterleaved YES.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testValidSavedSpeechTimelineRestoresWithoutStartingRecognition]' passed (0.077 seconds).
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testVisualizerUpdatesWhileRunLoopTracksControls]' started.
+Test Case '-[MusicPrayerTests.PlayerStoreTransitionTests testVisualizerUpdatesWhileRunLoopTracksControls]' passed (0.214 seconds).
+Test Suite 'PlayerStoreTransitionTests' passed at 2026-10-19 04:28:46.792.
+	 Executed 36 tests, with 0 failures (0 unexpected) in 8.528 (8.531) seconds
+Test Suite 'MusicPrayerTests.xctest' passed at 2026-10-19 04:28:46.792.
+	 Executed 59 tests, with 0 failures (0 unexpected) in 10.520 (10.525) seconds
+Test Suite 'Selected tests' passed at 2026-10-19 04:28:46.792.
+	 Executed 59 tests, with 0 failures (0 unexpected) in 10.520 (10.527) seconds

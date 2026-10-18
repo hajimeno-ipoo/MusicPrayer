@@ -20,6 +20,11 @@ enum LyricRecognitionRecovery {
         pattern: "[\\p{Latin}]+(?:[ \\t]+[\\p{Latin}]+)*")
     private static let epsilon = 1e-9
 
+    static func containsLatinText(_ sourceText: String) -> Bool {
+        latin.firstMatch(in: sourceText,
+            range: NSRange(location: 0, length: (sourceText as NSString).length)) != nil
+    }
+
     static func plan(sourceText: String, primaryLanguage: String,
                      transcription: [RecognizedLyricToken], duration: Double) throws -> [Window] {
         var parts: [Part] = []

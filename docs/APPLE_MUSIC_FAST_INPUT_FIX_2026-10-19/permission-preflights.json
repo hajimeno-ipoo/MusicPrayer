@@ -1,0 +1,110 @@
+[
+  {
+    "date": "2026-10-18T17:32:45Z",
+    "event": "start",
+    "pid": 37524
+  },
+  {
+    "date": "2026-10-18T17:32:46Z",
+    "event": "musicKitReady"
+  },
+  {
+    "date": "2026-10-18T17:34:27Z",
+    "event": "permissionPreflight",
+    "mute": 1,
+    "nonzero": 0,
+    "processPID": 37532
+  },
+  {
+    "date": "2026-10-18T17:34:27Z",
+    "description": "Error Domain=Probe.noPCM Code=1 \"(null)\"",
+    "error": "The operation couldn’t be completed. (Probe.noPCM error 1.)",
+    "event": "failure"
+  },
+  {
+    "date": "2026-10-18T17:34:27Z",
+    "event": "restored",
+    "info": {
+      "id": "1403236244",
+      "paused": true,
+      "playing": false,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 1,
+      "time": 6.00562880434006,
+      "volume": 0.12
+    }
+  },
+  {
+    "date": "2026-10-18T17:38:33Z",
+    "event": "start",
+    "pid": 38038
+  },
+  {
+    "date": "2026-10-18T17:38:35Z",
+    "event": "musicKitReady"
+  },
+  {
+    "date": "2026-10-18T17:40:13Z",
+    "event": "permissionPreflight",
+    "mute": 1,
+    "nonzero": 0,
+    "processPID": 38040
+  },
+  {
+    "date": "2026-10-18T17:40:13Z",
+    "description": "Error Domain=Probe.noPCM Code=1 \"(null)\"",
+    "error": "The operation couldn’t be completed. (Probe.noPCM error 1.)",
+    "event": "failure"
+  },
+  {
+    "date": "2026-10-18T17:40:13Z",
+    "event": "restored",
+    "info": {
+      "id": "1403236244",
+      "paused": true,
+      "playing": false,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 1,
+      "time": 4.934175905667014,
+      "volume": 0.12
+    }
+  },
+  {
+    "date": "2026-10-18T17:45:25Z",
+    "event": "start",
+    "pid": 38466
+  },
+  {
+    "date": "2026-10-18T17:45:25Z",
+    "event": "musicKitReady"
+  },
+  {
+    "date": "2026-10-18T17:47:04Z",
+    "event": "permissionPreflight",
+    "mute": 1,
+    "nonzero": 0,
+    "processPID": 38469
+  },
+  {
+    "date": "2026-10-18T17:47:04Z",
+    "description": "Error Domain=Probe.noPCM Code=1 \"(null)\"",
+    "error": "The operation couldn’t be completed. (Probe.noPCM error 1.)",
+    "event": "failure"
+  },
+  {
+    "date": "2026-10-18T17:47:04Z",
+    "event": "restored",
+    "info": {
+      "id": "1403236244",
+      "paused": true,
+      "playing": false,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 1,
+      "time": 4.8724994016673735,
+      "volume": 0.12
+    }
+  }
+]

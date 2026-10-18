@@ -78,7 +78,7 @@ actor MusicAnalyzer {
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func convert(_ result: MusicUnderstandingSession.SessionResult,
+    static func convert(_ result: MusicUnderstandingSession.SessionResult,
                                 duration: Double, fingerprint: String) -> MusicAnalysis {
         var analysis = MusicAnalysis(version: cacheVersion, fingerprint: fingerprint, duration: duration)
         if let rhythm = result.rhythm {
@@ -132,7 +132,7 @@ actor MusicAnalyzer {
         return TimeSpan(start: start, duration: duration)
     }
 
-    private static func values(_ values: [MusicUnderstandingSession.TimedValue<Float>]) -> [TimeValue] {
+    static func values(_ values: [MusicUnderstandingSession.TimedValue<Float>]) -> [TimeValue] {
         values.compactMap {
             guard $0.time.seconds.isFinite, $0.time.seconds >= 0, $0.value.isFinite else { return nil }
             return TimeValue(time: $0.time.seconds, value: $0.value)

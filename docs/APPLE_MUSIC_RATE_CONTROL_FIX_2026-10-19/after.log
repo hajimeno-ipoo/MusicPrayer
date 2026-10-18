@@ -1,0 +1,62 @@
+Building for debugging...
+[1 / 1]
+Build complete! (0.41秒)
+Test Suite 'Selected tests' started at 2026-10-19 04:05:41.408.
+Test Suite 'MusicPrayerTests.xctest' started at 2026-10-19 04:05:41.409.
+Test Suite 'AppleMusicBridgeTests' started at 2026-10-19 04:05:41.409.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisKeepsFastRateAfterPageResetsRateOrReplacesMedia]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisKeepsFastRateAfterPageResetsRateOrReplacesMedia]' passed (0.003 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisRatePreservesPitchAndRestoresNormalPlayback]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testAnalysisRatePreservesPitchAndRestoresNormalPlayback]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testBridgeRejectsOtherOriginsAndMissingPlayerWithoutReadingPageState]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testBridgeRejectsOtherOriginsAndMissingPlayerWithoutReadingPageState]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testExpiredSelectionDoesNotStartPlaybackAfterQueueCompletes]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testExpiredSelectionDoesNotStartPlaybackAfterQueueCompletes]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesSelectedSongRelationshipAndKeepsTTML]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesSelectedSongRelationshipAndKeepsTTML]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesWordTimingResourceBeforeLineTimingInIncludedResults]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsUsesWordTimingResourceBeforeLineTimingInIncludedResults]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsWithoutResourceReturnsNoLyricsAndRejectsInvalidID]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testLyricsWithoutResourceReturnsNoLyricsAndRejectsInvalidID]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testMediaEndStaysVisibleAfterOfficialPlayerClearsCurrentItem]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testMediaEndStaysVisibleAfterOfficialPlayerClearsCurrentItem]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testOfficialPageBridgeReadsMetadataAndControlsExistingPlayer]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testOfficialPageBridgeReadsMetadataAndControlsExistingPlayer]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testPreparingRegisteredSongDoesNotAutoplayAndUsesAppQueuePolicy]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testPreparingRegisteredSongDoesNotAutoplayAndUsesAppQueuePolicy]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSearchPassesQueryAsDataAndMapsCatalogResults]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSearchPassesQueryAsDataAndMapsCatalogResults]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSelectedCatalogSongSetsQueueBeforePlayAndRejectsInvalidID]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSelectedCatalogSongSetsQueueBeforePlayAndRejectsInvalidID]' passed (0.001 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSnapshotUsesFractionalMediaClockForContinuousMotion]' started.
+Test Case '-[MusicPrayerTests.AppleMusicBridgeTests testSnapshotUsesFractionalMediaClockForContinuousMotion]' passed (0.001 seconds).
+Test Suite 'AppleMusicBridgeTests' passed at 2026-10-19 04:05:41.425.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.015 (0.016) seconds
+Test Suite 'AppleMusicPlaybackPolicyTests' started at 2026-10-19 04:05:41.425.
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testCachedPreanalysisUsesExistingConnectionWithoutStartingMedia]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testCachedPreanalysisUsesExistingConnectionWithoutStartingMedia]' passed (1.291 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testNativePlayerConnectionCanStartAudioWithoutClickingWebPage]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPlaybackPolicyTests testNativePlayerConnectionCanStartAudioWithoutClickingWebPage]' passed (0.327 seconds).
+Test Suite 'AppleMusicPlaybackPolicyTests' passed at 2026-10-19 04:05:43.043.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 1.618 (1.618) seconds
+Test Suite 'AppleMusicPreanalysisTests' started at 2026-10-19 04:05:43.043.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testActiveStatusFollowsPreparationCaptureAndFinalAnalysisWithoutMovingOtherSongs]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testActiveStatusFollowsPreparationCaptureAndFinalAnalysisWithoutMovingOtherSongs]' passed (0.015 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testDoesNotStartUntilBackgroundWorkIsAllowed]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testDoesNotStartUntilBackgroundWorkIsAllowed]' passed (0.007 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testFailedSongIsNotRetriedEveryTickAndRemovalAllowsFreshAttempt]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testFailedSongIsNotRetriedEveryTickAndRemovalAllowsFreshAttempt]' passed (0.015 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testRemovingActiveSongCancelsItAndMovesToNextRetainedSong]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testRemovingActiveSongCancelsItAndMovesToNextRetainedSong]' passed (0.013 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSongsRunSeriallyAndDuplicateRegistrationsDoNotRunTwice]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSongsRunSeriallyAndDuplicateRegistrationsDoNotRunTwice]' passed (0.013 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSuccessfulSongsRemainCompletedAcrossQueueRefreshAndIdleEligibilityChanges]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testSuccessfulSongsRemainCompletedAcrossQueueRefreshAndIdleEligibilityChanges]' passed (0.017 seconds).
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testYieldWaitsForCleanupBeforeForegroundPlaybackAndCanResumeLater]' started.
+Test Case '-[MusicPrayerTests.AppleMusicPreanalysisTests testYieldWaitsForCleanupBeforeForegroundPlaybackAndCanResumeLater]' passed (0.032 seconds).
+Test Suite 'AppleMusicPreanalysisTests' passed at 2026-10-19 04:05:43.156.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.112 (0.113) seconds
+Test Suite 'MusicPrayerTests.xctest' passed at 2026-10-19 04:05:43.156.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 1.745 (1.747) seconds
+Test Suite 'Selected tests' passed at 2026-10-19 04:05:43.156.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 1.745 (1.748) seconds

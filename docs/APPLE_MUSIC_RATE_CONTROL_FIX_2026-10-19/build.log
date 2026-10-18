@@ -1,0 +1,63 @@
+Building for production...
+[4 / 6] MusicPrayer-product
+/Users/apple/Desktop/Dev_App/Music_Understanding_Prayer/Sources/AppleMusic/AppleMusicAudioCapture.swift:38:25: warning: capture of 'self' with non-Sendable type 'AppleMusicAudioCapture' in a '@Sendable' closure [#SendableClosureCaptures]
+  4 | /// Observes the WebKit audio process created by this connection. The tap only
+  5 | /// reads audio; WebKit continues to own playback, volume and the output device.
+  6 | final class AppleMusicAudioCapture {
+    |             `- note: class 'AppleMusicAudioCapture' does not conform to the 'Sendable' protocol
+  7 |     private let workQueue = DispatchQueue(label: "MusicPrayer.appleMusicAudio")
+  8 |     private let stateLock = NSLock()
+    :
+ 36 |             workQueue.async { [self] in
+ 37 |                 do {
+ 38 |                     try setMutedOnQueue(muted)
+    |                         `- warning: capture of 'self' with non-Sendable type 'AppleMusicAudioCapture' in a '@Sendable' closure [#SendableClosureCaptures]
+ 39 |                     continuation.resume()
+ 40 |                 } catch { continuation.resume(throwing: error) }
+
+/Users/apple/Desktop/Dev_App/Music_Understanding_Prayer/Sources/AppleMusic/AppleMusicAudioCapture.swift:50:17: warning: capture of 'self' with non-Sendable type 'AppleMusicAudioCapture' in a '@Sendable' closure [#SendableClosureCaptures]
+  4 | /// Observes the WebKit audio process created by this connection. The tap only
+  5 | /// reads audio; WebKit continues to own playback, volume and the output device.
+  6 | final class AppleMusicAudioCapture {
+    |             `- note: class 'AppleMusicAudioCapture' does not conform to the 'Sendable' protocol
+  7 |     private let workQueue = DispatchQueue(label: "MusicPrayer.appleMusicAudio")
+  8 |     private let stateLock = NSLock()
+    :
+ 48 |             stateLock.lock(); wantsCapture = true; stateLock.unlock()
+ 49 |             workQueue.async { [self] in
+ 50 |                 stateLock.lock(); let requested = wantsCapture; stateLock.unlock()
+    |                 `- warning: capture of 'self' with non-Sendable type 'AppleMusicAudioCapture' in a '@Sendable' closure [#SendableClosureCaptures]
+ 51 |                 guard requested else { continuation.resume(returning: false); return }
+ 52 |                 do {
+
+/Users/apple/Desktop/Dev_App/Music_Understanding_Prayer/Sources/AppleMusic/AppleMusicTimeExpansion.swift:29:16: warning: 'connect(_:to:format:)' was deprecated in macOS 27.0 [#DeprecatedDeclaration]
+27 |         // retained drum activity better at 3 than 8.
+28 |         stretch.overlap=3
+29 |         engine.connect(player,to:stretch,format:format)
+   |                `- warning: 'connect(_:to:format:)' was deprecated in macOS 27.0 [#DeprecatedDeclaration]
+30 |         engine.connect(stretch,to:engine.mainMixerNode,format:format)
+31 |         player.scheduleBuffer(quiet,at:nil,options:[])
+
+/Users/apple/Desktop/Dev_App/Music_Understanding_Prayer/Sources/AppleMusic/AppleMusicTimeExpansion.swift:30:16: warning: 'connect(_:to:format:)' was deprecated in macOS 27.0 [#DeprecatedDeclaration]
+28 |         stretch.overlap=3
+29 |         engine.connect(player,to:stretch,format:format)
+30 |         engine.connect(stretch,to:engine.mainMixerNode,format:format)
+   |                `- warning: 'connect(_:to:format:)' was deprecated in macOS 27.0 [#DeprecatedDeclaration]
+31 |         player.scheduleBuffer(quiet,at:nil,options:[])
+32 |         player.scheduleBuffer(source,at:nil,options:[])
+
+/Users/apple/Desktop/Dev_App/Music_Understanding_Prayer/Sources/AppleMusic/AppleMusicTimeExpansion.swift:34:35: warning: 'play()' was deprecated in macOS 27.0 [#DeprecatedDeclaration]
+32 |         player.scheduleBuffer(source,at:nil,options:[])
+33 |         player.scheduleBuffer(quiet,at:nil,options:[])
+34 |         try engine.start();player.play()
+   |                                   `- warning: 'play()' was deprecated in macOS 27.0 [#DeprecatedDeclaration]
+35 |         defer{player.stop();engine.stop()}
+36 |         let latency=stretch.latency
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[5 / 7] MusicPrayer-product
+[7 / 7] MusicPrayer-product
+[9 / 10] MusicPrayer-product
+Build complete! (24.30秒)
+/Users/apple/Desktop/Dev_App/Music_Understanding_Prayer/dist/MusicPrayer.app: replacing existing signature

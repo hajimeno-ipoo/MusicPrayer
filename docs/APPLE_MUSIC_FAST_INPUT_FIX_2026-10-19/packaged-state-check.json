@@ -1,0 +1,10 @@
+{
+  "queueFieldsPreserved": {
+    "tracks": true,
+    "current": true,
+    "time": true,
+    "volume": true
+  },
+  "signatureVerification": "passed",
+  "bundle": "dist/MusicPrayer.app"
+}

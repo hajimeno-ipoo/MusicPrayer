@@ -12,6 +12,13 @@ struct LyricMotionParameters: Equatable, Sendable {
     var glowRadius: Double
 }
 
+struct LyricDisplayWindow: Equatable, Sendable {
+    var start: Double
+    var entranceEnd: Double
+    var exitStart: Double
+    var end: Double
+}
+
 enum LyricMotion {
     /// Prepare the row for reading within its current musical frame and bar.
     /// These are presentation times; Speech/character times remain untouched.
@@ -31,27 +38,68 @@ enum LyricMotion {
         return starts
     }
 
+    /// Split only presentation windows; lyric and character timestamps stay intact.
+    static func displayWindows(_ lines: [TimedLyricLine], displayStarts: [Int: Double] = [:]) -> [Int: LyricDisplayWindow] {
+        let ordered = lines.filter { $0.start.isFinite && $0.end.isFinite && $0.end > $0.start }
+            .sorted {
+                let lhs = displayStarts[$0.ordinal] ?? $0.start
+                let rhs = displayStarts[$1.ordinal] ?? $1.start
+                return lhs == rhs ? $0.ordinal < $1.ordinal : lhs < rhs
+            }
+        var windows: [Int: LyricDisplayWindow] = [:]
+        for line in ordered {
+            let entranceEnd = displayStarts[line.ordinal] ?? line.start
+            windows[line.ordinal] = LyricDisplayWindow(start: entranceEnd - 0.35, entranceEnd: entranceEnd,
+                                                       exitStart: line.end, end: line.end + 0.40)
+        }
+        for (previous, next) in zip(ordered, ordered.dropFirst()) {
+            guard let outgoing = windows[previous.ordinal], let incoming = windows[next.ordinal],
+                  outgoing.end > incoming.start else { continue }
+            let nextStart = displayStarts[next.ordinal] ?? next.start
+            // Fit both fades inside the vocal gap. With no gap, switch directly
+            // at the next entrance instead of fading through sung words.
+            let gap = max(0, nextStart - previous.end)
+            let boundary = nextStart - gap * (0.35 / 0.75)
+            windows[previous.ordinal]?.exitStart = min(previous.end, boundary)
+            windows[previous.ordinal]?.end = boundary
+            windows[next.ordinal]?.start = boundary
+        }
+        return windows
+    }
+
     static func visibleLines(_ timeline: LyricTimeline, at time: Double,
-                             displayStarts: [Int: Double] = [:]) -> [TimedLyricLine] {
+                             displayStarts: [Int: Double] = [:],
+                             windows: [Int: LyricDisplayWindow]? = nil) -> [TimedLyricLine] {
         guard time.isFinite else { return [] }
         // Include neighbouring frames for the existing entrance/exit fades.
-        let ordinals = Set(timeline.frames.filter {
+        var ordinals = Set(timeline.frames.filter {
             $0.start <= time + 0.35 && $0.end >= time - 0.40
         }.flatMap(\.lineOrdinals))
+        if let first = timeline.frames.first, let last = timeline.frames.last {
+            // Edge rows use Speech times, including fades crossing into the
+            // observed structure even when the row has no frame overlap.
+            ordinals.formUnion(timeline.lines.filter {
+                $0.start < first.start || $0.end > last.end
+            }.map(\.ordinal))
+        }
         return select(timeline.lines.filter { ordinals.contains($0.ordinal) }, at: time,
-                      displayStarts: displayStarts)
+                      displayStarts: displayStarts, windows: windows ?? displayWindows(timeline.lines, displayStarts: displayStarts))
     }
 
     static func parameters(for line: TimedLyricLine, time: Double, vocal: Float?,
                            beat: Float, beatPhase: Float, barPhase: Float,
-                           displayStart: Double? = nil) -> LyricMotionParameters? {
+                           displayStart: Double? = nil, window: LyricDisplayWindow? = nil) -> LyricMotionParameters? {
         let entranceEnd = displayStart ?? line.start
+        let window = window ?? LyricDisplayWindow(start: entranceEnd - 0.35, entranceEnd: entranceEnd,
+                                                          exitStart: line.end, end: line.end + 0.40)
         guard time.isFinite, line.start.isFinite, line.end.isFinite, line.end > line.start,
               entranceEnd.isFinite, entranceEnd >= 0, entranceEnd <= line.start,
-              time >= entranceEnd - 0.35, time <= line.end + 0.40 else { return nil }
+              window.end > window.start, time >= window.start, time <= window.end else { return nil }
         let progress = clamp((time - line.start) / (line.end - line.start))
-        let entrance = smoothstep((time - entranceEnd + 0.35) / 0.35)
-        let exit = smoothstep((time - line.end) / 0.40)
+        let entranceDuration = window.entranceEnd - window.start
+        let exitDuration = window.end - window.exitStart
+        let entrance = entranceDuration > 0 ? smoothstep((time - window.start) / entranceDuration) : 1
+        let exit = exitDuration > 0 ? smoothstep((time - window.exitStart) / exitDuration) : (time >= window.end ? 1.0 : 0.0)
         let singing = time >= line.start && time < line.end
         let activity = vocal.map { clamp(Double($0)) } ?? 0
         let pulse = singing ? 0.02 * clamp(Double(beat)) * (1 - clamp(Double(beatPhase))) : 0
@@ -63,26 +111,20 @@ enum LyricMotion {
             glowOpacity: 0.15 + 0.30 * activity, glowRadius: 2 + 4 * activity)
     }
 
-    static func visibleLines(_ lines: [TimedLyricLine], at time: Double) -> [TimedLyricLine] {
-        select(lines, at: time, displayStarts: [:])
+    static func visibleLines(_ lines: [TimedLyricLine], at time: Double,
+                             windows: [Int: LyricDisplayWindow]? = nil) -> [TimedLyricLine] {
+        select(lines, at: time, displayStarts: [:], windows: windows ?? displayWindows(lines))
     }
 
     private static func select(_ lines: [TimedLyricLine], at time: Double,
-                               displayStarts: [Int: Double]) -> [TimedLyricLine] {
+                               displayStarts: [Int: Double], windows: [Int: LyricDisplayWindow]) -> [TimedLyricLine] {
         guard time.isFinite else { return [] }
-        var candidates: [(line: TimedLyricLine, opacity: Double, singing: Bool)] = []
-        for line in lines {
-            if let motion = parameters(for: line, time: time, vocal: nil, beat: 0, beatPhase: 0, barPhase: 0,
-                                       displayStart: displayStarts[line.ordinal]),
-               motion.opacity > 0 {
-                candidates.append((line, motion.opacity, time >= line.start && time < line.end))
-            }
+        return lines.filter { line in
+            guard let window = windows[line.ordinal],
+                  let motion = parameters(for: line, time: time, vocal: nil, beat: 0, beatPhase: 0, barPhase: 0,
+                                          displayStart: displayStarts[line.ordinal], window: window) else { return false }
+            return motion.opacity > 0
         }
-        return candidates.sorted {
-            if $0.singing != $1.singing { return $0.singing }
-            if $0.opacity != $1.opacity { return $0.opacity > $1.opacity }
-            return $0.line.ordinal < $1.line.ordinal
-        }.prefix(2).map(\.line).sorted { $0.ordinal < $1.ordinal }
     }
 
     static func emphasis(time: Double, timing: LyricCharacterTiming) -> Double {
@@ -201,34 +243,48 @@ private struct LyricFittingLayout: Layout {
     }
 }
 
-private struct LyricMotionLineView: View {
+struct LyricMotionLineView: View {
     let line: TimedLyricLine
     let colourTimings: [LyricCharacterTiming]
     let motion: LyricMotionParameters
     let time: Double
     let viewport: CGSize
+    let font: LyricFont
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
 
-    private var lyricText: Text {
+    private func lyricText(breakOffset: Int? = nil) -> Text {
         return line.text.enumerated().reduce(Text("")) { text, element in
-            let fragment = Text(String(element.element))
-                .customAttribute(LyricProgressAttribute(timing: colourTimings[element.offset]))
+            let character = Text(String(element.element))
+            let fragment = colourTimings.indices.contains(element.offset)
+                ? character.customAttribute(LyricProgressAttribute(timing: colourTimings[element.offset])) : character
+            if element.offset == breakOffset { return Text("\(text)\n\(fragment)") }
             return Text("\(text)\(fragment)")
         }
     }
 
+    private func styledText(size: CGFloat, breakOffset: Int? = nil) -> some View {
+        lyricText(breakOffset: breakOffset)
+            .font(font.font(size: size))
+            .foregroundStyle(.white)
+            .multilineTextAlignment(.center)
+            .lineSpacing(6)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .textRenderer(LyricTextRenderer(time: time))
+            .accessibilityHidden(true)
+    }
+
     var body: some View {
-        let text = lyricText
-        LyricFittingLayout(progress: motion.progress) {
-            ForEach(Array(stride(from: 32, through: 14, by: -1)), id: \.self) { size in
-                text.font(.system(size: CGFloat(size), weight: .medium))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(6)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .textRenderer(LyricTextRenderer(time: time))
-                    .accessibilityHidden(true)
+        Group {
+            if let presentation = LyricLineWrapping.presentation(text: line.text, viewport: viewport, font: font) {
+                styledText(size: presentation.fontSize, breakOffset: presentation.breakOffset)
+                    .frame(maxHeight: .infinity, alignment: .center)
+            } else {
+                LyricFittingLayout(progress: motion.progress) {
+                    ForEach(Array(stride(from: 32, through: 14, by: -1)), id: \.self) { size in
+                        styledText(size: CGFloat(size))
+                    }
+                }
             }
         }
         .frame(width: viewport.width, height: viewport.height)
@@ -245,42 +301,69 @@ private struct LyricMotionLineView: View {
 
 struct LyricMotionView: View {
     let store: PlayerStore
+    var font: LyricFont = .system
 
     var body: some View {
         GeometryReader { geometry in
             let viewport = CGSize(width: max(0, geometry.size.width - 48), height: max(0, geometry.size.height - 32))
-            if let timeline = store.lyricTimeline, !timeline.lines.isEmpty,
-               timeline.lines.allSatisfy(\.hasValidCharacterTimings), viewport.width > 0, viewport.height > 0 {
-                let displayStarts = LyricMotion.displayStarts(timeline, analysis: store.analysis)
-                let colours = Dictionary(uniqueKeysWithValues: timeline.lines.map {
-                    ($0.ordinal, LyricMotion.colourTimings(for: $0, displayStart: displayStarts[$0.ordinal]))
-                })
-                TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !store.isPlaying)) { _ in
-                    if let frame = store.visualSource.snapshot().lyrics,
-                       frame.trackID == store.currentTrack?.id,
-                       frame.playbackGeneration == store.playbackGeneration,
-                       let fingerprint = store.lyricFingerprint, frame.audioFingerprint == fingerprint,
-                       timeline.analysisFingerprint == fingerprint,
-                       frame.time >= 0, frame.time <= frame.duration {
-                        ZStack {
-                            ForEach(LyricMotion.visibleLines(timeline, at: frame.time, displayStarts: displayStarts)) { line in
-                                if let motion = LyricMotion.parameters(for: line, time: frame.time, vocal: frame.vocal,
-                                                                       beat: frame.beat, beatPhase: frame.beatPhase,
-                                                                       barPhase: frame.barPhase,
-                                                                       displayStart: displayStarts[line.ordinal]) {
-                                    LyricMotionLineView(line: line, colourTimings: colours[line.ordinal]!,
-                                                       motion: motion, time: frame.time, viewport: viewport)
-                                }
+            Group {
+                if store.isAppleMusicActive {
+                    if let lyrics = store.appleMusic.lyrics,
+                       lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id {
+                        if lyrics.lines.isEmpty {
+                            Text(lyrics.text)
+                                .font(font.font(size: 28))
+                                .foregroundStyle(Color(red: 0.24, green: 0.87, blue: 1))
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(12)
+                        } else {
+                            let windows = LyricMotion.displayWindows(lyrics.lines)
+                            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !store.isPlaying)) { _ in
+                                lyricLines(LyricMotion.visibleLines(lyrics.lines, at: store.position, windows: windows),
+                                           time: store.position, viewport: viewport, windows: windows)
                             }
                         }
-                        .frame(width: viewport.width, height: viewport.height)
                     }
+                } else if let timeline = store.lyricTimeline, !timeline.lines.isEmpty,
+                          timeline.lines.allSatisfy(\.hasValidCharacterTimings), viewport.width > 0, viewport.height > 0 {
+                    let displayStarts = LyricMotion.displayStarts(timeline, analysis: store.analysis)
+                    let windows = LyricMotion.displayWindows(timeline.lines, displayStarts: displayStarts)
+                    TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !store.isPlaying)) { _ in
+                        if let frame = store.visualSource.snapshot().lyrics,
+                           frame.trackID == store.currentTrack?.id,
+                           frame.playbackGeneration == store.playbackGeneration,
+                           let fingerprint = store.lyricFingerprint, frame.audioFingerprint == fingerprint,
+                           timeline.analysisFingerprint == fingerprint,
+                           frame.time >= 0, frame.time <= frame.duration {
+                            lyricLines(LyricMotion.visibleLines(timeline, at: frame.time, displayStarts: displayStarts, windows: windows),
+                                       time: frame.time, viewport: viewport, frame: frame, displayStarts: displayStarts, windows: windows)
+                        }
+                    }
+                    .id(store.lyricFrameRevision)
                 }
-                .id(store.lyricFrameRevision)
-                .frame(width: viewport.width, height: viewport.height)
-                .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
             }
+            .frame(width: viewport.width, height: viewport.height)
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
         .allowsHitTesting(false)
+    }
+
+    private func lyricLines(_ lines: [TimedLyricLine], time: Double, viewport: CGSize,
+                            frame: LyricPlaybackFrame? = nil, displayStarts: [Int: Double] = [:],
+                            windows: [Int: LyricDisplayWindow]) -> some View {
+        ZStack {
+            ForEach(lines) { line in
+                if let motion = LyricMotion.parameters(for: line, time: time, vocal: frame?.vocal,
+                                                       beat: frame?.beat ?? 0, beatPhase: frame?.beatPhase ?? 0,
+                                                       barPhase: frame?.barPhase ?? 0,
+                                                       displayStart: displayStarts[line.ordinal], window: windows[line.ordinal]) {
+                    LyricMotionLineView(line: line,
+                                       colourTimings: line.hasValidCharacterTimings
+                                           ? LyricMotion.colourTimings(for: line, displayStart: displayStarts[line.ordinal]) : [],
+                                       motion: motion, time: time, viewport: viewport, font: font)
+                }
+            }
+        }
+        .frame(width: viewport.width, height: viewport.height)
     }
 }

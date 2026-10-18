@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 MODE="${1:-run}"
+CONFIGURATION="release"
+if [[ "$MODE" == "--debug" ]]; then CONFIGURATION="debug"; fi
 APP_NAME="MusicPrayer"
 BUNDLE_ID="com.hazimeno.MusicPrayer"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
-swift build
-BIN_DIR="$(swift build --show-bin-path)"
+swift build -c "$CONFIGURATION"
+BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 APP_BUNDLE="$ROOT_DIR/dist/$APP_NAME.app"
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
@@ -28,6 +30,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>27.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSAudioCaptureUsageDescription</key><string>Apple Musicの再生音を解析し、ビジュアライザーを音に合わせて動かします。音声は保存しません。</string>
 <key>CFBundleDocumentTypes</key><array><dict>
 <key>CFBundleTypeName</key><string>Audio</string>
 <key>LSItemContentTypes</key><array><string>public.audio</string></array>

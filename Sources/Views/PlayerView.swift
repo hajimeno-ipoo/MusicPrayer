@@ -4,7 +4,9 @@ import UniformTypeIdentifiers
 
 struct PlayerView: View {
     @Bindable var store: PlayerStore
+    @AppStorage(LyricFont.preferenceKey) private var lyricFont = LyricFont.system
     @State private var showQueue = false
+    @State private var showQueueAfterSearch = false
     @State private var showAnalysis = false
     @State private var showLyrics = false
     @State private var lyricDraft = ""
@@ -15,52 +17,99 @@ struct PlayerView: View {
     @State private var hideTask: Task<Void, Never>?
     @State private var dropTarget = false
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
-    private var overlayVisible: Bool { engaged || !store.isPlaying }
+    private var overlayVisible: Bool { store.isAppleMusicActive || engaged || !store.isPlaying }
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                MetalVisualizerView(source: store.visualSource).ignoresSafeArea()
-                PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight)
-                VStack(spacing: 0) {
-                    header
-                    Spacer(minLength: 20)
-                    if store.tracks.isEmpty { welcome; Spacer(minLength: 30) }
-                    VStack(spacing: 18) {
-                        trackInformation
-                            .opacity(overlayVisible ? 1 : 0)
-                            .allowsHitTesting(overlayVisible)
-                            .accessibilityHidden(!overlayVisible)
-                        if let error = store.playbackError { errorRow(error, retry: nil) }
-                        if let error = store.analysisError { errorRow("曲の詳しい解析ができませんでした：\(error)", retry: store.retryAnalysis) }
-                        if showAnalysis {
-                            AnalysisPanel(analysis: store.analysis, time: store.previewTime ?? store.position,
-                                          duration: store.duration, isPlaying: store.isPlaying)
-                                .frame(height: min(400, max(280, geometry.size.height - 460)))
-                        }
-                        MusicalTimeline(store: store)
-                            .opacity(overlayVisible ? 1 : 0)
-                            .allowsHitTesting(overlayVisible)
-                            .accessibilityHidden(!overlayVisible)
-                        controls
+                ZStack {
+                    MetalVisualizerView(source: store.visualSource).ignoresSafeArea()
+                    if store.isAppleMusicActive && store.visualizerStyle != .cassette {
+                        appleMusicArtwork
+                            .frame(width: min(240, geometry.size.height * 0.26), height: min(240, geometry.size.height * 0.26))
+                            .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
+                            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.55)
                     }
-                    .padding(.horizontal, geometry.size.width < 1000 ? 32 : 58)
-                    .padding(.bottom, 26)
-                    .background {
-                        LinearGradient(colors: [.clear, Color(red: 0.005, green: 0.012, blue: 0.06).opacity(0.85)], startPoint: .top, endPoint: .bottom)
-                            .padding(.top, -38)
+                    PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont)
+                    VStack(spacing: 0) {
+                        header
+                        if store.tracks.isEmpty && !store.isAppleMusicActive {
+                            welcome
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 50).padding(.trailing, 24)
+                                .padding(.top, 28)
+                        }
+                        Spacer(minLength: 20)
+                        VStack(spacing: 18) {
+                            trackInformation
+                                .opacity(overlayVisible ? 1 : 0)
+                                .allowsHitTesting(overlayVisible)
+                                .accessibilityHidden(!overlayVisible)
+                            if let error = store.playbackError { errorRow(error, retry: nil) }
+                            if store.isAppleMusicActive, let error = store.appleMusic.audioCaptureError { errorRow(error, retry: nil) }
+                            if store.isAppleMusicActive, let error = store.appleMusic.errorMessage {
+                                HStack(spacing: 10) {
+                                    Label(error, systemImage: "exclamationmark.circle")
+                                        .font(.callout).foregroundStyle(.orange)
+                                    Button("接続を確認", action: store.openAppleMusicSignIn)
+                                        .buttonStyle(.glass)
+                                }
+                            }
+                            if let error = store.analysisError { errorRow("曲の詳しい解析ができませんでした：\(error)", retry: store.retryAnalysis) }
+                            if showAnalysis {
+                                AnalysisPanel(analysis: store.analysis, time: store.previewTime ?? store.position,
+                                              duration: store.duration, isPlaying: store.isPlaying)
+                                    .frame(height: min(400, max(280, geometry.size.height - 460)))
+                            }
+                            MusicalTimeline(store: store)
+                                .opacity(overlayVisible ? 1 : 0)
+                                .allowsHitTesting(overlayVisible)
+                                .accessibilityHidden(!overlayVisible)
+                            controls
+                        }
+                        .padding(.horizontal, geometry.size.width < 1000 ? 32 : 58)
+                        .padding(.bottom, 26)
+                        .background {
+                            LinearGradient(colors: [.clear, Color(red: 0.005, green: 0.012, blue: 0.06).opacity(0.85)], startPoint: .top, endPoint: .bottom)
+                                .padding(.top, -38)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    if dropTarget {
+                        RoundedRectangle(cornerRadius: 24).stroke(cyan, style: StrokeStyle(lineWidth: 2, dash: [8, 8])).padding(14)
+                            .overlay { Label("曲・歌詞ファイルをここへドロップ", systemImage: "doc.badge.plus").font(.title2).padding(24).glassEffect() }
                             .allowsHitTesting(false)
                     }
                 }
-                if dropTarget {
-                    RoundedRectangle(cornerRadius: 24).stroke(cyan, style: StrokeStyle(lineWidth: 2, dash: [8, 8])).padding(14)
-                        .overlay { Label("曲・歌詞ファイルをここへドロップ", systemImage: "doc.badge.plus").font(.title2).padding(24).glassEffect() }
-                        .allowsHitTesting(false)
+                .opacity(store.isAppleMusicBrowserVisible ? 0 : 1)
+                .allowsHitTesting(!store.isAppleMusicBrowserVisible)
+                .accessibilityHidden(store.isAppleMusicBrowserVisible)
+
+                if store.isAppleMusicActive || store.isAppleMusicSearchVisible || store.isAppleMusicBrowserVisible || store.appleMusic.isInitialized {
+                    AppleMusicBrowserView(store: store.appleMusic, onReturnToPlayer: store.showAppleMusicPlayer)
+                        .opacity(store.isAppleMusicBrowserVisible ? 1 : 0)
+                        .allowsHitTesting(store.isAppleMusicBrowserVisible)
+                        .accessibilityHidden(!store.isAppleMusicBrowserVisible)
                 }
             }
         }
         .frame(minWidth: 860, minHeight: 800)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $store.isAppleMusicSearchVisible, onDismiss: {
+            if showQueueAfterSearch {
+                showQueueAfterSearch = false
+                showQueue = true
+            }
+        }) {
+            AppleMusicSearchView(store: store.appleMusic, onAdd: { song in
+                showQueueAfterSearch = true
+                store.addAppleMusicSong(song)
+            }, onSignIn: store.openAppleMusicSignIn,
+               onClose: { store.isAppleMusicSearchVisible = false })
+        }
+        .onChange(of: store.isAppleMusicActive) { _, active in
+            if active { showLyrics = false }
+        }
         .onContinuousHover { _ in revealControls() }
         .onTapGesture { revealControls() }
         .onDrop(of: [.fileURL], isTargeted: $dropTarget) { providers in
@@ -89,9 +138,20 @@ struct PlayerView: View {
             if let value = values["header"] { headerHeight = value }
         }
         .onChange(of: store.playbackGeneration) { _, generation in
-            if lyricDraftGeneration != generation { showLyrics = false }
+            if lyricDraftGeneration != generation {
+                showLyrics = false
+                lyricDraft = ""
+                lyricFileImportError = nil
+                lyricDraftGeneration = nil
+            }
         }
         .onChange(of: showLyrics) { _, _ in revealControls() }
+        .onChange(of: store.hasPendingLyricSaveFailure) { _, failed in
+            if failed && store.lyricsAcceptingRequests {
+                if !showLyrics { openLyricEditor() }
+                revealControls()
+            }
+        }
         .onChange(of: store.lyricsAcceptingRequests, initial: true) { _, accepting in
             if accepting && store.hasPendingLyricSaveFailure {
                 if !showLyrics { openLyricEditor() }
@@ -109,6 +169,13 @@ struct PlayerView: View {
                 .padding(.leading, 70)
             Spacer()
             HStack(spacing: 8) {
+                Button(action: store.openAppleMusic) {
+                    Label("Apple Music", systemImage: "music.note")
+                        .font(.system(size: 11, weight: .medium)).padding(.horizontal, 8).frame(height: 28)
+                }
+                .buttonStyle(.plain)
+                .focusEffectDisabled()
+                .accessibilityLabel("Apple Musicを開く")
                 iconButton("曲を追加", "plus", action: store.openFiles)
                 iconButton("曲の一覧", "list.bullet", action: { showQueue.toggle() })
                     .popover(isPresented: $showQueue, arrowEdge: .bottom) { QueueView(store: store) }
@@ -117,7 +184,7 @@ struct PlayerView: View {
                     if showLyrics { showLyrics = false }
                     else { openLyricEditor() }
                 })
-                    .disabled(store.currentTrack == nil)
+                    .disabled(store.currentTrack == nil && !store.hasPendingLyricSaveFailure)
                     .popover(isPresented: $showLyrics, arrowEdge: .bottom) {
                         LyricEditorView(store: store, draft: $lyricDraft, fileImportError: $lyricFileImportError,
                                         onFileDrop: { urls in
@@ -125,6 +192,19 @@ struct PlayerView: View {
                             Task { @MainActor in await importDroppedFiles(urls, generation: generation) }
                         })
                     }
+                Menu {
+                    Picker("歌詞フォント", selection: $lyricFont) {
+                        ForEach(LyricFont.allCases) { font in
+                            Text(font.title).tag(font)
+                        }
+                    }.pickerStyle(.inline)
+                } label: {
+                    Image(systemName: "textformat")
+                        .font(.system(size: 13, weight: .medium)).frame(width: 30, height: 28)
+                }
+                .menuStyle(.borderlessButton)
+                .accessibilityLabel("歌詞フォント：\(lyricFont.title)")
+                .help("歌詞フォントを選びます")
                 Menu {
                     Picker("ビジュアライザー", selection: $store.visualizerStyle) {
                         ForEach(VisualizerStyle.allCases) { style in
@@ -154,41 +234,107 @@ struct PlayerView: View {
     }
 
     private var welcome: some View {
-        VStack(spacing: 14) {
-            Text("音楽が、光になる。").font(.system(size: 30, weight: .light)).tracking(3)
-            Text("曲を追加するか、音声ファイルをここへドロップ").font(.system(size: 13)).foregroundStyle(.white.opacity(0.65))
-            Button(action: store.openFiles) { Label("曲を追加", systemImage: "plus").padding(.horizontal, 20).padding(.vertical, 8) }
-                .buttonStyle(.glass).padding(.top, 8)
+        let foreground = store.visualizerStyle == .cassette
+            ? Color(red: 0.08, green: 0.12, blue: 0.18) : .white
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("曲を追加して、再生をはじめる")
+                .font(.system(size: 20, weight: .semibold))
+            Text("音声ファイルを選ぶか、この画面へドロップしてください。")
+                .font(.system(size: 13)).opacity(0.8)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: store.openFiles) {
+                Label("曲を追加", systemImage: "plus")
+                    .foregroundStyle(foreground)
+                    .padding(.horizontal, 20).padding(.vertical, 8)
+            }
+                .buttonStyle(.glass).padding(.top, 4)
+            Button(action: store.openAppleMusic) {
+                Label("Apple Musicから選ぶ", systemImage: "music.note")
+            }.buttonStyle(.glass)
         }
+        .foregroundStyle(foreground)
+        .frame(maxWidth: 360, alignment: .leading)
+        .padding(20)
     }
 
     private var trackInformation: some View {
         HStack(alignment: .bottom, spacing: 16) {
-            if let track = store.currentTrack {
+            if store.isAppleMusicActive {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(appleMusicTitle)
+                        .font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
+                    if !appleMusicArtist.isEmpty {
+                        Text(appleMusicArtist).font(.system(size: 15)).foregroundStyle(.white.opacity(0.8))
+                    }
+                    analysisInformation
+                }
+                Spacer(minLength: 20)
+                activityIndicators
+            } else if let track = store.currentTrack {
                 if let data = track.artwork, let image = NSImage(data: data) {
                     Image(nsImage: image).resizable().scaledToFill().frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 VStack(alignment: .leading, spacing: 7) {
                     Text(track.title).font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
                     if !track.artist.isEmpty { Text(track.artist).font(.system(size: 13)).foregroundStyle(.white.opacity(0.65)) }
-                    HStack(spacing: 14) {
-                        if store.analyzing {
-                            ProgressView().controlSize(.mini)
-                            Text("曲を解析中 · 再生できます").font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
-                        } else {
-                            if let section = store.moment.section { Text("SECTION \(section)") }
-                            if let bpm = store.moment.bpm { Text("\(Int(bpm.rounded())) BPM") }
-                            if let key = store.moment.key { Text(key) }
-                            if store.analysis == nil && store.analysisError == nil { Text("解析結果なし") }
-                        }
-                    }
-                    .font(.system(size: 10, weight: .medium, design: .monospaced)).foregroundStyle(cyan.opacity(0.9))
+                    analysisInformation
                 }
                 Spacer(minLength: 20)
                 activityIndicators
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var analysisInformation: some View {
+        HStack(spacing: 14) {
+            if store.isAppleMusicActive, let song = store.currentQueueTrack?.appleMusicSong,
+               store.appleMusic.preanalysis.songID == song.id {
+                AnalysisProgressView(status: store.appleMusic.preanalysis.status(for: song),
+                                     progress: store.appleMusic.preanalysis.progress(for: song))
+                    .tint(cyan).frame(width: 240)
+            } else if store.analyzing {
+                ProgressView().controlSize(.mini)
+                Text(store.isAppleMusicActive ? "再生しながら解析中" : "曲を解析中 · 再生できます").font(.system(size: 14)).foregroundStyle(.white.opacity(0.9))
+            } else {
+                if let section = store.moment.section ?? (store.position == 0 && store.analysis?.sections.isEmpty == false ? 1 : nil) { Text("SECTION \(section)") }
+                if let bpm = store.moment.bpm { Text("\(Int(bpm.rounded())) BPM") }
+                if let key = store.moment.key ?? (store.position == 0 ? store.analysis?.keys.first?.label : nil) { Text(key) }
+                if store.analysis == nil && store.analysisError == nil {
+                    if store.isAppleMusicActive, let song = store.currentQueueTrack?.appleMusicSong {
+                        Text(store.appleMusic.preanalysis.status(for: song))
+                    } else { Text("解析結果なし") }
+                }
+            }
+        }
+        .font(.system(size: 14, weight: .medium, design: .monospaced)).foregroundStyle(cyan)
+    }
+
+    private var appleMusicTitle: String {
+        if let song = store.currentQueueTrack?.appleMusicSong { return song.title }
+        return store.appleMusic.playback.title.isEmpty ? "Apple Music" : store.appleMusic.playback.title
+    }
+
+    private var appleMusicArtist: String {
+        store.currentQueueTrack?.appleMusicSong?.artist ?? store.appleMusic.playback.artist
+    }
+
+    private var appleMusicArtworkURL: String? {
+        if let song = store.currentQueueTrack?.appleMusicSong { return song.artworkURL }
+        return store.appleMusic.playback.artworkURL
+    }
+
+    private var appleMusicArtwork: some View {
+        AsyncImage(url: appleMusicArtworkURL.flatMap(URL.init(string:))) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.07))
+                Image(systemName: "music.note").font(.system(size: 72, weight: .light)).foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .accessibilityLabel("Apple Musicのジャケット")
     }
 
     private var activityIndicators: some View {
@@ -218,12 +364,15 @@ struct PlayerView: View {
                 HStack(spacing: 10) {
                     iconButton("シャッフル", "shuffle", active: store.shuffle, action: { store.shuffle.toggle() })
                     iconButton("前の曲", "backward.end.fill", action: store.previous)
+                        .disabled(!store.canSkipPrevious)
                     Button(action: store.togglePlayback) {
                         Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 22, weight: .semibold)).frame(width: 58, height: 50)
                     }.buttonStyle(.plain).help(store.isPlaying ? "一時停止（Space）" : "再生（Space）")
                         .accessibilityLabel(store.isPlaying ? "一時停止" : "再生")
+                        .disabled(!store.canTogglePlayback)
                     iconButton("次の曲", "forward.end.fill", action: store.next)
+                        .disabled(!store.canSkipNext)
                     iconButton("リピート", store.repeatSetting == .one ? "repeat.1" : "repeat", active: store.repeatSetting != .off,
                                action: { store.repeatSetting = RepeatSetting(rawValue: (store.repeatSetting.rawValue + 1) % 3)! })
                 }
@@ -253,13 +402,14 @@ struct PlayerView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "hifispeaker")
-                            Text(store.outputDeviceName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                            Text(store.isAppleMusicActive ? "Macの既定の出力先" : store.outputDeviceName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
                         }
                         .frame(width: 180, height: 28, alignment: .leading)
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 180)
-                    .help("音の出力先：\(store.outputName)")
-                    .accessibilityLabel("音の出力先：\(store.outputName)")
+                    .disabled(store.isAppleMusicActive)
+                    .help(store.isAppleMusicActive ? "音の出力先：Macの既定の出力先" : "音の出力先：\(store.outputName)")
+                    .accessibilityLabel(store.isAppleMusicActive ? "音の出力先：Macの既定の出力先" : "音の出力先：\(store.outputName)")
                 }
                 .padding(.horizontal, 18).padding(.vertical, 16).glassEffect(.regular, in: .capsule)
                 .opacity(overlayVisible ? 1 : 0)
@@ -277,7 +427,7 @@ struct PlayerView: View {
             Text(error).font(.system(size: 11)).lineLimit(2).textSelection(.enabled)
             Spacer()
             if let retry { Button("解析をやり直す", action: retry).buttonStyle(.glass) }
-            Button { store.playbackError = nil; store.analysisError = nil } label: { Image(systemName: "xmark").font(.system(size: 10)) }.buttonStyle(.plain).help("閉じる")
+            Button { store.playbackError = nil; store.analysisError = nil; store.appleMusic.audioCaptureError = nil } label: { Image(systemName: "xmark").font(.system(size: 10)) }.buttonStyle(.plain).help("閉じる")
         }
         .foregroundStyle(.orange.opacity(0.95)).padding(12).glassEffect(.regular, in: .rect(cornerRadius: 12))
     }
@@ -339,9 +489,10 @@ struct PlayerLyricRegion: View {
     let store: PlayerStore
     let size: CGSize
     let headerHeight: CGFloat
+    var font: LyricFont = .system
 
     var body: some View {
-        LyricMotionView(store: store)
+        LyricMotionView(store: store, font: font)
             .frame(width: size.width, height: max(0, size.height * 0.48 - 2 * headerHeight))
             .position(x: size.width / 2, y: size.height * 0.24)
             .allowsHitTesting(false)

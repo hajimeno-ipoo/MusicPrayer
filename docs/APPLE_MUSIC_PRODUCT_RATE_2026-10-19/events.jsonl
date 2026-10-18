@@ -1,0 +1,12 @@
+{"date":"2026-10-18T18:44:46Z","event":"start","pid":46853}
+{"date":"2026-10-18T18:44:50Z","error":"Error Domain=Probe.selection Code=1 \"(null)\"","event":"failure"}
+{"date":"2026-10-18T18:44:50Z","event":"restored"}
+{"date":"2026-10-18T18:47:06Z","event":"start","pid":47021}
+{"authorized":true,"date":"2026-10-18T18:47:07Z","event":"pageReady"}
+{"authorized":true,"date":"2026-10-18T18:47:08Z","event":"prepared"}
+{"date":"2026-10-18T18:47:09Z","event":"progress","foregroundPlaying":false,"isWorking":true,"media":0,"phase":"preparing","status":"事前解析の準備中","wall":1.0624068975448608}
+{"date":"2026-10-18T18:47:18Z","event":"progress","foregroundPlaying":false,"isWorking":true,"media":3.1987623040029094,"phase":"capturing","status":"無音で事前解析中（2倍速）","wall":10.229668974876404}
+{"date":"2026-10-18T18:47:28Z","event":"progress","foregroundPlaying":false,"isWorking":true,"media":23.554899306676717,"phase":"capturing","status":"無音で事前解析中（2倍速）","wall":20.386121988296509}
+{"date":"2026-10-18T18:47:38Z","event":"progress","foregroundPlaying":false,"isWorking":true,"media":43.828022636635744,"phase":"capturing","status":"無音で事前解析中（2倍速）","wall":30.540410995483398}
+{"actualRate":2.0000739412903266,"date":"2026-10-18T18:47:48Z","event":"actualRate","mediaSeconds":61.144770415325667,"wallSeconds":30.571254968643188}
+{"date":"2026-10-18T18:47:48Z","event":"restored"}

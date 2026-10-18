@@ -1,0 +1,25 @@
+{
+  "songID": "75073758",
+  "duration": 323.109,
+  "addedAtUTC": "2026-10-18T19:22:30.304Z",
+  "selectionAttemptAtUTC": "2026-10-18T19:22:45.963Z",
+  "samples": [
+    {
+      "wall": 1792351418213,
+      "position": 45
+    },
+    {
+      "wall": 1792351487845,
+      "position": 184
+    },
+    {
+      "wall": 1792351539400,
+      "position": 287
+    }
+  ],
+  "savedAtUTC": "2026-10-18T19:26:03.235391Z",
+  "completedUI": "DEPARTURES globe 解析済み 100 BPM",
+  "observedSelectionRestart": true,
+  "firstRecordedQueuePositionBeforeSelection": "0:53",
+  "recordedAfterSelection": "0:06"
+}

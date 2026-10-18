@@ -12,6 +12,50 @@ final class LyricMusicContextTests: XCTestCase {
         .init(text: text, start: start, end: end, confidence: 0.9)
     }
 
+    func testSpeechBeforeAndAfterObservedMusicKeepsNativeTimesAndRemainsVisible() throws {
+        var music = analysis()
+        let observed = TimeSpan(start: 2, duration: 6)
+        music.sections = [observed]; music.segments = [observed]; music.phrases = [observed]
+        let timeline = try LyricAligner.align(sourceText: "Alpha\nBravo\nCharlie", analysis: music,
+            transcription: [token("Alpha", 1, 3), token("Bravo", 7, 9), token("Charlie", 12, 13)])
+        XCTAssertEqual(timeline.lines.map(\.start), [1, 7, 12])
+        XCTAssertEqual(timeline.lines.map(\.end), [3, 9, 13])
+        XCTAssertEqual(timeline.frames.count, 1)
+        XCTAssertEqual(timeline.frames[0].start, 2)
+        XCTAssertEqual(timeline.frames[0].end, 8)
+        XCTAssertEqual(timeline.frames[0].lineOrdinals, [0, 1], "観測されていない構造枠を作らないこと")
+        XCTAssertEqual(LyricMotion.visibleLines(timeline, at: 1.5).map(\.ordinal), [0])
+        XCTAssertEqual(LyricMotion.visibleLines(timeline, at: 8.5).map(\.ordinal), [1])
+        XCTAssertEqual(LyricMotion.visibleLines(timeline, at: 12.5).map(\.ordinal), [2])
+        XCTAssertTrue(LyricMotion.visibleLines(timeline, at: 4.5).isEmpty)
+        XCTAssertTrue(LyricMotion.visibleLines(timeline, at: 20).isEmpty)
+        try LyricAligner.validate(timeline, analysis: music)
+        let restored = try JSONDecoder().decode(LyricTimeline.self, from: JSONEncoder().encode(timeline))
+        XCTAssertTrue(LyricMusicContext.isConsistent(restored.frames, lines: restored.lines))
+        XCTAssertEqual(restored, timeline)
+    }
+
+    func testMissingInteriorStructureStillRejectsAFrameSpanningSpeechRow() {
+        var music = analysis()
+        music.phrases = [TimeSpan(start: 0, duration: 5), TimeSpan(start: 6, duration: 94)]
+        XCTAssertThrowsError(try LyricAligner.align(sourceText: "Alpha", analysis: music,
+            transcription: [token("Alpha", 4, 7)])) {
+            XCTAssertEqual($0 as? LyricAlignmentError, .invalidFinalBoundaries)
+        }
+    }
+
+    func testRowsEntirelyOutsideStructureKeepTheirFadesAcrossItsEdges() throws {
+        var music = analysis()
+        let observed = TimeSpan(start: 2, duration: 6)
+        music.sections = [observed]; music.segments = [observed]; music.phrases = [observed]
+        let timeline = try LyricAligner.align(sourceText: "Alpha\nBravo", analysis: music,
+            transcription: [token("Alpha", 1.3, 1.8), token("Bravo", 8.1, 8.6)])
+        XCTAssertTrue(timeline.frames[0].lineOrdinals.isEmpty)
+        XCTAssertEqual(LyricMotion.visibleLines(timeline, at: 2.05).map(\.ordinal), [0])
+        XCTAssertEqual(LyricMotion.visibleLines(timeline, at: 7.9).map(\.ordinal), [1])
+        XCTAssertTrue(LyricMotion.visibleLines(timeline, at: 4).isEmpty)
+    }
+
     func testMissingPrefixUsesEntranceGapWithoutMovingRecognizedFollowingCharacters() throws {
         var music = analysis()
         music.bars = [10]

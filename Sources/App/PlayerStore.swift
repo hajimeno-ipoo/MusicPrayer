@@ -6,14 +6,22 @@ import OSLog
 @MainActor @Observable
 final class PlayerStore {
     private static let lyricLogger = Logger(subsystem: "com.hazimeno.MusicPrayer", category: "Lyrics")
-    var tracks: [Track] = []
+    var tracks: [Track] = [] {
+        didSet { appleMusic.setQueueSongs(tracks.compactMap(\.appleMusicSong)) }
+    }
     var currentIndex = 0
     var position: Double = 0
     var duration: Double = 0
     var isPlaying = false
+    var isAppleMusicActive = false
+    var isAppleMusicBrowserVisible = false
+    var isAppleMusicSearchVisible = false
+    let appleMusic: AppleMusicStore
+    @ObservationIgnored private var appleMusicTask: Task<Void, Never>?
+    @ObservationIgnored private var appleMusicRequest: UInt64 = 0
     var visualizerStyle = VisualizerStyle.ribbons
-    var volume: Float = 0.75 { didSet { engine.volume = isMuted ? 0 : volume } }
-    var isMuted = false { didSet { engine.volume = isMuted ? 0 : volume } }
+    var volume: Float = 0.75 { didSet { updateVolume() } }
+    var isMuted = false { didSet { updateVolume() } }
     var shuffle = false { didSet { planNext() } }
     var repeatSetting = RepeatSetting.off { didSet { planNext() } }
     var analysis: MusicAnalysis?
@@ -66,15 +74,31 @@ final class PlayerStore {
     @ObservationIgnored private var openedURLs: [URL] = []
     @ObservationIgnored private var nowPlaying: NowPlayingController?
     @ObservationIgnored private var warmTask: Task<Void, Never>?
+    @ObservationIgnored private var appleAnalysisRevision = -1
     @ObservationIgnored private var scenes: [SectionScene] = []
     @ObservationIgnored private var loadedURL: URL?
-    var currentTrack: Track? { tracks.indices.contains(currentIndex) ? tracks[currentIndex] : nil }
+    @ObservationIgnored private var restoredLocalSelection: (url: URL, time: Double)?
+    @ObservationIgnored private var appleMusicSelectionPending = false
+    @ObservationIgnored private var appleMusicEndHandled = false
+    var currentQueueTrack: Track? { tracks.indices.contains(currentIndex) ? tracks[currentIndex] : nil }
+    var currentTrack: Track? { !isAppleMusicActive && currentQueueTrack?.isAppleMusic == false ? currentQueueTrack : nil }
+    var canTogglePlayback: Bool { !isAppleMusicActive || currentQueueTrack != nil }
+    var canSkipNext: Bool { plannedIndex != nil }
+    var canSkipPrevious: Bool { currentIndex > 0 || position > 3 }
+    var canSeekPlayback: Bool { !isAppleMusicActive || (!appleMusicSelectionPending && appleMusic.playback.id == currentQueueTrack?.appleMusicSong?.id && appleMusic.playback.available && appleMusic.playback.duration > 0) }
 
-    init(lyricDirectory: URL? = nil, lyricTranscriber: any LyricTranscribing = AppleLyricTranscriber()) {
+    private func updateVolume() {
+        let value = isMuted ? 0 : volume
+        engine.volume = value
+        if isAppleMusicActive { appleMusic.setVolume(value) }
+    }
+
+    init(lyricDirectory: URL? = nil, lyricTranscriber: any LyricTranscribing = AppleLyricTranscriber(), appleMusicAnalysisDirectory: URL? = nil) {
+        appleMusic = AppleMusicStore(analysisDirectory: appleMusicAnalysisDirectory)
         lyricStore = LyricStore(directory: lyricDirectory)
         self.lyricTranscriber = lyricTranscriber
         engine.onTrackTransition = { [weak self] url in self?.didTransition(to: url) }
-        engine.onEnd = { [weak self] in self?.isPlaying = false; self?.publishLyricEvent(); self?.persist() }
+        engine.onEnd = { [weak self] in self?.localPlaybackEnded() }
         engine.onError = { [weak self] error in self?.playbackError = error.localizedDescription }
         engine.volume = volume
         refreshDevices()
@@ -88,11 +112,22 @@ final class PlayerStore {
     func restore() async {
         nowPlaying = NowPlayingController(store: self)
         guard let session = QueuePersistence.restore() else { return }
-        await add(urls: session.urls, selectFirst: false)
+        if session.tracks.indices.contains(session.current) {
+            restoredLocalSelection = (session.tracks[session.current].url, session.time)
+        }
+        let incoming = tracks.filter { incoming in !session.tracks.contains(where: { $0.url == incoming.url }) }
+        tracks = session.tracks + incoming
+        currentIndex = session.current
+        await add(urls: [], selectFirst: false)
         volume = session.volume
-        if !tracks.isEmpty {
-            select(min(max(0, session.current), tracks.count - 1), autoplay: false)
-            seek(session.time)
+        if let restored = restoredLocalSelection,
+           let index = tracks.firstIndex(where: { $0.url == restored.url }) {
+            if tracks[index].isAppleMusic {
+                selectAppleMusic(index, autoplay: false, resumeTime: restored.time)
+            } else {
+                select(index, autoplay: false)
+                seek(restored.time)
+            }
         }
     }
 
@@ -114,8 +149,8 @@ final class PlayerStore {
             if url.startAccessingSecurityScopedResource() { openedURLs.append(url) }
             tracks.append(Track(url: url))
         }
-        if wasEmpty, selectFirst, !tracks.isEmpty { select(0, autoplay: false) }
-        let ids = tracks.map { ($0.id, $0.url) }
+        if wasEmpty, selectFirst, !tracks.isEmpty, !isAppleMusicActive { select(0, autoplay: false) }
+        let ids = tracks.filter { !$0.isAppleMusic }.map { ($0.id, $0.url) }
         for (id, url) in ids {
             let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
             do {
@@ -145,10 +180,26 @@ final class PlayerStore {
 
     func select(_ index: Int, autoplay: Bool = true) {
         guard tracks.indices.contains(index) else { return }
+        let keepsPreanalysis = !autoplay && appleMusic.preanalysis.isWorking &&
+            tracks[index].appleMusicSong?.id == appleMusic.preanalysis.songID
+        if !keepsPreanalysis { appleMusic.setPreanalysisAllowed(false) }
+        if tracks[index].isAppleMusic { selectAppleMusic(index, autoplay: autoplay); return }
+        if isAppleMusicActive {
+            let trackID = tracks[index].id
+            switchToLocalPlayback { store in
+                if let selected = store.tracks.firstIndex(where: { $0.id == trackID }) {
+                    store.currentIndex = selected
+                    store.select(selected, autoplay: autoplay)
+                }
+            }
+            return
+        }
         let outgoing = loadedURL == nil ? nil : visualSource.snapshot()
         let wasPlaying = engine.isPlaying
         do {
             try engine.load(url: tracks[index].url)
+            restoredLocalSelection = nil
+            cancelAppleMusicCommand()
             loadedURL = tracks[index].url
             currentIndex = index; position = 0; duration = engine.duration
             resetLyricsForSelection()
@@ -165,6 +216,14 @@ final class PlayerStore {
     }
 
     func togglePlayback() {
+        appleMusic.setPreanalysisAllowed(false)
+        if isAppleMusicActive {
+            if appleMusicSelectionPending { selectAppleMusic(currentIndex, autoplay: true, resumeTime: position); return }
+            if appleMusic.playback.id != currentQueueTrack?.appleMusicSong?.id || !appleMusic.playback.available {
+                selectAppleMusic(currentIndex, autoplay: true, resumeTime: position)
+            } else { appleMusic.command("toggle") }
+            return
+        }
         guard currentTrack != nil else { openFiles(); return }
         guard loadedURL == currentTrack?.url else { select(currentIndex); return }
         do {
@@ -176,21 +235,44 @@ final class PlayerStore {
         } catch { playbackError = error.localizedDescription }
     }
     func toggleMute() { isMuted.toggle() }
-    func stop() { visualTransition = nil; engine.stop(); isPlaying = false; position = 0; previewTime = nil; publishLyricEvent(); persist() }
+    func stop() {
+        if isAppleMusicActive {
+            cancelAppleMusicCommand()
+            appleMusic.stopPlayback()
+            appleMusicEndHandled = true; isPlaying = false; position = 0; previewTime = nil
+            persist(); return
+        }
+        cancelAppleMusicCommand()
+        visualTransition = nil; engine.stop(); isPlaying = false; position = 0; previewTime = nil; publishLyricEvent(); persist()
+    }
     func seek(_ time: Double) {
+        if isAppleMusicActive {
+            previewTime = nil
+            guard canSeekPlayback, time.isFinite else { return }
+            appleMusic.command("seek", value: min(max(0, time), duration)); return
+        }
         do { try engine.seek(to: min(max(0, time), duration)); position = engine.currentTime; previewTime = nil; visualTransition = nil; publishLyricEvent(); planNext(); persist() }
         catch { playbackError = error.localizedDescription }
     }
-    func next() { if let plannedIndex { select(plannedIndex) } }
+    func next() {
+        if let plannedIndex { select(plannedIndex) }
+    }
     func previous() {
         if position > 3 { seek(0) }
         else if currentIndex > 0 { select(currentIndex - 1) }
     }
     func remove(_ id: UUID) {
         guard let index = tracks.firstIndex(where: { $0.id == id }) else { return }
+        let removed = tracks[index]
         let removingCurrent = index == currentIndex
         let playing = isPlaying
+        var deletion = removed.isAppleMusic ? nil : makeLyricSaveRequest(track: removed, text: nil)
+        deletion?.fingerprint = removingCurrent ? lyricFingerprint : nil
         tracks.remove(at: index)
+        if var deletion {
+            deletion.retainingAudioURLs = tracks.filter { !$0.isAppleMusic }.map(\.url)
+            enqueueLyricSave(deletion)
+        }
         if removingCurrent {
             resetLyricsForSelection()
             engine.unload(); loadedURL = nil
@@ -199,8 +281,10 @@ final class PlayerStore {
             duration = 0; position = 0; isPlaying = false; moment = MusicalMoment(); previewTime = nil
             currentIndex = min(index, max(0, tracks.count - 1))
         }
-        if tracks.isEmpty { currentIndex = 0; plannedIndex = nil }
-        else if removingCurrent { select(currentIndex, autoplay: playing) }
+        if tracks.isEmpty {
+            currentIndex = 0; plannedIndex = nil
+            if isAppleMusicActive { switchToLocalPlayback { _ in } }
+        } else if removingCurrent { select(currentIndex, autoplay: playing) }
         else { if index < currentIndex { currentIndex -= 1 }; planNext() }
         persist()
         if removingCurrent { publishLyricEvent() }
@@ -213,7 +297,11 @@ final class PlayerStore {
         devices = AudioOutputs.devices()
         defaultOutputName = AudioOutputs.defaultDevice().flatMap { AudioOutputs.name(of: $0) }
     }
-    func retryAnalysis() { analyzeCurrent(force: true) }
+    func retryAnalysis() {
+        if isAppleMusicActive, let song = currentQueueTrack?.appleMusicSong {
+            appleMusic.musicAnalysis.select(song, force: true)
+        } else { analyzeCurrent(force: true) }
+    }
 
     private func analyzeCurrent(force: Bool = false) {
         lyricTask?.cancel(); lyricTimeline = nil
@@ -243,17 +331,19 @@ final class PlayerStore {
     }
     private func planNext() {
         plannedIndex = nil
-        guard tracks.indices.contains(currentIndex), loadedURL != nil else { try? engine.prepareNext(url: nil); return }
+        guard tracks.indices.contains(currentIndex) else { try? engine.prepareNext(url: nil); return }
         if repeatSetting == .one { plannedIndex = currentIndex }
         else if shuffle { plannedIndex = tracks.indices.filter { $0 != currentIndex }.randomElement() ?? (repeatSetting == .all ? currentIndex : nil) }
         else if currentIndex + 1 < tracks.count { plannedIndex = currentIndex + 1 }
         else if repeatSetting == .all { plannedIndex = 0 }
-        do { try engine.prepareNext(url: plannedIndex.map { tracks[$0].url }) }
+        let nextURL = plannedIndex.flatMap { tracks[$0].isAppleMusic ? nil : tracks[$0].url }
+        do { try engine.prepareNext(url: isAppleMusicActive ? nil : nextURL) }
         catch { playbackError = error.localizedDescription }
     }
     private func warmAnalyses() {
         warmTask?.cancel()
-        let urls = tracks.map(\.url).filter { $0 != currentTrack?.url }
+        guard !isAppleMusicActive else { return }
+        let urls = tracks.filter { !$0.isAppleMusic }.map(\.url).filter { $0 != currentTrack?.url }
         warmTask = Task { [weak self, analyzer] in
             for url in urls {
                 guard !Task.isCancelled else { return }
@@ -266,6 +356,7 @@ final class PlayerStore {
         }
     }
     private func didTransition(to url: URL) {
+        guard !isAppleMusicActive else { return }
         if let plannedIndex, tracks.indices.contains(plannedIndex), tracks[plannedIndex].url == url { currentIndex = plannedIndex }
         else if let i = tracks.firstIndex(where: { $0.url == url }) { currentIndex = i }
         loadedURL = url; duration = engine.duration; position = engine.currentTime
@@ -276,9 +367,62 @@ final class PlayerStore {
         loadCurrentLyrics(); publishLyricEvent()
     }
     private func tick() {
+        appleMusic.setPreanalysisAllowed(!isPlaying && !appleMusicSelectionPending && !isAppleMusicBrowserVisible && !isAppleMusicSearchVisible)
         let now = Date()
         let dt = Float(min(0.1, now.timeIntervalSince(previousTick))); previousTick = now
+        if appleMusic.isInitialized { appleMusic.pollPlayback() }
+        if isAppleMusicActive {
+            let playback = appleMusic.playback
+            if !appleMusicSelectionPending, playback.id == currentQueueTrack?.appleMusicSong?.id || playback.ended {
+                position = playback.time
+                duration = playback.duration > 0 ? playback.duration : (currentQueueTrack?.duration ?? 0)
+                isPlaying = playback.isPlaying
+                if playback.isPlaying { appleMusicEndHandled = false }
+                if playback.ended, !appleMusicEndHandled {
+                    appleMusicEndHandled = true
+                    appleMusic.finishAnalysis()
+                    if let plannedIndex { select(plannedIndex) }
+                }
+                nowPlaying?.update()
+            }
+            // Use the same PCM analyzer, composer and Metal view as local tracks.
+            let playing = !appleMusicSelectionPending && isPlaying && playback.id == currentQueueTrack?.appleMusicSong?.id
+            let audio = appleMusic.audioFeatures(isPlaying: playing)
+            let music = appleMusic.musicAnalysis
+            if music.songID == currentQueueTrack?.appleMusicSong?.id {
+                if appleAnalysisRevision != music.revision {
+                    analysis = music.analysis
+                    scenes = analysis.map(SectionScenes.make) ?? []
+                    appleAnalysisRevision = music.revision
+                }
+                analyzing = music.analyzing
+                analysisError = music.error
+            }
+            var sampled = TimelineSampler.sample(analysis, at: position)
+            let live = music.songID == currentQueueTrack?.appleMusicSong?.id ? music.liveLevels(at: position) : (momentary: nil, shortTerm: nil)
+            if sampled.momentary == nil { sampled.momentary = live.momentary }
+            if sampled.shortTerm == nil { sampled.shortTerm = live.shortTerm }
+            if now.timeIntervalSince(uiTick) >= 0.1 {
+                if moment != sampled { moment = sampled }
+                uiTick = now
+            }
+            let sceneIndex = (sampled.section ?? 0) - 1
+            let scene = scenes.indices.contains(sceneIndex) ? scenes[sceneIndex] : nil
+            var frame = composer.compose(time: position, audio: audio, moment: sampled, scene: scene,
+                                         analyzed: analysis != nil, presence: 1, dt: dt)
+            frame.trackID = currentQueueTrack?.id
+            frame.title = currentQueueTrack?.title ?? "Apple Music"
+            frame.artist = currentQueueTrack?.artist ?? ""
+            frame.artwork = appleMusic.artworkData
+            frame.duration = duration
+            frame.style = visualizerStyle
+            frame.isPlaying = playing
+            visualSource.publish(frame)
+            if now.timeIntervalSince(lastSave) > 5 { persist(); lastSave = now }
+            return
+        }
         let time = engine.currentTime
+        guard !isAppleMusicActive else { return }
         let sampled = TimelineSampler.sample(analysis, at: previewTime ?? time)
         var audio = engine.features()
         if !engine.isPlaying { audio = AudioFeatures() }
@@ -312,10 +456,144 @@ final class PlayerStore {
         if now.timeIntervalSince(lastSave) > 5 { persist(); lastSave = now }
     }
     func persist() {
-        do { try QueuePersistence.save(tracks: tracks, current: currentIndex, time: engine.currentTime, volume: volume) }
+        let index = restoredLocalSelection.flatMap { restored in tracks.firstIndex(where: { $0.url == restored.url }) } ?? currentIndex
+        do { try QueuePersistence.save(tracks: tracks, current: index, time: restoredLocalSelection?.time ?? (isAppleMusicActive ? position : engine.currentTime), volume: volume) }
         catch { playbackError = "再生位置を保存できませんでした：\(error.localizedDescription)" }
     }
-    func shutdown() { persist(); analysisTask?.cancel(); warmTask?.cancel(); lyricLoadTask?.cancel(); lyricTask?.cancel(); timer?.invalidate(); engine.stop(); openedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
+    func shutdown() { cancelAppleMusicCommand(); appleMusic.stop(); persist(); analysisTask?.cancel(); warmTask?.cancel(); lyricLoadTask?.cancel(); lyricTask?.cancel(); timer?.invalidate(); engine.stop(); openedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
+
+    func openAppleMusic() {
+        isAppleMusicBrowserVisible = false
+        isAppleMusicSearchVisible = true
+    }
+
+    func openAppleMusicSignIn() {
+        isAppleMusicSearchVisible = false
+        isAppleMusicBrowserVisible = true
+    }
+
+    func addAppleMusicSong(_ song: AppleMusicSong) {
+        let wasEmpty = tracks.isEmpty
+        if !tracks.contains(where: { $0.appleMusicSong?.id == song.id }) {
+            tracks.append(Track(appleMusicSong: song))
+        }
+        isAppleMusicSearchVisible = false
+        if wasEmpty { select(0, autoplay: false) }
+        else { planNext(); persist() }
+    }
+
+    private func selectAppleMusic(_ index: Int, autoplay: Bool, resumeTime: Double = 0) {
+        guard tracks.indices.contains(index), let song = tracks[index].appleMusicSong else { return }
+        cancelAppleMusicCommand()
+        beginAppleMusicPlayback()
+        currentIndex = index
+        appleMusic.musicAnalysis.select(song)
+        restoredLocalSelection = nil
+        position = resumeTime; duration = song.duration
+        if !autoplay, appleMusic.selectDuringPreanalysis(song) {
+            appleMusicSelectionPending = false
+            appleMusicEndHandled = false
+            updateVolume()
+            planNext(); persist(); nowPlaying?.update()
+            return
+        }
+        appleMusicSelectionPending = true
+        appleMusicEndHandled = false
+        planNext(); persist(); nowPlaying?.update()
+        let id = tracks[index].id
+        let request = appleMusicRequest
+        appleMusicTask = Task { [weak self] in
+            guard let self else { return }
+            await self.appleMusic.allowPlayback()
+            guard !Task.isCancelled, request == self.appleMusicRequest else { return }
+            self.updateVolume()
+            // The view creates the connection; selecting a saved song waits for its initialization.
+            for _ in 0..<160 {
+                guard !Task.isCancelled, request == self.appleMusicRequest else { return }
+                self.appleMusic.pollPlayback()
+                if self.appleMusic.playback.isReady { break }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard !Task.isCancelled, request == self.appleMusicRequest,
+                  self.currentQueueTrack?.id == id else { return }
+            if self.appleMusic.playback.isReady,
+               await self.appleMusic.playSong(song, autoplay: autoplay) {
+                guard !Task.isCancelled, request == self.appleMusicRequest else { return }
+                if resumeTime > 0, autoplay {
+                    for _ in 0..<80 {
+                        guard !Task.isCancelled, request == self.appleMusicRequest else { return }
+                        if self.appleMusic.playback.id == song.id, self.appleMusic.playback.duration > 0 { break }
+                        self.appleMusic.pollPlayback()
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    guard !Task.isCancelled, request == self.appleMusicRequest else { return }
+                    if self.appleMusic.playback.id == song.id, self.appleMusic.playback.duration > 0 {
+                        self.appleMusic.command("seek", value: resumeTime)
+                    } else {
+                        self.appleMusic.command("pause")
+                        self.playbackError = "Apple Musicの再生位置を復元できませんでした。曲の一覧から選び直してください。"
+                    }
+                }
+                self.isPlaying = autoplay && self.playbackError == nil
+            } else {
+                guard !Task.isCancelled, request == self.appleMusicRequest else { return }
+                self.playbackError = "Apple Musicの曲を準備できませんでした。Apple Musicの検索画面から接続状態を確認してください。"
+            }
+            guard request == self.appleMusicRequest else { return }
+            self.appleMusicSelectionPending = false
+            self.persist()
+        }
+    }
+
+    private func localPlaybackEnded() {
+        guard !isAppleMusicActive else { return }
+        isPlaying = false
+        if let plannedIndex { select(plannedIndex) }
+        else { publishLyricEvent(); persist() }
+    }
+
+    func showAppleMusicPlayer() {
+        isAppleMusicBrowserVisible = false
+        appleMusic.pollPlayback()
+    }
+
+    // The local queue and resume position stay intact while the official web player is shown.
+    func beginAppleMusicPlayback() {
+        persist()
+        engine.pause()
+        isAppleMusicActive = true
+        planNext()
+        resetLyricsForSelection()
+        analysisTask?.cancel(); warmTask?.cancel()
+        analysis = nil; scenes = []; analyzing = false; analysisError = nil
+        appleAnalysisRevision = -1
+        moment = MusicalMoment(); previewTime = nil; visualTransition = nil
+        composer = VisualComposer()
+        playbackError = nil; isPlaying = false; position = 0; duration = 0
+        visualSource.publish(VisualFrame())
+    }
+
+    private func cancelAppleMusicCommand() {
+        appleMusicRequest &+= 1
+        appleMusicTask?.cancel(); appleMusicTask = nil
+        appleMusicSelectionPending = false
+    }
+
+    private func switchToLocalPlayback(_ action: @escaping @MainActor (PlayerStore) -> Void) {
+        cancelAppleMusicCommand()
+        let request = appleMusicRequest
+        appleMusicTask = Task { [weak self] in
+            guard let self, self.isAppleMusicActive else { return }
+            await self.appleMusic.suspendPlayback()
+            guard !Task.isCancelled, request == self.appleMusicRequest else { return }
+            self.isAppleMusicActive = false
+            self.isAppleMusicBrowserVisible = false
+            self.isAppleMusicSearchVisible = false
+            self.appleMusic.cancelSearch()
+            action(self)
+            self.nowPlaying = NowPlayingController(store: self)
+        }
+    }
 }
 
 private struct LyricSaveRequest {
@@ -327,6 +605,8 @@ private struct LyricSaveRequest {
     var trackID: UUID?
     var playbackGeneration: UInt64
     var lyricGeneration: UInt64
+    var fingerprint: String? = nil
+    var retainingAudioURLs: [URL] = []
 }
 
 extension PlayerStore {
@@ -487,7 +767,9 @@ extension PlayerStore {
                         try await lyricStore.saveTimeline(timeline, request: request.sequence)
                     }
                 } else {
-                    fingerprint = try await lyricStore.clear(url: request.url, request: request.sequence)
+                    fingerprint = try await lyricStore.clear(url: request.url, request: request.sequence,
+                                                             fingerprint: request.fingerprint,
+                                                             retainingAudioAt: request.retainingAudioURLs)
                 }
                 if let self {
                     self.pendingLyricSaves.removeValue(forKey: request.sequence)
@@ -522,7 +804,8 @@ extension PlayerStore {
     private func refreshLyricSaveError(reason: String? = nil) {
         hasPendingLyricSaveFailure = !failedLyricSaves.isEmpty
         if let failed = failedLyricSaves.values.min(by: { $0.sequence < $1.sequence }) {
-            lyricSaveError = "歌詞を保存できませんでした：\(failed.title)" + (reason.map { " — \($0)" } ?? "")
+            let operation = failed.text == nil ? "削除" : "保存"
+            lyricSaveError = "歌詞を\(operation)できませんでした：\(failed.title)" + (reason.map { " — \($0)" } ?? "")
         } else { lyricSaveError = nil }
     }
 

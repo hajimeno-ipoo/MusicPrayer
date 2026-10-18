@@ -1,0 +1,37 @@
+{
+  "intervalSeconds": [
+    3,
+    37.2
+  ],
+  "gridStep": 0.05,
+  "note": "Numerical activity units are framework scores, not measured vocal sound level or error percentage. Exclude first/final three seconds for padding/edge context.",
+  "metrics": {
+    "off24_9B7167": {
+      "duration": 40.275333333333336,
+      "fullMean": 0.4684898817431762,
+      "interiorMean": 0.5144590064715329,
+      "interiorBias": -0.2173776444189781,
+      "interiorMAE": 0.2173776444189781,
+      "interiorCorrelation": 0.6394978365121073,
+      "pointCount": 806
+    },
+    "reference24_59382D": {
+      "duration": 40.275333333333336,
+      "fullMean": 0.7231986004466501,
+      "interiorMean": 0.731836650890511,
+      "interiorBias": 0.0,
+      "interiorMAE": 0.0,
+      "interiorCorrelation": 1.0,
+      "pointCount": 806
+    },
+    "referenceFiltered_D16D94": {
+      "duration": 40.275333333333336,
+      "fullMean": 0.4776811052171216,
+      "interiorMean": 0.5239748318029197,
+      "interiorBias": -0.20786181908759124,
+      "interiorMAE": 0.20786181908759124,
+      "interiorCorrelation": 0.6491153771309977,
+      "pointCount": 806
+    }
+  }
+}

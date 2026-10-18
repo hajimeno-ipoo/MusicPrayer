@@ -1,0 +1,7 @@
+{
+  "Sources/App/PlayerStore.swift": "1f09e2bc86f72d8554995b82320746eb76ef874f8a9eb9484061158033b32f0c",
+  "Sources/AppleMusic/AppleMusicStore.swift": "84745d7d7cc1167a2bc3926eada45fd873f61dd5c69a42084c7035304dbcdee2",
+  "Sources/AppleMusic/AppleMusicBridge.js": "e74919df1f8545f77be9b6e100ceef7cff0dcbd92ea8401400d5a2dcf4e55fbc",
+  "Sources/AppleMusic/AppleMusicPreanalysis.swift": "884bbea8211c37cf05b3b4acf0a3213b754e1d20db0881bf28f285e7bd031176",
+  "Sources/Views/PlayerView.swift": "346745f7cdfbcae33ec7aa7676a7134daf12c8b69e7d120b4afe1b1ac1b123e8"
+}

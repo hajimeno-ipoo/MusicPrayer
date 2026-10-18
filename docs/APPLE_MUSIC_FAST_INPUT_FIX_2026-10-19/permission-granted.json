@@ -1,0 +1,18 @@
+{
+  "processPID": 39639,
+  "messages": [
+    "AUTHREQ_CTX: msgID=761.1826, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>",
+    "AUTHREQ_RESULT: msgID=761.1826, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),",
+    "AUTHREQ_CTX: msgID=761.1829, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>",
+    "AUTHREQ_RESULT: msgID=761.1829, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),",
+    "AUTHREQ_CTX: msgID=761.1831, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>",
+    "AUTHREQ_RESULT: msgID=761.1831, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+  ],
+  "preflight": {
+    "date": "2026-10-18T17:53:38Z",
+    "event": "permissionPreflight",
+    "mute": 1,
+    "nonzero": 38,
+    "processPID": 39644
+  }
+}

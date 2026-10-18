@@ -1,0 +1,72 @@
+{
+  "duration": 40.29066666666667,
+  "referenceBPM": 119.4,
+  "correctedBPM": 119.4,
+  "metrics": {
+    "vocal": {
+      "referenceMean": 0.7219123173573201,
+      "correctedMean": 0.6821234541687345,
+      "correlation": 0.963239436911861,
+      "meanAbsoluteDifference": 0.05523848229528536
+    },
+    "drums": {
+      "referenceMean": 0.6629425873895781,
+      "correctedMean": 0.29773108256526054,
+      "correlation": 0.4390908072295024,
+      "meanAbsoluteDifference": 0.36521150482431763
+    },
+    "bass": {
+      "referenceMean": 0.607332820955335,
+      "correctedMean": 0.4001357693424318,
+      "correlation": 0.29115854021370724,
+      "meanAbsoluteDifference": 0.20719705161290322
+    },
+    "other": {
+      "referenceMean": 0.6029544957568238,
+      "correctedMean": 0.6666023502853599,
+      "correlation": 0.8207356722242026,
+      "meanAbsoluteDifference": 0.06409372924317618
+    },
+    "momentary": {
+      "referenceMean": -9.589299764837905,
+      "correctedMean": -11.286514681296758,
+      "correlation": 0.7632400586705574,
+      "meanAbsoluteDifference": 1.7010093054862843
+    }
+  },
+  "beats": {
+    "referenceCount": 80,
+    "correctedCount": 80
+  },
+  "bars": {
+    "referenceCount": 20,
+    "correctedCount": 20
+  },
+  "sections": {
+    "referenceCount": 4,
+    "correctedCount": 4
+  },
+  "segments": {
+    "referenceCount": 6,
+    "correctedCount": 6
+  },
+  "phrases": {
+    "referenceCount": 10,
+    "correctedCount": 10
+  },
+  "pace": {
+    "referenceCount": 1,
+    "correctedCount": 1
+  },
+  "spectrumDb": {
+    "987.0149282610821": -1.8845204638145052,
+    "3948.0597130443284": -1.2682177667674486,
+    "7896.119426088657": -2.4521109760996183,
+    "8610.779292198036": -2.3373531297038905,
+    "9122.802873757073": -2.1393217905478124,
+    "9390.121402415833": -2.3965844480977476,
+    "9665.272961860543": -2.425844366972545,
+    "9948.487077412921": -2.4262790476125704,
+    "10848.90208623918": -2.324518933856544
+  }
+}

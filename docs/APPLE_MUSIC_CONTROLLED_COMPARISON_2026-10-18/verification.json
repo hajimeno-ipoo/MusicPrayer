@@ -1,0 +1,930 @@
+{
+  "date": "2026-10-18",
+  "track": {
+    "id": "1403236244",
+    "duration": 208.941,
+    "title": "愛が止まらない ~Turn it into love~ (Remastered 2018)",
+    "artist": "Wink"
+  },
+  "scope": {
+    "productImplementation": false,
+    "audioFilesSaved": false,
+    "audioHeldInMemoryOnly": true,
+    "screenCaptureOrSharingUsed": false,
+    "concurrentOtherSongPlaybackTested": false
+  },
+  "events": [
+    {
+      "date": "2026-10-18T12:01:14Z",
+      "event": "start",
+      "pid": 23578
+    },
+    {
+      "date": "2026-10-18T12:01:16Z",
+      "event": "musicKitReady"
+    },
+    {
+      "date": "2026-10-18T12:01:27Z",
+      "event": "permissionPreflight",
+      "mute": 1,
+      "nonzero": 35,
+      "processPID": 23586
+    },
+    {
+      "date": "2026-10-18T12:01:27Z",
+      "event": "waitingPermissionAudit"
+    },
+    {
+      "date": "2026-10-18T12:02:06Z",
+      "event": "permissionAuditConfirmed"
+    },
+    {
+      "date": "2026-10-18T12:02:08Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 1e-06,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "native_1x"
+    },
+    {
+      "date": "2026-10-18T12:02:08Z",
+      "event": "captureProgress",
+      "media": 1e-06,
+      "name": "native_1x",
+      "rms": 0,
+      "wall": 0.08774495124816895
+    },
+    {
+      "date": "2026-10-18T12:02:38Z",
+      "event": "captureProgress",
+      "media": 29.743688103000867,
+      "name": "native_1x",
+      "rms": 0.2873634397983551,
+      "wall": 30.015845894813538
+    },
+    {
+      "date": "2026-10-18T12:03:08Z",
+      "event": "captureProgress",
+      "media": 59.74329714532051,
+      "name": "native_1x",
+      "rms": 0.2571588456630707,
+      "wall": 60.015763998031616
+    },
+    {
+      "date": "2026-10-18T12:03:37Z",
+      "event": "captureProgress",
+      "media": 89.73324268697182,
+      "name": "native_1x",
+      "rms": 0.08147359639406204,
+      "wall": 90.00697898864746
+    },
+    {
+      "date": "2026-10-18T12:04:07Z",
+      "event": "captureProgress",
+      "media": 119.73164381133726,
+      "name": "native_1x",
+      "rms": 0.1790151596069336,
+      "wall": 120.00547397136688
+    },
+    {
+      "date": "2026-10-18T12:04:38Z",
+      "event": "captureProgress",
+      "media": 149.7488269789992,
+      "name": "native_1x",
+      "rms": 0.19270539283752441,
+      "wall": 150.02178394794464
+    },
+    {
+      "date": "2026-10-18T12:05:07Z",
+      "event": "captureProgress",
+      "media": 179.7372341869927,
+      "name": "native_1x",
+      "rms": 0.16027964651584625,
+      "wall": 180.0103839635849
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:05:37Z",
+      "duration": 209.33333333333334,
+      "event": "captureResult",
+      "frames": 10048000,
+      "info": {
+        "id": "",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 0,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "native_1x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 19625,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 209.6833848953247
+    },
+    {
+      "date": "2026-10-18T12:05:39Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 2,
+        "time": 2.3411346435546876e-05,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_kept_2x"
+    },
+    {
+      "date": "2026-10-18T12:05:39Z",
+      "event": "captureProgress",
+      "media": 2.3411346435546876e-05,
+      "name": "pitch_kept_2x",
+      "rms": 0,
+      "wall": 0.10553896427154541
+    },
+    {
+      "date": "2026-10-18T12:06:09Z",
+      "event": "captureProgress",
+      "media": 58.76748179731874,
+      "name": "pitch_kept_2x",
+      "rms": 0.1874714195728302,
+      "wall": 30.021530032157898
+    },
+    {
+      "date": "2026-10-18T12:06:39Z",
+      "event": "captureProgress",
+      "media": 118.72928729865453,
+      "name": "pitch_kept_2x",
+      "rms": 0.22565801441669464,
+      "wall": 60.001952052116394
+    },
+    {
+      "date": "2026-10-18T12:07:09Z",
+      "event": "captureProgress",
+      "media": 178.73999688137965,
+      "name": "pitch_kept_2x",
+      "rms": 0.1624644547700882,
+      "wall": 90.00743901729584
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:07:24Z",
+      "duration": 105.23733333333334,
+      "event": "captureResult",
+      "frames": 5051392,
+      "info": {
+        "id": "",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 2,
+        "time": 0,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_kept_2x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 9866,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 105.40873897075653
+    },
+    {
+      "date": "2026-10-18T12:07:26Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": false,
+        "protected": true,
+        "rate": 2,
+        "time": 2.102716064453125e-05,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_shifted_2x"
+    },
+    {
+      "date": "2026-10-18T12:07:26Z",
+      "event": "captureProgress",
+      "media": 2.102716064453125e-05,
+      "name": "pitch_shifted_2x",
+      "rms": 0,
+      "wall": 0.1273939609527588
+    },
+    {
+      "date": "2026-10-18T12:07:56Z",
+      "event": "captureProgress",
+      "media": 58.25619184665207,
+      "name": "pitch_shifted_2x",
+      "rms": 0.22767102718353271,
+      "wall": 30.011420965194702
+    },
+    {
+      "date": "2026-10-18T12:08:26Z",
+      "event": "captureProgress",
+      "media": 118.2755118493234,
+      "name": "pitch_shifted_2x",
+      "rms": 0.21614907681941986,
+      "wall": 60.02195501327515
+    },
+    {
+      "date": "2026-10-18T12:08:56Z",
+      "event": "captureProgress",
+      "media": 178.23618418270215,
+      "name": "pitch_shifted_2x",
+      "rms": 0.12220262736082077,
+      "wall": 90.00230896472931
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:09:11Z",
+      "duration": 105.51466666666667,
+      "event": "captureResult",
+      "frames": 5064704,
+      "info": {
+        "id": "",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": false,
+        "protected": true,
+        "rate": 2,
+        "time": 0,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_shifted_2x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 9892,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 105.68715405464172
+    },
+    {
+      "commonDuration": 209.29333333333332,
+      "commonEnd": 209.31333333333333,
+      "commonStart": 0.02,
+      "date": "2026-10-18T12:09:16Z",
+      "event": "alignment",
+      "pitchKept": {
+        "driftRangeSeconds": 0,
+        "offsetSeconds": 1,
+        "resolutionSeconds": 0.01,
+        "windowCorrelations": [
+          0.8766782811949664,
+          0.8814891594278533,
+          0.8695935926576214
+        ],
+        "windowOffsets": [
+          1,
+          1,
+          1
+        ]
+      },
+      "pitchShifted": {
+        "driftRangeSeconds": 0,
+        "offsetSeconds": 1.52,
+        "resolutionSeconds": 0.01,
+        "windowCorrelations": [
+          0.9255017747862188,
+          0.9322160049846628,
+          0.9265538246124182
+        ],
+        "windowOffsets": [
+          1.52,
+          1.52,
+          1.52
+        ]
+      }
+    },
+    {
+      "date": "2026-10-18T12:09:16Z",
+      "event": "waitingAlignmentAudit"
+    },
+    {
+      "date": "2026-10-18T12:09:39Z",
+      "event": "alignmentAuditConfirmed"
+    },
+    {
+      "chunks": 2453,
+      "date": "2026-10-18T12:09:39Z",
+      "duration": 209.29333333333332,
+      "event": "analysisStart",
+      "frames": 10046080,
+      "name": "reference_a",
+      "rate": 48000,
+      "sha256": "123d22c6e540584cd8844d8f9e2f79ac9ed33f04d8d418d15728d042223be520",
+      "timeScale": 1
+    },
+    {
+      "bars": 104,
+      "beats": 416,
+      "bpm": 119.37911987304688,
+      "date": "2026-10-18T12:09:42Z",
+      "duration": 209.29333333333332,
+      "event": "analysisResult",
+      "fedChunks": 2453,
+      "fedFrames": 10046080,
+      "keys": [
+        "E major"
+      ],
+      "name": "reference_a",
+      "pace": 2,
+      "seconds": 3.013975977897644,
+      "sections": 14
+    },
+    {
+      "chunks": 2453,
+      "date": "2026-10-18T12:09:42Z",
+      "duration": 209.29333333333332,
+      "event": "analysisStart",
+      "frames": 10046080,
+      "name": "reference_b",
+      "rate": 48000,
+      "sha256": "123d22c6e540584cd8844d8f9e2f79ac9ed33f04d8d418d15728d042223be520",
+      "timeScale": 1
+    },
+    {
+      "bars": 104,
+      "beats": 416,
+      "bpm": 119.37911987304688,
+      "date": "2026-10-18T12:09:45Z",
+      "duration": 209.29333333333332,
+      "event": "analysisResult",
+      "fedChunks": 2453,
+      "fedFrames": 10046080,
+      "keys": [
+        "E major"
+      ],
+      "name": "reference_b",
+      "pace": 2,
+      "seconds": 3.0507030487060547,
+      "sections": 14
+    },
+    {
+      "chunks": 2453,
+      "date": "2026-10-18T12:09:45Z",
+      "duration": 209.29333333333332,
+      "event": "analysisStart",
+      "frames": 10046080,
+      "name": "reference_c",
+      "rate": 48000,
+      "sha256": "123d22c6e540584cd8844d8f9e2f79ac9ed33f04d8d418d15728d042223be520",
+      "timeScale": 1
+    },
+    {
+      "bars": 104,
+      "beats": 416,
+      "bpm": 119.37911987304688,
+      "date": "2026-10-18T12:09:48Z",
+      "duration": 209.29333333333332,
+      "event": "analysisResult",
+      "fedChunks": 2453,
+      "fedFrames": 10046080,
+      "keys": [
+        "E major"
+      ],
+      "name": "reference_c",
+      "pace": 2,
+      "seconds": 3.0617018938064575,
+      "sections": 14
+    },
+    {
+      "chunks": 1227,
+      "date": "2026-10-18T12:09:48Z",
+      "duration": 209.29333333333332,
+      "event": "analysisStart",
+      "frames": 5023040,
+      "name": "reference_half_rate",
+      "rate": 24000,
+      "sha256": "c432599fc2efc82f70f521d19b3b4cb855f4a5fa7e858ad86270c1517b133388",
+      "timeScale": 1
+    },
+    {
+      "bars": 104,
+      "beats": 416,
+      "bpm": 119.38831329345703,
+      "date": "2026-10-18T12:09:51Z",
+      "duration": 209.29333333333332,
+      "event": "analysisResult",
+      "fedChunks": 1227,
+      "fedFrames": 5023040,
+      "keys": [
+        "E major"
+      ],
+      "name": "reference_half_rate",
+      "pace": 2,
+      "seconds": 2.9688849449157715,
+      "sections": 14
+    },
+    {
+      "chunks": 1227,
+      "date": "2026-10-18T12:09:51Z",
+      "duration": 104.64666666666666,
+      "event": "analysisStart",
+      "frames": 5023040,
+      "name": "pitch_kept_2x",
+      "rate": 48000,
+      "sha256": "f0c82b01c0a2dfe83e280a6c7547ae60105b7f8d045851819f2df6fb5db8668f",
+      "timeScale": 2
+    },
+    {
+      "bars": 52,
+      "beats": 208,
+      "bpm": 59.68991470336914,
+      "date": "2026-10-18T12:09:53Z",
+      "duration": 209.29333333333332,
+      "event": "analysisResult",
+      "fedChunks": 1227,
+      "fedFrames": 5023040,
+      "keys": [
+        "E major"
+      ],
+      "name": "pitch_kept_2x",
+      "pace": 5,
+      "seconds": 1.5195040702819824,
+      "sections": 9
+    },
+    {
+      "chunks": 1227,
+      "date": "2026-10-18T12:09:53Z",
+      "duration": 209.29333333333332,
+      "event": "analysisStart",
+      "frames": 5023040,
+      "name": "pitch_shifted_half_rate",
+      "rate": 24000,
+      "sha256": "8fe7a52ce61addaf04109dc674f9f3fac0901c6bc7934c207eeaa7d18a8c1862",
+      "timeScale": 1
+    },
+    {
+      "bars": 104,
+      "beats": 416,
+      "bpm": 119.3768081665039,
+      "date": "2026-10-18T12:09:56Z",
+      "duration": 209.29333333333332,
+      "event": "analysisResult",
+      "fedChunks": 1227,
+      "fedFrames": 5023040,
+      "keys": [
+        "E major"
+      ],
+      "name": "pitch_shifted_half_rate",
+      "pace": 6,
+      "seconds": 3.0478310585021973,
+      "sections": 15
+    },
+    {
+      "chunks": 2453,
+      "date": "2026-10-18T12:09:56Z",
+      "duration": 209.29333333333332,
+      "event": "analysisStart",
+      "frames": 10046080,
+      "name": "pitch_shifted_resampled_native",
+      "rate": 48000,
+      "sha256": "08438dd21c51808f0c6eba9a06ff38199fbcd13cd2d64d292bb5f4f9c5ae0ad1",
+      "timeScale": 1
+    },
+    {
+      "bars": 104,
+      "beats": 416,
+      "bpm": 119.38829803466797,
+      "date": "2026-10-18T12:10:00Z",
+      "duration": 209.29333333333332,
+      "event": "analysisResult",
+      "fedChunks": 2453,
+      "fedFrames": 10046080,
+      "keys": [
+        "E major"
+      ],
+      "name": "pitch_shifted_resampled_native",
+      "pace": 6,
+      "seconds": 3.4247050285339355,
+      "sections": 15
+    },
+    {
+      "date": "2026-10-18T12:10:00Z",
+      "event": "done"
+    },
+    {
+      "date": "2026-10-18T12:10:00Z",
+      "event": "restored",
+      "info": {
+        "id": "",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 0,
+        "volume": 0.12
+      }
+    }
+  ],
+  "permissionProof": {
+    "pid": 23578,
+    "cdhash": "cc0a237f9d474886af336457b87e26273df6d916",
+    "audioCaptureGranted": true,
+    "nonzeroPCMAndMuteVerified": true,
+    "events": [
+      {
+        "timestamp": "2026-10-18 21:01:14.713299+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1643, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:14.713816+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1643, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:14.714373+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1643, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:18.977943+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1646, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:18.978472+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1646, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:22.049465+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1646, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:22.267772+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1648, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:22.268405+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1648, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 21:01:22.269028+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1648, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+      }
+    ]
+  },
+  "alignmentProof": {
+    "confirmed": true,
+    "alignment": {
+      "commonDuration": 209.29333333333332,
+      "commonEnd": 209.31333333333333,
+      "commonStart": 0.02,
+      "date": "2026-10-18T12:09:16Z",
+      "event": "alignment",
+      "pitchKept": {
+        "driftRangeSeconds": 0,
+        "offsetSeconds": 1,
+        "resolutionSeconds": 0.01,
+        "windowCorrelations": [
+          0.8766782811949664,
+          0.8814891594278533,
+          0.8695935926576214
+        ],
+        "windowOffsets": [
+          1,
+          1,
+          1
+        ]
+      },
+      "pitchShifted": {
+        "driftRangeSeconds": 0,
+        "offsetSeconds": 1.52,
+        "resolutionSeconds": 0.01,
+        "windowCorrelations": [
+          0.9255017747862188,
+          0.9322160049846628,
+          0.9265538246124182
+        ],
+        "windowOffsets": [
+          1.52,
+          1.52,
+          1.52
+        ]
+      }
+    },
+    "check": "Three 20-second windows agree within 20 ms at 10 ms resolution; all envelope correlations exceed 0.8; peaks are inside ±3 s search. This validates timing alignment only, not analysis accuracy."
+  },
+  "utilityCheck": {
+    "alignment": {
+      "driftRangeSeconds": 0,
+      "offsetSeconds": 1.43,
+      "resolutionSeconds": 0.01,
+      "windowCorrelations": [
+        1,
+        1,
+        1
+      ],
+      "windowOffsets": [
+        1.43,
+        1.43,
+        1.43
+      ]
+    },
+    "convertedFrames": 72000,
+    "convertedHz": 440,
+    "convertedSeconds": 3,
+    "passed": true,
+    "relabelHz": 219.82758620689657,
+    "relabelSeconds": 6
+  },
+  "productIntegrity": {
+    "Sources/AppleMusic/AppleMusicAudioCapture.swift": {
+      "before": "79a996530ebe4a6ad9d132aa049bb84aadac105db26b9b15b851a60a9165c76d",
+      "after": "79a996530ebe4a6ad9d132aa049bb84aadac105db26b9b15b851a60a9165c76d",
+      "unchanged": true
+    },
+    "Sources/AppleMusic/AppleMusicAnalysis.swift": {
+      "before": "f478829d5d7f9b6635f574c2f1118b4db91d2d689b4842bbed1f38ff258ac419",
+      "after": "f478829d5d7f9b6635f574c2f1118b4db91d2d689b4842bbed1f38ff258ac419",
+      "unchanged": true
+    },
+    "Sources/AppleMusic/AppleMusicPlayback.swift": {
+      "before": "b59e5920376d27e7960eb340024c2a0650f7e1f6ec3210fdd50c430b1f8451c2",
+      "after": "b59e5920376d27e7960eb340024c2a0650f7e1f6ec3210fdd50c430b1f8451c2",
+      "unchanged": true
+    },
+    "Sources/AppleMusic/AppleMusicBridge.js": {
+      "before": "8e33e85e13ce96f7dfc2e1ca26175df58daff1f5ce1743fa10067ac166535670",
+      "after": "8e33e85e13ce96f7dfc2e1ca26175df58daff1f5ce1743fa10067ac166535670",
+      "unchanged": true
+    },
+    "Sources/App/PlayerStore.swift": {
+      "before": "c931757b10ad4152f7504114858d5b95d9ed3f952c8fb951889162b1132c9ffa",
+      "after": "c931757b10ad4152f7504114858d5b95d9ed3f952c8fb951889162b1132c9ffa",
+      "unchanged": true
+    },
+    "Sources/Analysis/MusicAnalyzer.swift": {
+      "before": "e5bfa25b9a709925afbca514873c23b4fd3dbf687c54ed1cd08ed9b1f7d93e12",
+      "after": "e5bfa25b9a709925afbca514873c23b4fd3dbf687c54ed1cd08ed9b1f7d93e12",
+      "unchanged": true
+    },
+    "dist/MusicPrayer.app/Contents/MacOS/MusicPrayer": {
+      "before": "a9c30412a622d2be02732fe73ef72e22f5af85f3bfd7774ea3bb35a4b3d97979",
+      "after": "a9c30412a622d2be02732fe73ef72e22f5af85f3bfd7774ea3bb35a4b3d97979",
+      "unchanged": true
+    }
+  },
+  "probeSourceHashes": {
+    "Main.swift": "f32d1b548d425ab1793bdb0b1a658a5f4862ccf55bd96f7f1926f8fbde144b3f",
+    "PCM.swift": "4adb8334d5c4ebf6c1cb0c74dd44df35e80da454b77bb659e14ab4b77989fdbe",
+    "Capture.swift": "af54b2af8d3f6edb2a745f85e18e506e0ad9336959c691b1e0dbc75ac6673259",
+    "compare.py": "b9fff73ac5fe37e09b8670f076f05f2bfe6a1657c447282c4ce361547a31e8ef",
+    "UtilityCheck.swift": "3522b70567040cc859a224b7fd11cc078873870cb04279d92adc663e4bd76e0f"
+  },
+  "excludedAttempts": {
+    "speedReset": {
+      "reason": "Playback rate reset to 1 at first play. Not used as a 2x comparison.",
+      "events": [
+        {
+          "date": "2026-10-18T11:43:49Z",
+          "event": "start",
+          "pid": 22765
+        },
+        {
+          "date": "2026-10-18T11:43:53Z",
+          "event": "musicKitReady"
+        },
+        {
+          "date": "2026-10-18T11:44:05Z",
+          "event": "permissionPreflight",
+          "mute": 1,
+          "nonzero": 34,
+          "processPID": 22774
+        },
+        {
+          "date": "2026-10-18T11:44:05Z",
+          "event": "waitingPermissionAudit"
+        },
+        {
+          "date": "2026-10-18T11:44:58Z",
+          "event": "permissionAuditConfirmed"
+        },
+        {
+          "date": "2026-10-18T11:44:59Z",
+          "event": "captureStart",
+          "info": {
+            "id": "1403236244",
+            "paused": false,
+            "playing": true,
+            "preservesPitch": true,
+            "protected": true,
+            "rate": 1,
+            "time": 0,
+            "volume": 0.12
+          },
+          "mute": 1,
+          "name": "native_1x"
+        },
+        {
+          "date": "2026-10-18T11:44:59Z",
+          "event": "captureProgress",
+          "media": 0,
+          "name": "native_1x",
+          "rms": 0,
+          "wall": 1.1663329601287842
+        },
+        {
+          "date": "2026-10-18T11:45:28Z",
+          "event": "captureProgress",
+          "media": 28.697905435985714,
+          "name": "native_1x",
+          "rms": 0.25268033146858215,
+          "wall": 30.00795304775238
+        },
+        {
+          "date": "2026-10-18T11:45:58Z",
+          "event": "captureProgress",
+          "media": 58.69490572733819,
+          "name": "native_1x",
+          "rms": 0.20571401715278625,
+          "wall": 60.00551104545593
+        },
+        {
+          "date": "2026-10-18T11:46:28Z",
+          "event": "captureProgress",
+          "media": 88.69804347766978,
+          "name": "native_1x",
+          "rms": 0.15891483426094055,
+          "wall": 90.00828301906586
+        },
+        {
+          "date": "2026-10-18T11:46:58Z",
+          "event": "captureProgress",
+          "media": 118.69936981064842,
+          "name": "native_1x",
+          "rms": 0.23339532315731049,
+          "wall": 120.01028597354889
+        },
+        {
+          "date": "2026-10-18T11:47:28Z",
+          "event": "captureProgress",
+          "media": 148.70439185330704,
+          "name": "native_1x",
+          "rms": 0.24024751782417297,
+          "wall": 150.01536095142365
+        },
+        {
+          "date": "2026-10-18T11:47:58Z",
+          "event": "captureProgress",
+          "media": 178.6912840603129,
+          "name": "native_1x",
+          "rms": 0.1143767312169075,
+          "wall": 180.00264596939087
+        },
+        {
+          "date": "2026-10-18T11:48:28Z",
+          "event": "captureProgress",
+          "media": 208.69545126935026,
+          "name": "native_1x",
+          "rms": 0.0008797455811873078,
+          "wall": 210.00687396526337
+        },
+        {
+          "channels": 2,
+          "date": "2026-10-18T11:48:29Z",
+          "duration": 210.368,
+          "event": "captureResult",
+          "frames": 10097664,
+          "info": {
+            "id": "",
+            "paused": true,
+            "playing": false,
+            "preservesPitch": true,
+            "protected": true,
+            "rate": 1,
+            "time": 0,
+            "volume": 0.12
+          },
+          "mute": 1,
+          "name": "native_1x",
+          "rate": 48000,
+          "stats": {
+            "buffers": 19722,
+            "maxCallbackGapSeconds": 1.734723475976807e-18,
+            "valid": true
+          },
+          "wall": 210.67569196224213
+        },
+        {
+          "date": "2026-10-18T11:48:30Z",
+          "event": "captureStart",
+          "info": {
+            "id": "1403236244",
+            "paused": false,
+            "playing": true,
+            "preservesPitch": true,
+            "protected": true,
+            "rate": 1,
+            "time": 0,
+            "volume": 0.12
+          },
+          "mute": 1,
+          "name": "pitch_kept_2x"
+        },
+        {
+          "date": "2026-10-18T11:48:30Z",
+          "event": "captureProgress",
+          "media": 0,
+          "name": "pitch_kept_2x",
+          "rms": 0,
+          "wall": 1.1127660274505615
+        },
+        {
+          "date": "2026-10-18T11:48:59Z",
+          "event": "captureProgress",
+          "media": 28.762054064013853,
+          "name": "pitch_kept_2x",
+          "rms": 0.2755665183067322,
+          "wall": 30.015793085098267
+        },
+        {
+          "date": "2026-10-18T11:49:29Z",
+          "event": "captureProgress",
+          "media": 58.75740793831827,
+          "name": "pitch_kept_2x",
+          "rms": 0.21416695415973663,
+          "wall": 60.01133108139038
+        }
+      ]
+    },
+    "narrowAlignment": {
+      "reason": "±1 s alignment search was too narrow for shifted-pitch capture. Candidate comparisons excluded.",
+      "alignment": [
+        {
+          "commonDuration": 209.3253333333333,
+          "commonEnd": 209.34533333333331,
+          "commonStart": 0.02,
+          "date": "2026-10-18T11:58:30Z",
+          "event": "alignment",
+          "pitchKept": {
+            "driftRangeSeconds": 0,
+            "offsetSeconds": 0.97,
+            "resolutionSeconds": 0.01,
+            "windowCorrelations": [
+              0.877250576257811,
+              0.8779796224278824,
+              0.85871331330087
+            ],
+            "windowOffsets": [
+              0.97,
+              0.97,
+              0.97
+            ]
+          },
+          "pitchShifted": {
+            "driftRangeSeconds": 1.51,
+            "offsetSeconds": 0.47000000000000003,
+            "resolutionSeconds": 0.01,
+            "windowCorrelations": [
+              0.43364969163636036,
+              0.2602270198865998,
+              0.32248054780272856
+            ],
+            "windowOffsets": [
+              0.97,
+              -0.54,
+              0.47000000000000003
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "primaryReferences": [
+    "https://developer.apple.com/documentation/CoreAudio/capturing-system-audio-with-core-audio-taps",
+    "https://developer.apple.com/videos/play/wwdc2026/253/"
+  ],
+  "limits": [
+    "One track; consistency against the normal-input result, not independent musical ground truth.",
+    "Timing alignment uses 10 ms RMS windows; uncertainty is approximately one grid step.",
+    "100 ms grids summarize activity/loudness; full time series is retained.",
+    "50 ms event matching is descriptive and not an acceptance threshold.",
+    "RAM analysis timing excludes Apple Music acquisition and model/capture setup.",
+    "The precise internal stage causing candidate differences is not isolated."
+  ]
+}

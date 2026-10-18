@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-18",
+  "songID": "1403236244",
+  "song": "Wink 愛が止まらない ~Turn it into love~ (Remastered 2018)",
+  "input": "actual Apple Music / process tap / production AppleMusicAnalysis",
+  "outputVolume": 0.12,
+  "results": {
+    "beats": 416,
+    "bars": 104,
+    "sections": 14,
+    "segments": 28,
+    "phrases": 53,
+    "pace": 3,
+    "vocal": 4183,
+    "drums": 4183,
+    "bass": 4183,
+    "other": 4183,
+    "momentary": 2082,
+    "shortTerm": 2082,
+    "keys": 1,
+    "instrumentRanges": {
+      "drums": 1,
+      "vocal": 7,
+      "bass": 1,
+      "other": 1
+    },
+    "duration": 208.988,
+    "bpm": 119.48224,
+    "integrated": -9.823499
+  },
+  "liveRun": {
+    "beats": 416,
+    "bpm": 119.48223876953125,
+    "duration": 0,
+    "ended": true,
+    "error": "",
+    "event": "result",
+    "fftFrames": 6226,
+    "inputOrigin": 0.013466458331095055,
+    "inputSeconds": 209.13066666675385,
+    "inputValid": true,
+    "keys": [
+      "E major"
+    ],
+    "liveFrames": 6223,
+    "maxRMS": 0.36814814805984497,
+    "momentary": 2082,
+    "samples": 6263,
+    "sections": 14,
+    "time": 0,
+    "vocal": 4183
+  },
+  "reusedFrame": {
+    "bassInstrument": 0.6622794270515442,
+    "beat": 1,
+    "bpm": 119.48223876953125,
+    "drums": 0.6903995275497437,
+    "event": "reused",
+    "hasAnalysis": 1,
+    "hue": -0.006627631839364767,
+    "key": "E major",
+    "loudness": 0.3497021198272705,
+    "sceneCount": 14,
+    "section": 3,
+    "vocal": 0.6697800159454346
+  },
+  "scope": "One actual catalog song; no screen capture; no audio file; isolated derived-analysis cache."
+}

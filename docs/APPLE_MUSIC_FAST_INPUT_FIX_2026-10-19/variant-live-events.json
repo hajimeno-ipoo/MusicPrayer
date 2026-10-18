@@ -1,0 +1,399 @@
+[
+  {
+    "date": "2026-10-18T18:04:57Z",
+    "event": "start",
+    "pid": 40201
+  },
+  {
+    "date": "2026-10-18T18:05:00Z",
+    "event": "musicKitReady"
+  },
+  {
+    "date": "2026-10-18T18:05:13Z",
+    "event": "permissionPreflight",
+    "mute": 1,
+    "nonzero": 35,
+    "processPID": 40204
+  },
+  {
+    "date": "2026-10-18T18:05:13Z",
+    "event": "waitingPermissionAudit"
+  },
+  {
+    "date": "2026-10-18T18:05:49Z",
+    "event": "permissionAuditConfirmed"
+  },
+  {
+    "date": "2026-10-18T18:05:51Z",
+    "event": "captureStart",
+    "info": {
+      "id": "1403236244",
+      "paused": false,
+      "playing": true,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 1,
+      "time": 30,
+      "volume": 0.12
+    },
+    "mute": 1,
+    "name": "native_1x"
+  },
+  {
+    "date": "2026-10-18T18:05:51Z",
+    "event": "captureProgress",
+    "media": 30,
+    "name": "native_1x",
+    "rms": 0,
+    "wall": 0.21620392799377441
+  },
+  {
+    "date": "2026-10-18T18:06:21Z",
+    "event": "captureProgress",
+    "media": 59.5169315356913,
+    "name": "native_1x",
+    "rms": 0.2043209969997406,
+    "wall": 30.006244897842407
+  },
+  {
+    "channels": 2,
+    "date": "2026-10-18T18:06:31Z",
+    "duration": 40.512,
+    "event": "captureResult",
+    "frames": 1944576,
+    "info": {
+      "id": "1403236244",
+      "paused": true,
+      "playing": false,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 1,
+      "time": 70.0225523690185,
+      "volume": 0.12
+    },
+    "mute": 1,
+    "name": "native_1x",
+    "rate": 48000,
+    "stats": {
+      "buffers": 3798,
+      "maxCallbackGapSeconds": 1.734723475976807e-18,
+      "valid": true
+    },
+    "wall": 40.57050800323486
+  },
+  {
+    "date": "2026-10-18T18:06:33Z",
+    "event": "captureStart",
+    "info": {
+      "id": "1403236244",
+      "paused": false,
+      "playing": true,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 2,
+      "time": 30,
+      "volume": 0.12
+    },
+    "mute": 1,
+    "name": "pitch_kept_2x"
+  },
+  {
+    "date": "2026-10-18T18:06:33Z",
+    "event": "captureProgress",
+    "media": 30,
+    "name": "pitch_kept_2x",
+    "rms": 0,
+    "wall": 0.39083194732666016
+  },
+  {
+    "channels": 2,
+    "date": "2026-10-18T18:06:53Z",
+    "duration": 20.746666666666666,
+    "event": "captureResult",
+    "frames": 995840,
+    "info": {
+      "id": "1403236244",
+      "paused": true,
+      "playing": false,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 2,
+      "time": 70.06331599200821,
+      "volume": 0.12
+    },
+    "mute": 1,
+    "name": "pitch_kept_2x",
+    "rate": 48000,
+    "stats": {
+      "buffers": 1945,
+      "maxCallbackGapSeconds": 1.734723475976807e-18,
+      "valid": true
+    },
+    "wall": 20.771853923797607
+  },
+  {
+    "date": "2026-10-18T18:06:53Z",
+    "event": "timeExpansion",
+    "inputFrames": 995840,
+    "outputFrames": 1991680,
+    "paddingInputFrames": 12000,
+    "renderedFrames": 2039680,
+    "sampleRate": 48000,
+    "trimmedFrames": 24000,
+    "unitLatencySeconds": 0
+  },
+  {
+    "commonDuration": 40.471999999999994,
+    "commonEnd": 40.492,
+    "commonStart": 0.02,
+    "date": "2026-10-18T18:06:53Z",
+    "event": "alignment",
+    "restored": {
+      "driftRangeSeconds": 0.010000000000000009,
+      "offsetSeconds": 0.92,
+      "resolutionSeconds": 0.01,
+      "windowCorrelations": [
+        0.8921851270948546,
+        0.8531836280401794,
+        0.8479297567329357
+      ],
+      "windowOffsets": [
+        0.92,
+        0.92,
+        0.93
+      ]
+    }
+  },
+  {
+    "chunks": 475,
+    "date": "2026-10-18T18:06:54Z",
+    "duration": 40.472,
+    "event": "analysisStart",
+    "frames": 1942656,
+    "name": "reference",
+    "rate": 48000,
+    "sha256": "62c024563ee29de851b4728e8a1181ce5f85d6d7004f0c2de8c3bfee89feb9c8",
+    "timeScale": 1
+  },
+  {
+    "bars": 20,
+    "beats": 81,
+    "bpm": 119.4000015258789,
+    "date": "2026-10-18T18:06:54Z",
+    "duration": 40.472,
+    "event": "analysisResult",
+    "fedChunks": 475,
+    "fedFrames": 1942656,
+    "keys": [
+      "E major"
+    ],
+    "name": "reference",
+    "pace": 1,
+    "seconds": 0.7385660409927368,
+    "sections": 4
+  },
+  {
+    "chunks": 475,
+    "date": "2026-10-18T18:06:54Z",
+    "duration": 40.472,
+    "event": "analysisStart",
+    "frames": 1942656,
+    "name": "corrected",
+    "rate": 48000,
+    "sha256": "d25a092b7f4a776eeb24b70a470389282a48babf338fdb3a35e9aa9eb9f8dc5d",
+    "timeScale": 1
+  },
+  {
+    "bars": 20,
+    "beats": 81,
+    "bpm": 119.4000015258789,
+    "date": "2026-10-18T18:06:55Z",
+    "duration": 40.472,
+    "event": "analysisResult",
+    "fedChunks": 475,
+    "fedFrames": 1942656,
+    "keys": [
+      "E major"
+    ],
+    "name": "corrected",
+    "pace": 1,
+    "seconds": 0.581866979598999,
+    "sections": 4
+  },
+  {
+    "chunks": 475,
+    "date": "2026-10-18T18:06:55Z",
+    "duration": 40.472,
+    "event": "analysisStart",
+    "frames": 1942656,
+    "name": "smoothness3",
+    "rate": 48000,
+    "sha256": "256c6188f019de4ed083e065a82afc4aac6d21fb22376c5f7caf1080940bd083",
+    "timeScale": 1
+  },
+  {
+    "bars": 20,
+    "beats": 81,
+    "bpm": 119.60310363769531,
+    "date": "2026-10-18T18:06:56Z",
+    "duration": 40.472,
+    "event": "analysisResult",
+    "fedChunks": 475,
+    "fedFrames": 1942656,
+    "keys": [
+      "E major"
+    ],
+    "name": "smoothness3",
+    "pace": 3,
+    "seconds": 0.6068829298019409,
+    "sections": 4
+  },
+  {
+    "compressedRMS": 0.21442386337019026,
+    "date": "2026-10-18T18:06:56Z",
+    "event": "stageLevels",
+    "expanded3RMS": 0.19876672099226755,
+    "expanded8RMS": 0.19612250355208935,
+    "nativeRMS": 0.22720265172735196
+  },
+  {
+    "date": "2026-10-18T18:06:56Z",
+    "event": "shortComplete"
+  },
+  {
+    "date": "2026-10-18T18:07:56Z",
+    "event": "captureStart",
+    "info": {
+      "id": "1403236244",
+      "paused": false,
+      "playing": true,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 2,
+      "time": 1.4828277587890626e-05,
+      "volume": 0.12
+    },
+    "mute": 1,
+    "name": "full_pitch_kept_2x"
+  },
+  {
+    "date": "2026-10-18T18:07:56Z",
+    "event": "captureProgress",
+    "media": 1.4828277587890626e-05,
+    "name": "full_pitch_kept_2x",
+    "rms": 0,
+    "wall": 0.1020500659942627
+  },
+  {
+    "date": "2026-10-18T18:08:26Z",
+    "event": "captureProgress",
+    "media": 58.73680555933646,
+    "name": "full_pitch_kept_2x",
+    "rms": 0.20126810669898987,
+    "wall": 30.007336974143982
+  },
+  {
+    "date": "2026-10-18T18:08:56Z",
+    "event": "captureProgress",
+    "media": 118.73389680864946,
+    "name": "full_pitch_kept_2x",
+    "rms": 0.22213174402713776,
+    "wall": 60.00602102279663
+  },
+  {
+    "date": "2026-10-18T18:09:26Z",
+    "event": "captureProgress",
+    "media": 178.74709280730724,
+    "name": "full_pitch_kept_2x",
+    "rms": 0.18322551250457764,
+    "wall": 90.01294898986816
+  },
+  {
+    "channels": 2,
+    "date": "2026-10-18T18:09:42Z",
+    "duration": 105.23733333333334,
+    "event": "captureResult",
+    "frames": 5051392,
+    "info": {
+      "id": "",
+      "paused": true,
+      "playing": false,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 2,
+      "time": 0,
+      "volume": 0.12
+    },
+    "mute": 1,
+    "name": "full_pitch_kept_2x",
+    "rate": 48000,
+    "stats": {
+      "buffers": 9866,
+      "maxCallbackGapSeconds": 1.734723475976807e-18,
+      "valid": true
+    },
+    "wall": 105.38349902629852
+  },
+  {
+    "date": "2026-10-18T18:09:42Z",
+    "event": "fullTimeExpansion",
+    "inputFrames": 5051392,
+    "outputFrames": 10102784,
+    "paddingInputFrames": 12000,
+    "renderedFrames": 10150784,
+    "sampleRate": 48000,
+    "trimmedFrames": 24000,
+    "unitLatencySeconds": 0
+  },
+  {
+    "chunks": 2467,
+    "date": "2026-10-18T18:09:42Z",
+    "duration": 210.47466666666668,
+    "event": "analysisStart",
+    "frames": 10102784,
+    "name": "full_corrected",
+    "rate": 48000,
+    "sha256": "7454b0218ece726644be0cd33598c740fb66940c996bce166413c8cc73365cfe",
+    "timeScale": 1
+  },
+  {
+    "bars": 105,
+    "beats": 419,
+    "bpm": 119.46891021728516,
+    "date": "2026-10-18T18:09:45Z",
+    "duration": 210.47466666666668,
+    "event": "analysisResult",
+    "fedChunks": 2467,
+    "fedFrames": 10102784,
+    "keys": [
+      "E major"
+    ],
+    "name": "full_corrected",
+    "pace": 10,
+    "seconds": 2.7545909881591797,
+    "sections": 15
+  },
+  {
+    "date": "2026-10-18T18:09:45Z",
+    "event": "fullComplete",
+    "wallSeconds": 110.62954902648926
+  },
+  {
+    "date": "2026-10-18T18:11:20Z",
+    "event": "done"
+  },
+  {
+    "date": "2026-10-18T18:11:20Z",
+    "event": "restored",
+    "info": {
+      "id": "",
+      "paused": true,
+      "playing": false,
+      "preservesPitch": true,
+      "protected": true,
+      "rate": 1,
+      "time": 0,
+      "volume": 0.12
+    }
+  }
+]

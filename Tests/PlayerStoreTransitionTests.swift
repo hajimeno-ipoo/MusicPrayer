@@ -7,6 +7,333 @@ import XCTest
 @testable import MusicPrayer
 
 final class PlayerStoreTransitionTests: XCTestCase {
+    private var catalogSong: AppleMusicSong {
+        AppleMusicSong(id: "123456", title: "配信曲", artist: "歌手", album: "アルバム", artworkURL: nil, duration: 209)
+    }
+
+    @MainActor
+    func testOpeningSearchAndSignInKeepsLocalPlaybackAndSelection() async throws {
+        try await withLyricFixture { store, _ in
+            store.select(0, autoplay: false)
+            store.seek(0.7)
+            store.togglePlayback()
+            let id = store.currentTrack?.id
+            let generation = store.playbackGeneration
+            store.openAppleMusic()
+            XCTAssertTrue(store.isAppleMusicSearchVisible)
+            XCTAssertFalse(store.isAppleMusicActive)
+            XCTAssertTrue(store.engine.isPlaying)
+            store.openAppleMusicSignIn()
+            XCTAssertTrue(store.isAppleMusicBrowserVisible)
+            store.showAppleMusicPlayer()
+            XCTAssertFalse(store.isAppleMusicBrowserVisible)
+            XCTAssertEqual(store.currentTrack?.id, id)
+            XCTAssertEqual(store.playbackGeneration, generation)
+            XCTAssertTrue(store.isPlaying)
+            XCTAssertFalse(store.appleMusic.isInitialized)
+        }
+    }
+
+    @MainActor
+    func testAddingAppleMusicSongOnlyRegistersInSameQueueAndDeduplicates() async throws {
+        try await withLyricFixture { store, _ in
+            store.select(0, autoplay: false)
+            store.seek(0.7)
+            let id = store.currentTrack?.id
+            let generation = store.playbackGeneration
+            store.openAppleMusic()
+            store.addAppleMusicSong(self.catalogSong)
+            store.addAppleMusicSong(self.catalogSong)
+            XCTAssertEqual(store.tracks.count, 3)
+            XCTAssertEqual(store.tracks.last?.appleMusicSong, self.catalogSong)
+            XCTAssertEqual(store.currentQueueTrack?.id, id)
+            XCTAssertEqual(store.engine.currentTime, 0.7, accuracy: 0.03)
+            XCTAssertEqual(store.playbackGeneration, generation)
+            XCTAssertFalse(store.isAppleMusicActive)
+            XCTAssertFalse(store.isAppleMusicSearchVisible)
+            XCTAssertFalse(store.isPlaying)
+            XCTAssertFalse(store.appleMusic.isInitialized)
+        }
+    }
+
+    @MainActor
+    func testSelectingRegisteredAppleMusicPausesLocalAndClearsItsAnalysisAndLyrics() async throws {
+        try await withLyricFixture { store, _ in
+            store.select(0, autoplay: false)
+            try await self.waitUntil("ローカル音源の準備") { store.lyricFingerprint != nil }
+            store.seek(0.7)
+            store.applyLyrics("ローカル音源だけの歌詞")
+            let generation = store.playbackGeneration
+            store.addAppleMusicSong(self.catalogSong)
+            store.select(2, autoplay: false)
+            XCTAssertTrue(store.isAppleMusicActive)
+            XCTAssertFalse(store.engine.isPlaying)
+            XCTAssertEqual(store.currentQueueTrack?.appleMusicSong, self.catalogSong)
+            XCTAssertNil(store.currentTrack)
+            XCTAssertEqual(store.duration, 209)
+            XCTAssertGreaterThan(store.playbackGeneration, generation)
+            XCTAssertNil(store.analysis)
+            XCTAssertEqual(store.lyricText, "")
+            try await Task.sleep(for: .milliseconds(100))
+            XCTAssertNil(store.analysis)
+            XCTAssertEqual(store.lyricText, "")
+            store.select(1, autoplay: false)
+            try await self.waitUntil("一覧でローカルを選ぶだけで戻る") { !store.isAppleMusicActive }
+            XCTAssertEqual(store.currentIndex, 1)
+            XCTAssertFalse(store.isPlaying)
+        }
+    }
+
+    @MainActor
+    func testNextAndPreviousNavigateMixedQueueWithoutManualModeSwitch() async throws {
+        try await withLyricFixture { store, _ in
+            store.addAppleMusicSong(self.catalogSong)
+            store.tracks.swapAt(1, 2)
+            store.select(0, autoplay: false)
+            store.next()
+            XCTAssertEqual(store.currentIndex, 1)
+            XCTAssertTrue(store.isAppleMusicActive)
+            XCTAssertTrue(store.canSkipNext)
+            store.next()
+            try await self.waitUntil("次のローカル曲へ自動切り替え") { store.currentIndex == 2 && !store.isAppleMusicActive }
+            store.previous()
+            XCTAssertEqual(store.currentIndex, 1)
+            XCTAssertTrue(store.isAppleMusicActive)
+            let id = try XCTUnwrap(store.currentQueueTrack?.id)
+            store.remove(id)
+            try await self.waitUntil("現在の配信曲を外すと残った曲を選択") { !store.isAppleMusicActive }
+            XCTAssertEqual(store.tracks.count, 2)
+            XCTAssertNotNil(store.currentTrack)
+        }
+    }
+
+    @MainActor
+    func testOpeningSearchDuringRestoreKeepsSavedLocalSongAndPosition() async throws {
+        try await withLyricFixture { store, fixture in
+            try QueuePersistence.save(tracks: store.tracks, current: 1, time: 0.8, volume: 0)
+            store.tracks = []
+            let restoring = Task { await store.restore() }
+            await Task.yield()
+            store.openAppleMusic()
+            await restoring.value
+            XCTAssertFalse(store.isAppleMusicActive)
+            XCTAssertTrue(store.isAppleMusicSearchVisible)
+            XCTAssertEqual(store.currentTrack?.url.resolvingSymlinksInPath(), fixture.audio[1].resolvingSymlinksInPath())
+            XCTAssertEqual(store.position, 0.8, accuracy: 0.03)
+            XCTAssertFalse(store.isPlaying)
+        }
+    }
+
+    @MainActor
+    func testRestoreKeepsAppleMusicEntrySelectedWithoutAutoplay() async throws {
+        try await withLyricFixture { store, _ in
+            store.addAppleMusicSong(self.catalogSong)
+            try QueuePersistence.save(tracks: store.tracks, current: 2, time: 31, volume: 0)
+            store.tracks = []
+            await store.restore()
+            XCTAssertEqual(store.tracks.count, 3)
+            XCTAssertEqual(store.currentIndex, 2)
+            XCTAssertTrue(store.isAppleMusicActive)
+            XCTAssertFalse(store.isPlaying)
+            XCTAssertEqual(store.position, 31)
+            XCTAssertEqual(store.currentQueueTrack?.appleMusicSong, self.catalogSong)
+            store.persist()
+            let session = try XCTUnwrap(QueuePersistence.restore())
+            XCTAssertEqual(session.current, 2)
+            XCTAssertEqual(session.time, 31)
+        }
+    }
+
+    @MainActor
+    func testLocalTrackEndAdvancesToAppleMusicEntry() async throws {
+        try await withLyricFixture { store, _ in
+            store.addAppleMusicSong(self.catalogSong)
+            store.tracks.swapAt(1, 2)
+            store.select(0, autoplay: true)
+            try await self.waitUntil("ローカル曲の終了後に配信曲を選択") {
+                store.currentIndex == 1 && store.isAppleMusicActive
+            }
+            XCTAssertFalse(store.engine.isPlaying)
+            XCTAssertEqual(store.currentQueueTrack?.appleMusicSong, self.catalogSong)
+        }
+    }
+
+    @MainActor
+    func testRepeatAllWrapsFromAppleMusicEntryToFirstLocalSong() async throws {
+        try await withLyricFixture { store, _ in
+            store.addAppleMusicSong(self.catalogSong)
+            store.repeatSetting = .all
+            store.select(2, autoplay: false)
+            XCTAssertTrue(store.canSkipNext)
+            store.next()
+            try await self.waitUntil("混在一覧の先頭へ戻る") { store.currentIndex == 0 && !store.isAppleMusicActive }
+            XCTAssertNotNil(store.currentTrack)
+        }
+    }
+
+    @MainActor
+    func testRemovingLastTrackDeletesLyricsAndReaddingDoesNotRestoreThem() async throws {
+        try await withLyricFixture { store, fixture in
+            store.tracks = [store.tracks[0]]
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: "削除する曲の歌詞", request: 0)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("保存済み歌詞を読み込むこと") { store.lyricText == "削除する曲の歌詞" }
+            store.remove(store.tracks[0].id)
+            XCTAssertTrue(store.tracks.isEmpty)
+            XCTAssertNil(store.currentTrack)
+            XCTAssertEqual(store.lyricText, "")
+            XCTAssertNil(store.lyricTimeline)
+            XCTAssertNil(store.lyricFingerprint)
+            XCTAssertEqual(store.lyricTimingState, .unset)
+            XCTAssertNil(store.visualSource.snapshot().lyrics?.audioFingerprint)
+            try await self.waitUntil("最後の曲の保存歌詞を削除すること") {
+                (try fixture.saved(index: 0)) == nil && !store.needsLyricSaveBeforeTermination
+            }
+            await store.add(urls: [fixture.audio[0]])
+            try await self.waitUntil("再追加した曲の歌詞確認が完了すること") {
+                store.lyricFingerprint == fixture.fingerprints[0]
+            }
+            XCTAssertEqual(store.lyricText, "")
+            XCTAssertNil(store.lyricTimeline)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.audio[0].path),
+                          "一覧からの削除で元の音声ファイルを削除しないこと")
+        }
+    }
+
+    @MainActor
+    func testRemovingUnselectedTrackDeletesOnlyItsLyrics() async throws {
+        try await withLyricFixture { store, fixture in
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: "削除する歌詞", request: 0)
+            _ = try await savedStore.saveText(url: fixture.audio[1], text: "残す歌詞", request: 1)
+            store.select(1, autoplay: false)
+            try await self.waitUntil("現在曲の歌詞を読み込むこと") { store.lyricText == "残す歌詞" }
+            let currentID = store.currentTrack?.id, generation = store.playbackGeneration
+            store.remove(store.tracks[0].id)
+            XCTAssertEqual(store.currentTrack?.id, currentID)
+            XCTAssertEqual(store.playbackGeneration, generation)
+            XCTAssertEqual(store.lyricText, "残す歌詞")
+            try await self.waitUntil("選択していない曲の保存歌詞を削除すること") {
+                (try fixture.saved(index: 0)) == nil && !store.needsLyricSaveBeforeTermination
+            }
+            XCTAssertEqual(try fixture.saved(index: 1)?.sourceText, "残す歌詞")
+            XCTAssertEqual(store.lyricText, "残す歌詞")
+        }
+    }
+
+    @MainActor
+    func testRemovingCurrentTrackLoadsRemainingTracksOwnLyrics() async throws {
+        try await withLyricFixture { store, fixture in
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: "削除する歌詞", request: 0)
+            _ = try await savedStore.saveText(url: fixture.audio[1], text: "次の曲の歌詞", request: 1)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("削除前の歌詞を読み込むこと") { store.lyricText == "削除する歌詞" }
+            store.remove(store.tracks[0].id)
+            try await self.waitUntil("残った曲の歌詞へ切り替わること") {
+                let removedLyrics = try fixture.saved(index: 0)
+                return store.lyricText == "次の曲の歌詞" && removedLyrics == nil && !store.needsLyricSaveBeforeTermination
+            }
+            XCTAssertEqual(store.currentTrack?.url, fixture.audio[1])
+            XCTAssertEqual(try fixture.saved(index: 1)?.sourceText, "次の曲の歌詞")
+        }
+    }
+
+    @MainActor
+    func testRemovingTrackImmediatelyAfterApplyingLyricsDoesNotLeaveASave() async throws {
+        try await withLyricFixture { store, fixture in
+            store.tracks = [store.tracks[0]]
+            store.select(0, autoplay: false)
+            try await self.waitUntil("音源の確認を終えること") { store.lyricFingerprint == fixture.fingerprints[0] }
+            store.applyLyrics("保存直後に削除する歌詞")
+            store.remove(store.tracks[0].id)
+            let finished = await store.finishLyricsBeforeTermination()
+            XCTAssertTrue(finished)
+            XCTAssertNil(try fixture.saved(index: 0))
+            XCTAssertEqual(store.lyricText, "")
+            XCTAssertNil(store.lyricTimeline)
+        }
+    }
+
+    @MainActor
+    func testRemovingOneCopyKeepsLyricsForIdenticalAudioStillInQueue() async throws {
+        try await withLyricFixture(sameAudio: true) { store, fixture in
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: "同じ音源の歌詞", request: 0)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("共有歌詞を読み込むこと") { store.lyricText == "同じ音源の歌詞" }
+            store.remove(store.tracks[0].id)
+            try await self.waitUntil("同じ音源が残る場合は共有歌詞を維持すること") {
+                store.currentTrack?.url == fixture.audio[1] && store.lyricText == "同じ音源の歌詞" && !store.needsLyricSaveBeforeTermination
+            }
+            XCTAssertEqual(try fixture.saved(index: 1)?.sourceText, "同じ音源の歌詞")
+            store.remove(store.tracks[0].id)
+            try await self.waitUntil("最後の音源を削除した場合は共有歌詞も削除すること") {
+                (try fixture.saved(index: 1)) == nil && !store.needsLyricSaveBeforeTermination
+            }
+        }
+    }
+
+    @MainActor
+    func testRemovingReplacedAudioKeepsLyricsForItsOriginalCopy() async throws {
+        try await withLyricFixture(sameAudio: true) { store, fixture in
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: "元音源の歌詞", request: 0)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("元音源の識別情報を取得すること") { store.lyricText == "元音源の歌詞" }
+            // Replace only the removed source with a different byte size.
+            try Data("replacement audio".utf8).write(to: fixture.audio[0], options: .atomic)
+            store.remove(store.tracks[0].id)
+            try await self.waitUntil("一覧に残った元音源の歌詞を維持すること") {
+                store.currentTrack?.url == fixture.audio[1] && store.lyricText == "元音源の歌詞" && !store.needsLyricSaveBeforeTermination
+            }
+            XCTAssertEqual(try fixture.saved(index: 1)?.sourceText, "元音源の歌詞")
+        }
+    }
+
+    @MainActor
+    func testRemovingMissingCurrentAudioUsesItsKnownLyricFingerprint() async throws {
+        try await withLyricFixture { store, fixture in
+            store.tracks = [store.tracks[0]]
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: "元ファイルが無い歌詞", request: 0)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("歌詞の識別情報を取得すること") { store.lyricText == "元ファイルが無い歌詞" }
+            try FileManager.default.removeItem(at: fixture.audio[0])
+            store.remove(store.tracks[0].id)
+            try await self.waitUntil("取得済み識別情報で保存歌詞を削除すること") {
+                (try fixture.saved(index: 0)) == nil && !store.needsLyricSaveBeforeTermination
+            }
+            XCTAssertNil(store.lyricSaveError)
+        }
+    }
+
+    @MainActor
+    func testRemovingTrackReportsDeleteFailureAndRetryRemovesLyrics() async throws {
+        guard geteuid() != 0 else { throw XCTSkip("管理者特権では削除権限の失敗を検証できません") }
+        try await withLyricFixture { store, fixture in
+            store.tracks = [store.tracks[0]]
+            let savedStore = LyricStore(directory: fixture.lyrics)
+            _ = try await savedStore.saveText(url: fixture.audio[0], text: "削除を再試行する歌詞", request: 0)
+            store.select(0, autoplay: false)
+            try await self.waitUntil("削除前の歌詞を読み込むこと") { store.lyricText == "削除を再試行する歌詞" }
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: fixture.lyrics.path)
+            defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fixture.lyrics.path) }
+            store.remove(store.tracks[0].id)
+            try await self.waitUntil("歌詞の削除失敗を保持すること") { store.hasPendingLyricSaveFailure }
+            XCTAssertEqual(store.lyricText, "")
+            XCTAssertTrue(store.lyricSaveError?.contains("歌詞を削除できませんでした") == true)
+            XCTAssertNotNil(try fixture.saved(index: 0))
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fixture.lyrics.path)
+            store.retryLyricSave()
+            try await self.waitUntil("曲が無くても削除を再試行すること") {
+                (try fixture.saved(index: 0)) == nil && !store.needsLyricSaveBeforeTermination
+            }
+            XCTAssertNil(store.lyricSaveError)
+        }
+    }
+
     @MainActor
     func testPairedDropSelectsItsSongAndKeepsImportedLyricsUnapplied() async throws {
         try await withLyricFixture { store, fixture in
@@ -79,7 +406,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
     func testVisualizerUpdatesWhileRunLoopTracksControls() throws {
         _ = NSApplication.shared
         let backup = try FileBackup(QueuePersistence.file)
-        let store = PlayerStore()
+        let store = PlayerStore(appleMusicAnalysisDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("MusicPrayerAnalysisTests-" + UUID().uuidString))
         defer {
             store.shutdown()
             do { try backup.restore() }
@@ -125,7 +452,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
         // Run with the app closed: normal select/shutdown persist to the real queue location.
         // Preserve exact prior bytes without changing production persistence for the test.
         let backups = try ([QueuePersistence.file] + cacheFiles).map(FileBackup.init)
-        let store = PlayerStore()
+        let store = PlayerStore(appleMusicAnalysisDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("MusicPrayerAnalysisTests-" + UUID().uuidString))
         defer {
             store.shutdown()
             for backup in backups {
@@ -731,7 +1058,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
             second = try writeTone(to: directory.appendingPathComponent("second.wav"), sampleRate: 48_000, channels: 2)
         }
         let fixture = try LyricTransitionFixture(directory: directory, audio: [first, second])
-        let store = PlayerStore(lyricDirectory: fixture.lyrics, lyricTranscriber: lyricTranscriber)
+        let store = PlayerStore(lyricDirectory: fixture.lyrics, lyricTranscriber: lyricTranscriber, appleMusicAnalysisDirectory: fixture.lyrics.appendingPathComponent("AppleMusicAnalysis"))
         store.volume = 0
         store.tracks = [Track(url: first), Track(url: second)]
         var operationError: Error?

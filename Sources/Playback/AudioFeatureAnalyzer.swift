@@ -12,6 +12,7 @@ final class AudioFeatureAnalyzer: @unchecked Sendable {
     private var historyIndex = 0
     private var historyCount = 0
     private var resetRequested = false
+    private var inputGain: Float = 1
     private var samples = [Float](repeating: 0, count: fftSize)
     private var filled = 0
     private var sinceTransform = 0
@@ -58,6 +59,12 @@ final class AudioFeatureAnalyzer: @unchecked Sendable {
         snapshotLock.unlock()
     }
 
+    func setInputGain(_ value: Float) {
+        snapshotLock.lock()
+        inputGain = value
+        snapshotLock.unlock()
+    }
+
     func process(_ buffer: AVAudioPCMBuffer, at time: AVAudioTime) {
         processFrames(count: Int(buffer.frameLength), channelCount: Int(buffer.format.channelCount), time: time) { channel, frame in
             buffer.floatChannelData![channel][frame]
@@ -73,10 +80,36 @@ final class AudioFeatureAnalyzer: @unchecked Sendable {
         }
     }
 
+    /// Core Audio taps provide Float32 buffers in planar or interleaved layout.
+    /// Read them directly so the audio callback does not copy or allocate PCM buffers.
+    func process(_ bufferList: UnsafePointer<AudioBufferList>, at time: AVAudioTime) {
+        let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: bufferList))
+        guard !buffers.isEmpty else { return }
+        var channels = 0
+        var frames = Int.max
+        for buffer in buffers {
+            guard buffer.mData != nil, buffer.mNumberChannels > 0 else { return }
+            channels += Int(buffer.mNumberChannels)
+            frames = min(frames, Int(buffer.mDataByteSize) / (MemoryLayout<Float>.size * Int(buffer.mNumberChannels)))
+        }
+        processFrames(count: frames, channelCount: channels, time: time) { channel, frame in
+            var offset = channel
+            for buffer in buffers {
+                let count = Int(buffer.mNumberChannels)
+                if offset < count {
+                    return buffer.mData!.assumingMemoryBound(to: Float.self)[frame * count + offset]
+                }
+                offset -= count
+            }
+            return 0
+        }
+    }
+
     private func processFrames(count: Int, channelCount: Int, time: AVAudioTime, sample: (Int, Int) -> Float) {
         guard channelCount > 0 else { return }
         snapshotLock.lock()
         let reset = resetRequested
+        let gain = inputGain
         resetRequested = false
         snapshotLock.unlock()
         if reset {
@@ -86,7 +119,7 @@ final class AudioFeatureAnalyzer: @unchecked Sendable {
         for frame in 0..<count {
             var mono: Float = 0
             for channel in 0..<channelCount { mono += sample(channel, frame) }
-            mono /= Float(channelCount)
+            mono = mono / Float(channelCount) * gain
             if filled < Self.fftSize {
                 samples[filled] = mono
                 filled += 1

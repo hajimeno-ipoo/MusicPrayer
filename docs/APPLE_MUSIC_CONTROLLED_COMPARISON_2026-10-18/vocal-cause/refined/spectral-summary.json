@@ -1,0 +1,122 @@
+[
+  {
+    "frequencyHz": 6088.740428813931,
+    "actualMinusReferenceDB": -0.0005147446663895893,
+    "filteredMinusReferenceDB": 1.3813810758738135e-05
+  },
+  {
+    "frequencyHz": 6267.154141719837,
+    "actualMinusReferenceDB": -0.0007735640677198341,
+    "filteredMinusReferenceDB": -0.00023257557652117897
+  },
+  {
+    "frequencyHz": 6450.795775461749,
+    "actualMinusReferenceDB": -0.00032420222310423045,
+    "filteredMinusReferenceDB": -0.002227481002103262
+  },
+  {
+    "frequencyHz": 6639.81851981317,
+    "actualMinusReferenceDB": -0.0008393355141022126,
+    "filteredMinusReferenceDB": -0.0015103531340667387
+  },
+  {
+    "frequencyHz": 6834.380053350577,
+    "actualMinusReferenceDB": -0.0007039356276992156,
+    "filteredMinusReferenceDB": -0.0010901372573737197
+  },
+  {
+    "frequencyHz": 7034.642674985415,
+    "actualMinusReferenceDB": -0.00037834693927439817,
+    "filteredMinusReferenceDB": -0.0006522678406442939
+  },
+  {
+    "frequencyHz": 7240.773439350247,
+    "actualMinusReferenceDB": -0.000713502616124641,
+    "filteredMinusReferenceDB": -0.000544864029698886
+  },
+  {
+    "frequencyHz": 7452.944296152001,
+    "actualMinusReferenceDB": -0.0006966660196520119,
+    "filteredMinusReferenceDB": -0.0010147299002373148
+  },
+  {
+    "frequencyHz": 7671.3322336086085,
+    "actualMinusReferenceDB": -0.0013471784565474167,
+    "filteredMinusReferenceDB": -0.0007103595280954091
+  },
+  {
+    "frequencyHz": 7896.119426088657,
+    "actualMinusReferenceDB": -0.004204787613700847,
+    "filteredMinusReferenceDB": -0.009060297756939537
+  },
+  {
+    "frequencyHz": 8127.4933860771835,
+    "actualMinusReferenceDB": -0.03501542116751323,
+    "filteredMinusReferenceDB": -0.04950924304031814
+  },
+  {
+    "frequencyHz": 8365.647120594429,
+    "actualMinusReferenceDB": -0.19848650799269613,
+    "filteredMinusReferenceDB": -0.2361202474936496
+  },
+  {
+    "frequencyHz": 8610.779292198036,
+    "actualMinusReferenceDB": -0.6713235034089172,
+    "filteredMinusReferenceDB": -0.7247468807389192
+  },
+  {
+    "frequencyHz": 8863.094384702907,
+    "actualMinusReferenceDB": -1.878591827943842,
+    "filteredMinusReferenceDB": -1.963839623531858
+  },
+  {
+    "frequencyHz": 9122.802873757073,
+    "actualMinusReferenceDB": -4.131420242803477,
+    "filteredMinusReferenceDB": -4.157492893692391
+  },
+  {
+    "frequencyHz": 9390.121402415833,
+    "actualMinusReferenceDB": -8.244759556878577,
+    "filteredMinusReferenceDB": -8.227669369146911
+  },
+  {
+    "frequencyHz": 9665.272961860543,
+    "actualMinusReferenceDB": -14.295419351040595,
+    "filteredMinusReferenceDB": -13.955586831790422
+  },
+  {
+    "frequencyHz": 9948.487077412921,
+    "actualMinusReferenceDB": -23.15964108059916,
+    "filteredMinusReferenceDB": -22.205453992077285
+  },
+  {
+    "frequencyHz": 10240,
+    "actualMinusReferenceDB": -35.83831010371293,
+    "filteredMinusReferenceDB": -34.03028959589702
+  },
+  {
+    "frequencyHz": 10540.05490322936,
+    "actualMinusReferenceDB": -54.74747458669752,
+    "filteredMinusReferenceDB": -51.46773782150771
+  },
+  {
+    "frequencyHz": 10848.90208623918,
+    "actualMinusReferenceDB": -82.55617240998666,
+    "filteredMinusReferenceDB": -75.21337922422335
+  },
+  {
+    "frequencyHz": 11166.79918249224,
+    "actualMinusReferenceDB": -99.70399641233261,
+    "filteredMinusReferenceDB": -94.29976153766917
+  },
+  {
+    "frequencyHz": 11494.011374687982,
+    "actualMinusReferenceDB": -101.29918115066917,
+    "filteredMinusReferenceDB": -94.04280810894413
+  },
+  {
+    "frequencyHz": 11830.811615972072,
+    "actualMinusReferenceDB": -89.45670363467552,
+    "filteredMinusReferenceDB": -82.35361223226576
+  }
+]

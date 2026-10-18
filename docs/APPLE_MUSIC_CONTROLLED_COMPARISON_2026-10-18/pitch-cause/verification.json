@@ -1,0 +1,314 @@
+{
+  "date": "2026-10-18",
+  "scope": "Only the cause of beat/pace differences in the prior 2x method; short same-song segment 30-70 seconds; no product changes",
+  "events": [
+    {
+      "date": "2026-10-18T12:32:53Z",
+      "event": "start",
+      "pid": 26459
+    },
+    {
+      "date": "2026-10-18T12:32:57Z",
+      "event": "musicKitReady"
+    },
+    {
+      "date": "2026-10-18T12:33:06Z",
+      "event": "permissionPreflight",
+      "mute": 1,
+      "nonzero": 37,
+      "processPID": 26471
+    },
+    {
+      "date": "2026-10-18T12:33:06Z",
+      "event": "waitingPermissionAudit"
+    },
+    {
+      "date": "2026-10-18T12:33:50Z",
+      "event": "permissionAuditConfirmed"
+    },
+    {
+      "date": "2026-10-18T12:33:51Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 30.000001,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "native_1x"
+    },
+    {
+      "date": "2026-10-18T12:33:51Z",
+      "event": "captureProgress",
+      "media": 30.000001,
+      "name": "native_1x",
+      "rms": 0,
+      "wall": 0.04910111427307129
+    },
+    {
+      "date": "2026-10-18T12:34:21Z",
+      "event": "captureProgress",
+      "media": 59.799432627684915,
+      "name": "native_1x",
+      "rms": 0.19824932515621185,
+      "wall": 30.01230800151825
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:34:32Z",
+      "duration": 40.224,
+      "event": "captureResult",
+      "frames": 1930752,
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 70.00317541966066,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "native_1x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 3771,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 40.285670042037964
+    },
+    {
+      "date": "2026-10-18T12:34:33Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 2,
+        "time": 30,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_kept_2x"
+    },
+    {
+      "date": "2026-10-18T12:34:33Z",
+      "event": "captureProgress",
+      "media": 30,
+      "name": "pitch_kept_2x",
+      "rms": 0,
+      "wall": 0.3382129669189453
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:34:54Z",
+      "duration": 20.618666666666666,
+      "event": "captureResult",
+      "frames": 989696,
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 2,
+        "time": 70.00673744930626,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_kept_2x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 1933,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 20.647122025489807
+    },
+    {
+      "date": "2026-10-18T12:34:55Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": false,
+        "protected": true,
+        "rate": 2,
+        "time": 30,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_shifted_2x"
+    },
+    {
+      "date": "2026-10-18T12:34:55Z",
+      "event": "captureProgress",
+      "media": 30,
+      "name": "pitch_shifted_2x",
+      "rms": 0,
+      "wall": 0.035127997398376465
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:35:16Z",
+      "duration": 20.85333333333333,
+      "event": "captureResult",
+      "frames": 1000960,
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": false,
+        "protected": true,
+        "rate": 2,
+        "time": 70.02047972664472,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_shifted_2x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 1955,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 20.880287051200867
+    },
+    {
+      "commonDuration": 40.18399999999999,
+      "commonEnd": 40.20399999999999,
+      "commonStart": 0.02,
+      "date": "2026-10-18T12:35:17Z",
+      "event": "alignment",
+      "pitchKept": {
+        "driftRangeSeconds": 0,
+        "offsetSeconds": 1,
+        "resolutionSeconds": 0.01,
+        "windowCorrelations": [
+          0.9177660239810005,
+          0.8707802235070288,
+          0.8595506013377447
+        ],
+        "windowOffsets": [
+          1,
+          1,
+          1
+        ]
+      },
+      "pitchShifted": {
+        "driftRangeSeconds": 0,
+        "offsetSeconds": 1.48,
+        "resolutionSeconds": 0.01,
+        "windowCorrelations": [
+          0.9564090539383782,
+          0.9584620066104452,
+          0.9457333620521892
+        ],
+        "windowOffsets": [
+          1.48,
+          1.48,
+          1.48
+        ]
+      }
+    },
+    {
+      "date": "2026-10-18T12:35:17Z",
+      "event": "done"
+    },
+    {
+      "date": "2026-10-18T12:35:17Z",
+      "event": "restored",
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 70.02047972664472,
+        "volume": 0.12
+      }
+    }
+  ],
+  "permissionProof": {
+    "pid": 26459,
+    "cdhash": "87621771da727b7923f9bfdcd773a5d39c3cf5d2",
+    "audioCaptureGranted": true,
+    "nonzeroPCMAndMuteVerified": true,
+    "events": [
+      {
+        "timestamp": "2026-10-18 21:32:54.006597+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1680, function=<private>, service=kTCCServiceAudioCapture, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 21:32:54.007226+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1680, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 21:32:54.008060+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1680, authValue=1, authReason=0, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 21:32:59.571129+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1683, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 21:32:59.571782+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1683, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 21:33:00.966243+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1683, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+      },
+      {
+        "timestamp": "2026-10-18 21:33:00.975424+0900",
+        "message": "AUTHREQ_CTX: msgID=761.1685, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>"
+      },
+      {
+        "timestamp": "2026-10-18 21:33:00.976817+0900",
+        "message": "AUTHREQ_SUBJECT: msgID=761.1685, subject=com.hazimeno.MusicPrayer,"
+      },
+      {
+        "timestamp": "2026-10-18 21:33:00.977812+0900",
+        "message": "AUTHREQ_RESULT: msgID=761.1685, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),"
+      }
+    ]
+  },
+  "utilityCheck": "same=0, down=-12\n",
+  "productUnchanged": {
+    "Sources/AppleMusic/AppleMusicAudioCapture.swift": true,
+    "Sources/AppleMusic/AppleMusicAnalysis.swift": true,
+    "Sources/AppleMusic/AppleMusicPlayback.swift": true,
+    "Sources/AppleMusic/AppleMusicBridge.js": true,
+    "Sources/Analysis/MusicAnalyzer.swift": true,
+    "dist/MusicPrayer.app/Contents/MacOS/MusicPrayer": true
+  },
+  "results": {
+    "pitchOffAfterHalfRateInterpretation": {
+      "best": {
+        "candidateSemitonesRelativeToReference": 0,
+        "correlation": 0.9992537818286095
+      },
+      "framesCompared": 191
+    },
+    "pitchKeptAfterHalfRateInterpretation": {
+      "best": {
+        "candidateSemitonesRelativeToReference": -12,
+        "correlation": 0.7849472205018198
+      },
+      "framesCompared": 191
+    }
+  },
+  "finding": "The old 2x/preservesPitch=false/half-rate method restores nominal pitch in this segment. A failure to restore pitch is not supported as the cause. This does not establish sample-identical audio or explain every instrument activity difference.",
+  "savedData": "Derived magnitude spectra and numeric evidence only; no PCM or audio file."
+}

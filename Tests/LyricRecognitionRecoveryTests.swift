@@ -12,6 +12,14 @@ final class LyricRecognitionRecoveryTests: XCTestCase {
             phrases: [.init(start: 0, duration: 60)])
     }
 
+    func testRecoveryScriptGateRetainsMixedAndAccentedLatinText() {
+        XCTAssertFalse(LyricRecognitionRecovery.containsLatinText("昔々、カキの種(たね)をまきました。"))
+        XCTAssertFalse(LyricRecognitionRecovery.containsLatinText("고요한 밤\nΚαλημέρα\n123 ♪"))
+        XCTAssertTrue(LyricRecognitionRecovery.containsLatinText("고요한 밤\nSummer moonlight"))
+        XCTAssertTrue(LyricRecognitionRecovery.containsLatinText("étoile\n星の海"))
+        XCTAssertTrue(LyricRecognitionRecovery.containsLatinText("AIの世界"))
+    }
+
     func testForeignPrefixUsesSurroundingNativeEdges() throws {
         let speech = [token("고요한밤이와요", 10, 12), token("썸머문라이트", 18, 20),
                       token("반짝이는별빛", 20, 23), token("아침이밝아와요", 30, 32)]

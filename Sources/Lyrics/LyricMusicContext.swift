@@ -49,12 +49,16 @@ struct LyricMusicContext {
             guard frame.lineOrdinals == expected else { return false }
             previousEnd = frame.end
         }
-        // A row can cross several frames. Never discard a short overlap or fill a gap.
+        // Structure can begin after Speech or end before it. Check coverage only
+        // inside its observed extent; never fill an interior gap or move Speech.
+        let observedStart = frames[0].start
+        let observedEnd = frames[frames.count - 1].end
         return lines.allSatisfy { line in
             let covered = frames.reduce(0.0) {
                 $0 + overlap(line.start, line.end, $1.start, $1.end)
             }
-            return abs(covered - (line.end - line.start)) <= epsilon
+            let expected = overlap(line.start, line.end, observedStart, observedEnd)
+            return abs(covered - expected) <= epsilon
         }
     }
 

@@ -1,11 +1,262 @@
 import AppKit
 import AVFoundation
 import Combine
+import CoreText
 import SwiftUI
 import XCTest
 @testable import MusicPrayer
 
 final class LyricMotionTests: XCTestCase {
+    func testBundledFurifontUsesMediumFaceAtRequestedSizes() {
+        for size: CGFloat in [14, 24, 32] {
+            let font = LyricFont.furifont.nativeFont(size: size)
+            XCTAssertEqual(font.fontName, "FurifontSansVF-Medium")
+            XCTAssertEqual(font.pointSize, size)
+            let variation = CTFontCopyVariation(font as CTFont) as? [NSNumber: NSNumber]
+            XCTAssertEqual(variation?[NSNumber(value: 2003265652)]?.doubleValue, 500)
+        }
+    }
+
+    @MainActor
+    func testFontSwitchChangesPausedLyricsAndRestoresSystemRendering() async throws {
+        let source = "日本語の歌詞と Music Prayer"
+        let audio = try silentAudioFixture()
+        defer { try? FileManager.default.removeItem(at: audio) }
+        let store = offscreenStore(source: source)
+        try store.engine.load(url: audio)
+        defer { store.engine.unload() }
+        store.duration = store.engine.duration
+        store.previewTime = 1
+        let timings = store.lyricTimeline?.lines[0].characterTimings
+        let size = CGSize(width: 600, height: 240)
+        let renderer = ImageRenderer(content: LyricMotionView(store: store)
+            .frame(width: size.width, height: size.height).background(.black))
+        let system = try pixels(renderer)
+        try saveWrappingEvidence(renderer, name: "font-system-initial.png")
+        try await expectRendererUpdate(renderer) {
+            renderer.content = LyricMotionView(store: store, font: .furifont)
+                .frame(width: size.width, height: size.height).background(.black)
+        }
+        let furifont = try pixels(renderer)
+        XCTAssertGreaterThan(furifont.litPixels, 100)
+        XCTAssertFalse(system.bytes == furifont.bytes)
+        try saveWrappingEvidence(renderer, name: "font-furifont.png")
+        try await expectRendererUpdate(renderer) {
+            renderer.content = LyricMotionView(store: store, font: .system)
+                .frame(width: size.width, height: size.height).background(.black)
+        }
+        let returned = try pixels(renderer)
+        XCTAssertEqual(system.litBounds, returned.litBounds)
+        // Rebuilding text can change an 8-bit antialiasing sample by one step.
+        let maximumDifference = zip(system.bytes, returned.bytes).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        XCTAssertLessThanOrEqual(maximumDifference, 1)
+        try saveWrappingEvidence(renderer, name: "font-system.png")
+        XCTAssertFalse(store.isPlaying)
+        XCTAssertEqual(store.lyricTimeline?.sourceText, source)
+        XCTAssertEqual(store.lyricTimeline?.lines[0].characterTimings, timings)
+    }
+
+    @MainActor
+    func testFontSwitchRemeasuresScrollingLyricsAtSameViewport() throws {
+        let source = String(repeating: "遠い夜の向こうから歌声が聞こえる ", count: 35)
+        let store = offscreenStore(source: source)
+        defer { store.engine.stop() }
+        let viewport = CGSize(width: 252, height: 88)
+        for font in LyricFont.allCases {
+            XCTAssertNil(LyricLineWrapping.presentation(text: source, viewport: viewport, font: font))
+        }
+        func content(_ font: LyricFont) -> some View {
+            LyricMotionView(store: store, font: font).frame(width: 300, height: 120).background(.black)
+        }
+        let renderer = ImageRenderer(content: content(.system))
+        _ = try pixels(renderer)
+        for font in [LyricFont.furifont, .system] {
+            renderer.content = content(font)
+            let switched = try pixels(renderer)
+            let fresh = try pixels(ImageRenderer(content: content(font)))
+            XCTAssertGreaterThan(switched.litPixels, 100)
+            let maximumDifference = zip(switched.bytes, fresh.bytes).map { abs(Int($0) - Int($1)) }.max() ?? 0
+            XCTAssertLessThanOrEqual(maximumDifference, 1)
+        }
+        XCTAssertEqual(store.lyricTimeline?.sourceText, source)
+    }
+
+    @MainActor
+    func testFurifontLongLyricsFitAndKeepSeparateLayoutCache() throws {
+        for (index, source) in longLyricExamples.enumerated() {
+            let store = offscreenStore(source: source)
+            defer { store.engine.stop() }
+            for width in [600, 1000, 1280] {
+                let viewport = CGSize(width: width - 48, height: 208)
+                let system = LyricLineWrapping.presentation(text: source, viewport: viewport)
+                let presentation = try XCTUnwrap(LyricLineWrapping.presentation(text: source, viewport: viewport, font: .furifont))
+                let offset = try XCTUnwrap(presentation.breakOffset)
+                let characters = Array(source)
+                let rows = [String(characters[..<offset]), String(characters[offset...])]
+                let attributes: [NSAttributedString.Key: Any] = [.font: LyricFont.furifont.nativeFont(size: presentation.fontSize)]
+                for row in rows {
+                    XCTAssertLessThanOrEqual((row as NSString).size(withAttributes: attributes).width, viewport.width - 2)
+                }
+                XCTAssertEqual(rows.joined(), source)
+                XCTAssertEqual(system, LyricLineWrapping.presentation(text: source, viewport: viewport))
+                let size = CGSize(width: width, height: 240)
+                let renderer = ImageRenderer(content: LyricMotionView(store: store, font: .furifont)
+                    .frame(width: size.width, height: size.height).background(.black))
+                let image = try pixels(renderer)
+                let bounds = try XCTUnwrap(image.litBounds)
+                XCTAssertGreaterThan(bounds.minX, 24)
+                XCTAssertLessThan(bounds.maxX, CGFloat(width - 24))
+                XCTAssertGreaterThan(bounds.minY, 16)
+                XCTAssertLessThan(bounds.maxY, 224)
+                try saveWrappingEvidence(renderer, name: "furifont-example-\(index + 1)-\(width).png")
+            }
+        }
+    }
+
+    private let longLyricExamples = [
+        "「このカキの種をまけば、毎年おいしいカキの実がなるよ。どうだい、おにぎりと交換してあげようか？」",
+        "そして、お見舞いに来た友達の臼(うす→もちをつくる道具)とハチとクリにその事を話しました。"
+    ]
+
+    @MainActor
+    func testLongLyricChoosesSentenceBoundaryAndBalancedRows() throws {
+        let source = longLyricExamples[0]
+        let presentation = try XCTUnwrap(LyricLineWrapping.presentation(text: source,
+                                                                       viewport: CGSize(width: 1180, height: 160)))
+        let offset = try XCTUnwrap(presentation.breakOffset)
+        let characters = Array(source)
+        XCTAssertEqual(String(characters[..<offset]), "「このカキの種をまけば、毎年おいしいカキの実がなるよ。")
+        XCTAssertEqual(presentation.fontSize, 32)
+        XCTAssertEqual(String(characters[..<offset]) + String(characters[offset...]), source)
+    }
+
+    @MainActor
+    func testWrappingKeepsWordsPunctuationAndParenthesesTogether() throws {
+        for source in [longLyricExamples[1], "A beautiful melody carries our memories across the quiet evening sky."] {
+            let presentation = try XCTUnwrap(LyricLineWrapping.presentation(text: source,
+                                                                           viewport: CGSize(width: 960, height: 160)))
+            let offset = try XCTUnwrap(presentation.breakOffset)
+            let characters = Array(source)
+            let first = String(characters[..<offset]), second = String(characters[offset...])
+            XCTAssertFalse("、。！？!?）」)]}".contains(characters[offset]))
+            XCTAssertFalse("（「([{".contains(characters[offset - 1]))
+            XCTAssertEqual(first + second, source)
+            if source == longLyricExamples[1] {
+                XCTAssertEqual(first.filter { $0 == "(" }.count, first.filter { $0 == ")" }.count,
+                               "画像の括弧内の説明を途中で分けないこと")
+            } else {
+                XCTAssertTrue(characters[offset - 1].isWhitespace || characters[offset].isWhitespace,
+                              "英単語を途中で分けないこと")
+            }
+        }
+    }
+
+    @MainActor
+    func testShortLyricsKeepOneRowAndExtremeTextKeepsScrollingLayout() throws {
+        for source in ["君の声", "Cafe\u{301}", "家族 👨‍👩‍👧‍👦 と音楽 🎵"] {
+            let presentation = try XCTUnwrap(LyricLineWrapping.presentation(text: source,
+                                                                           viewport: CGSize(width: 552, height: 208)))
+            XCTAssertEqual(presentation.fontSize, 32)
+            XCTAssertNil(presentation.breakOffset)
+        }
+        XCTAssertNil(LyricLineWrapping.presentation(text: String(repeating: "遠い夜の向こうから ", count: 35),
+                                                   viewport: CGSize(width: 252, height: 88)))
+    }
+
+    @MainActor
+    func testScreenshotExamplesRenderTwoBalancedRowsWithoutChangingSource() throws {
+        var records: [[String: Any]] = []
+        for (index, source) in longLyricExamples.enumerated() {
+            let store = offscreenStore(source: source)
+            defer { store.engine.stop() }
+            for width in [600, 1000, 1280] {
+                let size = CGSize(width: width, height: 240)
+                let imageRenderer = renderer(for: store, size: size)
+                let image = try pixels(imageRenderer)
+                let rows = brightRowRanges(image, width: width)
+                XCTAssertEqual(rows.count, 2, "画像\(index + 1)、幅\(width)で2行に表示すること: \(rows)")
+                let viewport = CGSize(width: width - 48, height: 208)
+                let presentation = try XCTUnwrap(LyricLineWrapping.presentation(text: source, viewport: viewport))
+                let offset = try XCTUnwrap(presentation.breakOffset)
+                let characters = Array(source)
+                let first = String(characters[..<offset]), second = String(characters[offset...])
+                records.append(["example": index + 1, "width": width, "font_size": presentation.fontSize,
+                                "first": first, "second": second, "rendered_rows": rows.count])
+                try saveWrappingEvidence(imageRenderer, name: "example-\(index + 1)-\(width).png")
+                XCTAssertEqual(store.lyricTimeline?.sourceText, source)
+                XCTAssertEqual(store.lyricTimeline?.lines.first?.text, source)
+                XCTAssertEqual(store.lyricTimeline?.lines.first?.characterTimings.count, source.count)
+            }
+        }
+        if let directory = ProcessInfo.processInfo.environment["MUSIC_PRAYER_LYRIC_WRAP_EVIDENCE_DIR"] {
+            let data = try JSONSerialization.data(withJSONObject: records, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("line-layouts.json"))
+        }
+    }
+
+    @MainActor
+    func testTwoLineColourProgressAndSeekKeepOriginalCharacterTimings() throws {
+        let source = longLyricExamples[0]
+        let store = offscreenStore(source: source)
+        defer { store.engine.stop() }
+        var timeline = try XCTUnwrap(store.lyricTimeline)
+        let timings = source.enumerated().map { index, _ in
+            LyricCharacterTiming(start: 1 + 2 * Double(index) / Double(source.count),
+                                 end: 1 + 2 * Double(index + 1) / Double(source.count))
+        }
+        timeline.lines[0].characterTimings = timings
+        store.lyricTimeline = timeline
+        var frame = try XCTUnwrap(store.visualSource.snapshot().lyrics)
+        let size = CGSize(width: 1000, height: 240)
+        let initial = try pixels(renderer(for: store, size: size))
+        frame.time = 2.8
+        publish(frame, to: store)
+        let progressedRenderer = renderer(for: store, size: size)
+        let progressed = try pixels(progressedRenderer)
+        XCTAssertFalse(initial.bytes == progressed.bytes)
+        XCTAssertEqual(brightRowRanges(progressed, width: 1000).count, 2)
+        var cyanInSecondRow = 0
+        for y in 120..<240 {
+            for x in 0..<1000 {
+                let pixel = (y * 1000 + x) * 4
+                if Int(progressed.bytes[pixel + 1]) > Int(progressed.bytes[pixel]) + 50,
+                   progressed.bytes[pixel + 2] > 120 { cyanInSecondRow += 1 }
+            }
+        }
+        XCTAssertGreaterThan(cyanInSecondRow, 100, "改行後も元の文字時刻で2行目へ色が進むこと")
+        try saveWrappingEvidence(progressedRenderer, name: "two-line-colour-progress.png")
+        frame.time = 1
+        publish(frame, to: store)
+        XCTAssertEqual(initial.bytes, try pixels(renderer(for: store, size: size)).bytes)
+        XCTAssertEqual(store.lyricTimeline?.lines[0].characterTimings, timings)
+    }
+
+    private func brightRowRanges(_ image: RenderedPixels, width: Int) -> [ClosedRange<Int>] {
+        let height = image.bytes.count / (width * 4)
+        var ranges: [ClosedRange<Int>] = []
+        for y in 0..<height {
+            let lit = (0..<width).contains { x in
+                let offset = (y * width + x) * 4
+                return Int(image.bytes[offset]) + Int(image.bytes[offset + 1]) + Int(image.bytes[offset + 2]) > 180
+            }
+            guard lit else { continue }
+            if let last = ranges.last, y - last.upperBound <= 6 {
+                ranges[ranges.count - 1] = last.lowerBound...y
+            } else { ranges.append(y...y) }
+        }
+        return ranges
+    }
+
+    @MainActor
+    private func saveWrappingEvidence<Content: View>(_ renderer: ImageRenderer<Content>, name: String) throws {
+        guard let directory = ProcessInfo.processInfo.environment["MUSIC_PRAYER_LYRIC_WRAP_EVIDENCE_DIR"] else { return }
+        let url = URL(fileURLWithPath: directory, isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let image = try XCTUnwrap(renderer.cgImage)
+        let png = try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+        try png.write(to: url.appendingPathComponent(name))
+    }
+
     @MainActor
     func testPlayerLyricPositionStaysFixedWhenAnalysisPanelOpens() throws {
         _ = NSApplication.shared
@@ -55,10 +306,116 @@ final class LyricMotionTests: XCTestCase {
         XCTAssertNil(LyricMotion.parameters(for: lyric, time: 30, vocal: nil, beat: 0, beatPhase: 0, barPhase: 0))
     }
 
-    func testShortAdjacentLinesKeepSingingLineAndOnlyStrongestNeighbour() {
+    func testShortAdjacentLinesShowOnlyOnePhrase() {
         let lines = [line(0, 10, 10.3), line(1, 10.3, 10.6), line(2, 10.6, 10.9)]
-        XCTAssertEqual(LyricMotion.visibleLines(lines, at: 10.5).map(\.ordinal), [1, 2])
+        XCTAssertEqual(LyricMotion.visibleLines(lines, at: 10.5).map(\.ordinal), [1])
         XCTAssertEqual(LyricMotion.visibleLines(lines, at: 30).count, 0)
+    }
+
+    func testFadeWindowsNeverOverlayTouchingShortOrOverlappingPhrases() {
+        let cases = [
+            [line(0, 10, 14), line(1, 14, 18)],
+            [line(0, 10, 14), line(1, 14.2, 18)],
+            [line(0, 10, 10.3), line(1, 10.3, 10.6), line(2, 10.6, 10.9)],
+            [line(0, 10, 18), line(1, 12, 13), line(2, 13.1, 14)],
+            [line(0, 10, 14), line(1, 10, 12), line(2, 12, 14)]
+        ]
+        for lines in cases {
+            let windows = LyricMotion.displayWindows(lines)
+            var previousOrdinal = -1
+            for time in stride(from: 9.5, through: 18.5, by: 0.005) {
+                let visible = LyricMotion.visibleLines(lines, at: time, windows: windows)
+                XCTAssertLessThanOrEqual(visible.count, 1, "別フレーズを同じ場所へ重ねないこと")
+                if let ordinal = visible.first?.ordinal {
+                    XCTAssertGreaterThanOrEqual(ordinal, previousOrdinal, "古いフレーズを再表示しないこと")
+                    previousOrdinal = ordinal
+                }
+            }
+        }
+    }
+
+    func testSharedBoundaryFadesToZeroThenInAndSeeksDeterministically() throws {
+        let lines = [line(0, 10, 14), line(1, 14.3, 18)]
+        let windows = LyricMotion.displayWindows(lines)
+        let boundary = try XCTUnwrap(windows[0]).end
+        func motion(_ ordinal: Int, at time: Double) throws -> LyricMotionParameters {
+            try XCTUnwrap(LyricMotion.parameters(for: lines[ordinal], time: time, vocal: nil,
+                beat: 0, beatPhase: 0, barPhase: 0, window: windows[ordinal]))
+        }
+        XCTAssertEqual(try motion(0, at: boundary).opacity, 0, accuracy: 1e-12)
+        XCTAssertEqual(try motion(1, at: boundary).opacity, 0, accuracy: 1e-12)
+        XCTAssertTrue(LyricMotion.visibleLines(lines, at: boundary, windows: windows).isEmpty)
+        XCTAssertLessThan(try motion(0, at: boundary - 0.001).opacity, 0.001)
+        XCTAssertLessThan(try motion(1, at: boundary + 0.001).opacity, 0.001)
+        XCTAssertGreaterThan(try motion(0, at: 13.8).opacity, 0.1)
+        XCTAssertGreaterThan(try motion(1, at: 14.2).opacity, 0.1)
+        let initial = try motion(1, at: 14.2)
+        _ = try motion(1, at: 17)
+        XCTAssertEqual(initial, try motion(1, at: 14.2))
+        XCTAssertEqual(LyricMotion.visibleLines(lines, at: 13.8, windows: windows).map(\.ordinal), [0])
+        XCTAssertEqual(lines.map(\.start), [10, 14.3])
+        XCTAssertEqual(lines.map(\.end), [14, 18])
+    }
+
+    func testFadesStayOutsideVocalsAndNoGapNeverDelaysTheNextEntrance() throws {
+        for gap in [0.0, 0.02, 0.2, 0.7, 2.0] {
+            let lines = [line(0, 10, 14), line(1, 14 + gap, 18)]
+            let windows = LyricMotion.displayWindows(lines)
+            for line in lines {
+                let window = try XCTUnwrap(windows[line.ordinal])
+                XCTAssertLessThanOrEqual(window.entranceEnd, line.start)
+                XCTAssertGreaterThanOrEqual(window.exitStart, line.end)
+                for time in stride(from: line.start, to: line.end, by: 0.01) {
+                    let motion = try XCTUnwrap(LyricMotion.parameters(for: line, time: time, vocal: nil,
+                        beat: 0, beatPhase: 0, barPhase: 0, window: window))
+                    XCTAssertEqual(motion.opacity, 1, accuracy: 1e-10, "歌唱中に歌詞を薄くしないこと")
+                    XCTAssertEqual(motion.blur, 0, accuracy: 1e-10)
+                }
+            }
+            XCTAssertEqual(LyricMotion.visibleLines(lines, at: lines[1].start, windows: windows).map(\.ordinal), [1])
+        }
+    }
+
+    func testSeparatedPhrasesKeepExistingEntranceAndExitFades() throws {
+        let lines = [line(0, 10, 14), line(1, 16, 18)]
+        let windows = LyricMotion.displayWindows(lines)
+        for time in [9.7, 10, 12, 14.1, 14.3] {
+            let original = try XCTUnwrap(LyricMotion.parameters(for: lines[0], time: time, vocal: nil,
+                beat: 0, beatPhase: 0, barPhase: 0))
+            let coordinated = try XCTUnwrap(LyricMotion.parameters(for: lines[0], time: time, vocal: nil,
+                beat: 0, beatPhase: 0, barPhase: 0, window: windows[0]))
+            XCTAssertEqual(original, coordinated)
+        }
+    }
+
+    @MainActor
+    func testLocalFrameBoundaryUsesSameFadeWindowsAsUnframedLyrics() throws {
+        let store = offscreenStore(source: "前の歌詞")
+        defer { store.engine.stop() }
+        var timeline = try XCTUnwrap(store.lyricTimeline)
+        timeline.lines = [line(0, 1, 3), line(1, 3, 5)]
+        for index in timeline.lines.indices {
+            timeline.lines[index].characterTimings = timeline.lines[index].text.map { _ in
+                LyricCharacterTiming(start: timeline.lines[index].start, end: timeline.lines[index].end)
+            }
+        }
+        timeline.frames = [
+            .init(start: 0, end: 3, section: 0, segment: 0, lineOrdinals: [0], support: .init()),
+            .init(start: 3, end: 6, section: 1, segment: 0, lineOrdinals: [1], support: .init())
+        ]
+        store.lyricTimeline = timeline
+        let windows = LyricMotion.displayWindows(timeline.lines)
+        var frame = try XCTUnwrap(store.visualSource.snapshot().lyrics)
+        for time in [2.8, 2.999, 3, 3.001, 3.2] {
+            XCTAssertEqual(LyricMotion.visibleLines(timeline, at: time, windows: windows),
+                           LyricMotion.visibleLines(timeline.lines, at: time, windows: windows))
+            frame.time = time
+            publish(frame, to: store)
+            let image = try pixels(renderer(for: store))
+            if time == 3 { XCTAssertGreaterThan(image.litPixels, 30, "空き時間がない境界では次の歌詞をすぐ読めること") }
+            if time == 2.8 || time == 3.2 { XCTAssertGreaterThan(image.litPixels, 30) }
+        }
+        XCTAssertEqual(store.lyricTimeline, timeline, "表示の調整で歌詞や色の時刻を変更しないこと")
     }
 
     func testColourUsesEachSpeechIntervalAndWaitsThroughItsGap() {
@@ -74,6 +431,36 @@ final class LyricMotionTests: XCTestCase {
         let punctuation = LyricCharacterTiming(start: 10.4, end: 10.4)
         XCTAssertEqual(LyricMotion.emphasis(time: 10.39, timing: punctuation), 0)
         XCTAssertEqual(LyricMotion.emphasis(time: 10.4, timing: punctuation), 1)
+    }
+
+    @MainActor
+    func testSharedLineRendererUsesCharacterTimesAndRestoresColourAfterSeek() throws {
+        _ = NSApplication.shared
+        let text = "歌詞の色を確認"
+        let timings = text.enumerated().map { index, _ in
+            LyricCharacterTiming(start: 1 + Double(index) * 0.2, end: 1.2 + Double(index) * 0.2)
+        }
+        let lyric = TimedLyricLine(id: "word-timed", ordinal: 0, text: text, start: 1, end: 3,
+                                  textWeight: 7, confidence: 1, characterTimings: timings)
+        let viewport = CGSize(width: 600, height: 220)
+        func image(at time: Double) throws -> RenderedPixels {
+            let motion = try XCTUnwrap(LyricMotion.parameters(for: lyric, time: time, vocal: nil,
+                                                             beat: 0, beatPhase: 0, barPhase: 0))
+            return try pixels(ImageRenderer(content: LyricMotionLineView(line: lyric, colourTimings: lyric.characterTimings,
+                motion: motion, time: time, viewport: viewport, font: .system).background(.black)))
+        }
+        func cyanPixels(_ image: RenderedPixels) -> Int {
+            stride(from: 0, to: image.bytes.count, by: 4).filter { offset in
+                Int(image.bytes[offset + 1]) > Int(image.bytes[offset]) + 50 && image.bytes[offset + 2] > 120
+            }.count
+        }
+        let initial = try image(at: 1)
+        let progressed = try image(at: 2.9)
+        XCTAssertGreaterThan(initial.litPixels, 100)
+        XCTAssertGreaterThan(cyanPixels(progressed), cyanPixels(initial) + 100,
+                             "共通描画が文字時刻に沿って青へ変化すること")
+        XCTAssertEqual(initial.bytes, try image(at: 1).bytes, "シークで開始時の色に戻ること")
+        XCTAssertEqual(lyric.characterTimings, timings, "描画で取得した文字時刻を変えないこと")
     }
 
     @MainActor
@@ -302,7 +689,7 @@ final class LyricMotionTests: XCTestCase {
     private func offscreenStore(source: String) -> PlayerStore {
         // Never select/load an audio file or call persistence. These tests use only
         // in-memory playback values and ImageRenderer, not the real app window.
-        let store = PlayerStore()
+        let store = PlayerStore(appleMusicAnalysisDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("MusicPrayerAnalysisTests-" + UUID().uuidString))
         store.tracks = [Track(url: URL(fileURLWithPath: "/nonexistent/offscreen-lyrics.wav"))]
         store.playbackGeneration = 7
         store.duration = 10

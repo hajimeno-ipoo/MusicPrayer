@@ -41,7 +41,9 @@ struct MusicalTimeline: View {
                 .accessibilityLabel("再生位置")
                 .accessibilityValue(clock(time))
                 .accessibilityAdjustableAction { direction in store.seek(time + (direction == .increment ? 5 : -5)) }
-                .help("ドラッグ中は映像を確認し、離すとその位置から再生します")
+                .help(store.isAppleMusicActive ? "ドラッグして再生位置を変更します" : "ドラッグ中は映像を確認し、離すとその位置から再生します")
+                .allowsHitTesting(store.canSeekPlayback)
+                .disabled(!store.canSeekPlayback)
             }.frame(height: 30)
             HStack {
                 Text(clock(time))

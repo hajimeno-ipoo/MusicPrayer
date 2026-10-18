@@ -1,0 +1,88 @@
+{
+  "songID": "75073758",
+  "song": "DEPARTURES",
+  "artist": "globe",
+  "durationSeconds": 323.109,
+  "addedAtUTC": "2026-10-18T19:37:26.101000+00:00",
+  "savedAtUTC": "2026-10-18T19:40:20.251873+00:00",
+  "additionToSavedSeconds": 174.15087294578552,
+  "samples": [
+    {
+      "atUTC": "2026-10-18T19:37:27.404000+00:00",
+      "wallSeconds": 1.3029999732971191,
+      "mediaSeconds": null,
+      "state": "preparing"
+    },
+    {
+      "atUTC": "2026-10-18T19:37:43.250000+00:00",
+      "wallSeconds": 17.1489999294281,
+      "mediaSeconds": 22,
+      "state": "capturing-local-selected"
+    },
+    {
+      "atUTC": "2026-10-18T19:38:32.457000+00:00",
+      "wallSeconds": 66.35599994659424,
+      "mediaSeconds": 120,
+      "state": "capturing-departures-selected"
+    },
+    {
+      "atUTC": "2026-10-18T19:39:20.363000+00:00",
+      "wallSeconds": 114.26199984550476,
+      "mediaSeconds": 216,
+      "state": "capturing-departures-selected"
+    },
+    {
+      "atUTC": "2026-10-18T19:40:15.075000+00:00",
+      "wallSeconds": 168.97399997711182,
+      "mediaSeconds": null,
+      "state": "final-analysis"
+    },
+    {
+      "atUTC": "2026-10-18T19:40:34.363000+00:00",
+      "wallSeconds": 188.26199984550476,
+      "mediaSeconds": null,
+      "state": "complete-stopped"
+    },
+    {
+      "atUTC": "2026-10-18T19:41:01.798000+00:00",
+      "wallSeconds": 215.69700002670288,
+      "mediaSeconds": null,
+      "state": "reselected-saved-result"
+    }
+  ],
+  "selectionDuringCapture": "local selected at 22s; DEPARTURES selected by 120s; no progress reset",
+  "captureRateBetweenSamples": 2.0039243560843247,
+  "cacheSHA256": "4f10dcefe970da9de749512e45a5d4a40e5f14ef931e65a573aa28043f50f739",
+  "fingerprint": "appleMusic:75073758",
+  "arrayCounts": {
+    "beats": 539,
+    "bars": 134,
+    "keys": 1,
+    "sections": 18,
+    "segments": 34,
+    "phrases": 66,
+    "pace": 6,
+    "vocal": 6463,
+    "drums": 6463,
+    "bass": 6463,
+    "other": 6463,
+    "momentary": 3232,
+    "shortTerm": 3232
+  },
+  "bpm": 100.057945,
+  "queue": {
+    "count": 2,
+    "localPaths": [
+      "/Users/apple/Desktop/ずるいサル.wav"
+    ],
+    "appleMusicIDs": [
+      "75073758"
+    ],
+    "current": 1,
+    "time": 0,
+    "volume": 0.22026367
+  },
+  "reuse": "after selecting local then DEPARTURES, UI stayed analyzed; cache modification time remained unchanged",
+  "testsPassed": 59,
+  "releaseBuildSeconds": 25.92
+}

@@ -1,0 +1,737 @@
+{
+  "trackID": "1403236244",
+  "requestedSourceIntervalSeconds": [
+    30,
+    70
+  ],
+  "permission": {
+    "pid": 28072,
+    "cdhash": "946965e4ba7aee50bed751f54223381c4b2b0841",
+    "service": "kTCCServiceAudioCapture",
+    "proof": [
+      {
+        "msgID": "761.1707",
+        "messages": [
+          "REQUEST: tccd_uid=0, sender_pid=761, sender_uid=202, sender_auid=-1, function=TCCAccessRequest, msgID=761.1707",
+          "REQUEST_MSG: msgID=761.1707, msg={\n\trequire_purpose=<xpc_null>\n\tservice=\"kTCCServiceAudioCapture\"\n\tfunction=\"TCCAccessRequest\"\n\tpreflight=false\n\ttarget_token={pid:28072, auid:501, euid:501}\n\tTCCD_MSG_ID=\"761.1707\"\n\tbackground_session=false\n}",
+          "REQUEST: tccd_uid=501, sender_pid=608, sender_uid=0, sender_auid=-1, function=TCCAccessRequest, msgID=761.1707",
+          "REQUEST_MSG: msgID=761.1707, msg={\n\tTCCD_MSG_MESSAGE_OPTION_USAGE_STRING_POLICY_AUTHORIZED_BY_FORWARDER_KEY=false\n\trequire_purpose=<xpc_null>\n\tservice=\"kTCCServiceAudioCapture\"\n\tfunction=\"TCCAccessRequest\"\n\tpreflight=false\n\ttarget_token={pid:28072, auid:501, euid:501}\n\tTCCD_MSG_ID=\"761.1707\"\n\tbackground_session=false\n}",
+          "AUTHREQ_CTX: msgID=761.1707, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>",
+          "AUTHREQ_ATTRIBUTION: msgID=761.1707, attribution={accessing={TCCDProcess: identifier=com.hazimeno.MusicPrayer, pid=28072, auid=501, euid=501, binary_path=/private/tmp/music-prayer-vocal-cause/Verify.app/Contents/MacOS/VocalCause}, requesting={TCCDProcess: identifier=com.apple.tccd, pid=608, auid=0, euid=0, binary_path=/System/Library/PrivateFrameworks/TCC.framework/Support/tccd}, },",
+          "AUTHREQ_SUBJECT: msgID=761.1707, subject=com.hazimeno.MusicPrayer,",
+          "AUTHREQ_PROMPTING: msgID=761.1707, service=kTCCServiceAudioCapture, subject=Sub:{com.hazimeno.MusicPrayer}Resp:{TCCDProcess: identifier=com.hazimeno.MusicPrayer, pid=28072, auid=501, euid=501, binary_path=/private/tmp/music-prayer-vocal-cause/Verify.app/Contents/MacOS/VocalCause},",
+          "AUTHREQ_RESULT: msgID=761.1707, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),",
+          "signaling prompting semaphore for msgID=761.1707",
+          "REPLY: (501) function=TCCAccessRequest, msgID=761.1707"
+        ]
+      },
+      {
+        "msgID": "761.1709",
+        "messages": [
+          "REQUEST: tccd_uid=0, sender_pid=761, sender_uid=202, sender_auid=-1, function=TCCAccessRequest, msgID=761.1709",
+          "REQUEST_MSG: msgID=761.1709, msg={\n\trequire_purpose=<xpc_null>\n\tservice=\"kTCCServiceAudioCapture\"\n\tfunction=\"TCCAccessRequest\"\n\tpreflight=false\n\ttarget_token={pid:28072, auid:501, euid:501}\n\tTCCD_MSG_ID=\"761.1709\"\n\tbackground_session=false\n}",
+          "REQUEST: tccd_uid=501, sender_pid=608, sender_uid=0, sender_auid=-1, function=TCCAccessRequest, msgID=761.1709",
+          "REQUEST_MSG: msgID=761.1709, msg={\n\tTCCD_MSG_MESSAGE_OPTION_USAGE_STRING_POLICY_AUTHORIZED_BY_FORWARDER_KEY=false\n\trequire_purpose=<xpc_null>\n\tservice=\"kTCCServiceAudioCapture\"\n\tfunction=\"TCCAccessRequest\"\n\tpreflight=false\n\ttarget_token={pid:28072, auid:501, euid:501}\n\tTCCD_MSG_ID=\"761.1709\"\n\tbackground_session=false\n}",
+          "AUTHREQ_CTX: msgID=761.1709, function=<private>, service=kTCCServiceAudioCapture, preflight=no, query=1, client_dict=(null), daemon_dict=<private>",
+          "AUTHREQ_ATTRIBUTION: msgID=761.1709, attribution={accessing={TCCDProcess: identifier=com.hazimeno.MusicPrayer, pid=28072, auid=501, euid=501, binary_path=/private/tmp/music-prayer-vocal-cause/Verify.app/Contents/MacOS/VocalCause}, requesting={TCCDProcess: identifier=com.apple.tccd, pid=608, auid=0, euid=0, binary_path=/System/Library/PrivateFrameworks/TCC.framework/Support/tccd}, },",
+          "AUTHREQ_SUBJECT: msgID=761.1709, subject=com.hazimeno.MusicPrayer,",
+          "AUTHREQ_RESULT: msgID=761.1709, authValue=2, authReason=2, authVersion=1, desired_auth=0, error=(null),",
+          "REPLY: (501) function=TCCAccessRequest, msgID=761.1709"
+        ]
+      }
+    ],
+    "preflight": {
+      "date": "2026-10-18T12:48:12Z",
+      "event": "permissionPreflight",
+      "mute": 1,
+      "nonzero": 34,
+      "processPID": 28074
+    }
+  },
+  "events": [
+    {
+      "date": "2026-10-18T12:47:56Z",
+      "event": "start",
+      "pid": 28072
+    },
+    {
+      "date": "2026-10-18T12:47:58Z",
+      "event": "musicKitReady"
+    },
+    {
+      "date": "2026-10-18T12:48:12Z",
+      "event": "permissionPreflight",
+      "mute": 1,
+      "nonzero": 34,
+      "processPID": 28074
+    },
+    {
+      "date": "2026-10-18T12:48:12Z",
+      "event": "waitingPermissionAudit"
+    },
+    {
+      "date": "2026-10-18T12:48:51Z",
+      "event": "permissionAuditConfirmed"
+    },
+    {
+      "date": "2026-10-18T12:48:52Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 30,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "native_1x"
+    },
+    {
+      "date": "2026-10-18T12:48:52Z",
+      "event": "captureProgress",
+      "media": 30,
+      "name": "native_1x",
+      "rms": 0,
+      "wall": 0.1230919361114502
+    },
+    {
+      "date": "2026-10-18T12:49:22Z",
+      "event": "captureProgress",
+      "media": 59.70526603868166,
+      "name": "native_1x",
+      "rms": 0.2495984137058258,
+      "wall": 30.0134060382843
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:49:33Z",
+      "duration": 40.32,
+      "event": "captureResult",
+      "frames": 1935360,
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 70.00901374701374,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "native_1x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 3780,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 40.380249977111816
+    },
+    {
+      "date": "2026-10-18T12:49:35Z",
+      "event": "captureStart",
+      "info": {
+        "id": "1403236244",
+        "paused": false,
+        "playing": true,
+        "preservesPitch": false,
+        "protected": true,
+        "rate": 2,
+        "time": 30,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_shifted_2x"
+    },
+    {
+      "date": "2026-10-18T12:49:35Z",
+      "event": "captureProgress",
+      "media": 30,
+      "name": "pitch_shifted_2x",
+      "rms": 0,
+      "wall": 0.4184269905090332
+    },
+    {
+      "channels": 2,
+      "date": "2026-10-18T12:49:55Z",
+      "duration": 20.842666666666666,
+      "event": "captureResult",
+      "frames": 1000448,
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": false,
+        "protected": true,
+        "rate": 2,
+        "time": 70.0223504219854,
+        "volume": 0.12
+      },
+      "mute": 1,
+      "name": "pitch_shifted_2x",
+      "rate": 48000,
+      "stats": {
+        "buffers": 1954,
+        "maxCallbackGapSeconds": 1.734723475976807e-18,
+        "valid": true
+      },
+      "wall": 20.860206961631775
+    },
+    {
+      "commonDuration": 40.265333333333324,
+      "commonEnd": 40.28533333333333,
+      "commonStart": 0.02,
+      "date": "2026-10-18T12:49:55Z",
+      "event": "alignment",
+      "pitchShifted": {
+        "driftRangeSeconds": 0,
+        "offsetSeconds": 1.3800000000000001,
+        "resolutionSeconds": 0.01,
+        "windowCorrelations": [
+          0.9947598006808702,
+          0.9954871276911386,
+          0.9960278908499581
+        ],
+        "windowOffsets": [
+          1.3800000000000001,
+          1.3800000000000001,
+          1.3800000000000001
+        ]
+      }
+    },
+    {
+      "comparison": [
+        {
+          "center": 10,
+          "correlation": 0.996612359184347,
+          "gainBoverA": 0.9921868791876359,
+          "normalizedResidual": 0.08224235843535976,
+          "offsetSamples": 6,
+          "offsetSeconds": 0.00025,
+          "rmsRatio": 0.9955594771066928
+        },
+        {
+          "center": 20,
+          "correlation": 0.9931498967363448,
+          "gainBoverA": 0.9843727408851992,
+          "normalizedResidual": 0.1168472618959798,
+          "offsetSamples": 6,
+          "offsetSeconds": 0.00025,
+          "rmsRatio": 0.9911623050256675
+        },
+        {
+          "center": 30,
+          "correlation": 0.996660699893746,
+          "gainBoverA": 0.9915939597936864,
+          "normalizedResidual": 0.08165445050521403,
+          "offsetSamples": 6,
+          "offsetSeconds": 0.00025,
+          "rmsRatio": 0.9949162838460474
+        }
+      ],
+      "date": "2026-10-18T12:49:55Z",
+      "event": "waveform",
+      "off": {
+        "channels": [
+          {
+            "clippedFraction": 0,
+            "dc": 5.00857219888544e-06,
+            "peak": 0.9774379134178162,
+            "rms": 0.22783191614479878
+          },
+          {
+            "clippedFraction": 1.0348024769032087e-06,
+            "dc": 2.664551393045985e-06,
+            "peak": 1.0443147420883179,
+            "rms": 0.22179332490790732
+          }
+        ],
+        "leftRightCorrelation": 0.8253725936651991,
+        "midRMS": 0.21477572810248705,
+        "sideRMS": 0.06649223347130001
+      },
+      "reference": {
+        "channels": [
+          {
+            "clippedFraction": 0,
+            "dc": 3.863563023029796e-06,
+            "peak": 0.9983417987823486,
+            "rms": 0.2292023684847174
+          },
+          {
+            "clippedFraction": 1.0348024769032087e-06,
+            "dc": 1.1750978271336995e-06,
+            "peak": 1.0053224563598633,
+            "rms": 0.2228160624898686
+          }
+        ],
+        "leftRightCorrelation": 0.822283834839589,
+        "midRMS": 0.21573638065792677,
+        "sideRMS": 0.0674401643818724
+      }
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:49:55Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "off24_89056B",
+      "rate": 24000,
+      "sha256": "7c9231fceee51c93b90cdd38aaedf0ff768d585438937e7b96ac68f46d1de69c",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:49:56Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "off24_89056B",
+      "pace": 1,
+      "seconds": 0.846519947052002,
+      "sections": 4
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:49:56Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "reference24_793341",
+      "rate": 24000,
+      "sha256": "84e9406647e9637570f47641c3dc8e354f21ee0c1c99a7403514047443aed316",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:49:57Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "reference24_793341",
+      "pace": 1,
+      "seconds": 0.5973629951477051,
+      "sections": 4
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:49:57Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "off24_2BCC05",
+      "rate": 24000,
+      "sha256": "7c9231fceee51c93b90cdd38aaedf0ff768d585438937e7b96ac68f46d1de69c",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:49:58Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "off24_2BCC05",
+      "pace": 1,
+      "seconds": 0.5965080261230469,
+      "sections": 4
+    },
+    {
+      "chunks": 472,
+      "date": "2026-10-18T12:49:58Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 1932736,
+      "name": "reference48_8AD2D7",
+      "rate": 48000,
+      "sha256": "1b80ba8ab9fb3db75db41aee9933bcbaeab33aa779edd72b03da7341ad246312",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:49:58Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 472,
+      "fedFrames": 1932736,
+      "keys": [
+        "E major"
+      ],
+      "name": "reference48_8AD2D7",
+      "pace": 1,
+      "seconds": 0.6209390163421631,
+      "sections": 4
+    },
+    {
+      "chunks": 472,
+      "date": "2026-10-18T12:49:58Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 1932736,
+      "name": "off48_12B48D",
+      "rate": 48000,
+      "sha256": "b37dccc1017146626b7f952872bdce267408fe04512e59d67a2b15cf8b060704",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:49:59Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 472,
+      "fedFrames": 1932736,
+      "keys": [
+        "E major"
+      ],
+      "name": "off48_12B48D",
+      "pace": 1,
+      "seconds": 0.6139379739761353,
+      "sections": 4
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:49:59Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "referenceFiltered_BA3C52",
+      "rate": 24000,
+      "sha256": "fd33c5f0c799e8528a915291ba6102014a18e9ead4ba902239460c702132bbe7",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:49:59Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "referenceFiltered_BA3C52",
+      "pace": 1,
+      "seconds": 0.6025820970535278,
+      "sections": 4
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:49:59Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "offFiltered_94F22E",
+      "rate": 24000,
+      "sha256": "a36bd5791b9facfe20c56f94e2ddb5ee27e0f402b7a8d3580b54acc27eaf030a",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:50:00Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "offFiltered_94F22E",
+      "pace": 1,
+      "seconds": 0.6098580360412598,
+      "sections": 3
+    },
+    {
+      "date": "2026-10-18T12:50:00Z",
+      "event": "readyForDiagnostics"
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:10Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "referenceMono_AA047C",
+      "rate": 24000,
+      "sha256": "ab15bd4bdbe081087b4e241866a994866070ed6e5ea83d03f27231b61f3b9c55",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:11Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "referenceMono_AA047C",
+      "pace": 1,
+      "seconds": 0.7426509857177734,
+      "sections": 4
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:11Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "offMono_87B674",
+      "rate": 24000,
+      "sha256": "6b27567cc0c775dfd43c1f5e0839412bce3dfbf4f2e148f718c386a167825407",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:11Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "offMono_87B674",
+      "pace": 1,
+      "seconds": 0.5829339027404785,
+      "sections": 4
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:11Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "referenceLeft_A96D83",
+      "rate": 24000,
+      "sha256": "9dbae2d9697826e009330881c97251547f466b6625209ef542b50e93ac9c0725",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:12Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "referenceLeft_A96D83",
+      "pace": 1,
+      "seconds": 0.5829330682754517,
+      "sections": 3
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:12Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "offLeft_A56144",
+      "rate": 24000,
+      "sha256": "5a98a6f856187d4ef5daa67fc94d99620257c00eac15c48852c85ae4393a6d4e",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:12Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "offLeft_A56144",
+      "pace": 1,
+      "seconds": 0.5992881059646606,
+      "sections": 3
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:12Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "referenceRight_6E7FC9",
+      "rate": 24000,
+      "sha256": "570be8f91b149e76127496ccd9073cf3c72ec0c31e3fd2f640024e09d3119695",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:13Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "referenceRight_6E7FC9",
+      "pace": 1,
+      "seconds": 0.5809129476547241,
+      "sections": 3
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:13Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "offRight_93C879",
+      "rate": 24000,
+      "sha256": "b89d47314373a3598ed7b02db8b7e790c018587ac2ad48c28c4083a4b4c14917",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:14Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "offRight_93C879",
+      "pace": 1,
+      "seconds": 0.5800360441207886,
+      "sections": 3
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:14Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "referenceInverted_0A5324",
+      "rate": 24000,
+      "sha256": "ee177cb784567a6bdba3e8f6e72ad602d52fb53f12fb2164a36797139f848118",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:14Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "referenceInverted_0A5324",
+      "pace": 1,
+      "seconds": 0.5960839986801147,
+      "sections": 4
+    },
+    {
+      "chunks": 236,
+      "date": "2026-10-18T12:51:14Z",
+      "duration": 40.26533333333333,
+      "event": "analysisStart",
+      "frames": 966368,
+      "name": "offInverted_AF137D",
+      "rate": 24000,
+      "sha256": "34e4e61582cbf421f1411455c450bc7bf8c97eb2261e61e042a4a0a18282ddf0",
+      "timeScale": 1
+    },
+    {
+      "bars": 20,
+      "beats": 80,
+      "bpm": 119.4000015258789,
+      "date": "2026-10-18T12:51:15Z",
+      "duration": 40.26533333333333,
+      "event": "analysisResult",
+      "fedChunks": 236,
+      "fedFrames": 966368,
+      "keys": [
+        "E major"
+      ],
+      "name": "offInverted_AF137D",
+      "pace": 1,
+      "seconds": 0.6297029256820679,
+      "sections": 4
+    },
+    {
+      "date": "2026-10-18T12:51:15Z",
+      "event": "diagnosticsFinished"
+    },
+    {
+      "date": "2026-10-18T12:52:24Z",
+      "event": "done"
+    },
+    {
+      "date": "2026-10-18T12:52:24Z",
+      "event": "restored",
+      "info": {
+        "id": "1403236244",
+        "paused": true,
+        "playing": false,
+        "preservesPitch": true,
+        "protected": true,
+        "rate": 1,
+        "time": 70.0223504219854,
+        "volume": 0.12
+      }
+    }
+  ],
+  "compiledProductSourceSHA256": {
+    "Sources/AppleMusic/AppleMusicAnalysis.swift": "f478829d5d7f9b6635f574c2f1118b4db91d2d689b4842bbed1f38ff258ac419",
+    "Sources/AppleMusic/AppleMusicPlayback.swift": "b59e5920376d27e7960eb340024c2a0650f7e1f6ec3210fdd50c430b1f8451c2",
+    "Sources/Playback/AudioFeatureAnalyzer.swift": "5193a36f9edbb14cbb7968f267d839325c9fd3dbc8a6e8df40dc630eb7cc985d",
+    "Sources/Analysis/MusicAnalyzer.swift": "e5bfa25b9a709925afbca514873c23b4fd3dbf687c54ed1cd08ed9b1f7d93e12",
+    "Sources/Models/MusicModels.swift": "4ee740c04685b3a0115bf161413da7c8c58ac5c225f4d71085c9860292c62617",
+    "Sources/Support/AutomaticCamera.swift": "a26d4301e6937a392150ad758986403d8b08d4dfec24b5e610bb40cf8010d2a3",
+    "Sources/Rendering/WaterInteractions.swift": "a473f971c051e743cb5207652b5373fd4026ba9fd59ea62808de159728ac6843"
+  },
+  "productSourcesUnchanged": true,
+  "PCMStorage": "RAM only; released on process termination; no audio written to disk",
+  "captureMuteBehavior": "muted; readback 1",
+  "filterPadding": "zero padding; center-aligned FIR; first/final 3 seconds excluded from activity comparison"
+}

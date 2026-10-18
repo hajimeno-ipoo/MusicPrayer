@@ -1,0 +1,55 @@
+{
+  "verificationDate": "2026-10-18",
+  "song": {
+    "catalogID": "1403236244",
+    "title": "愛が止まらない ~Turn it into love~ (Remastered 2018)",
+    "artist": "Wink",
+    "nominalDurationSeconds": 209
+  },
+  "authorized": true,
+  "status": "complete",
+  "capture": {
+    "frames": 10045440,
+    "invalidBuffers": 0,
+    "nonzeroSamples": 19959626,
+    "sampleRate": 48000,
+    "seconds": 209.28
+  },
+  "presentSessionResultFields": {
+    "key": true,
+    "rhythm": true,
+    "structure": true,
+    "pace": true,
+    "instrumentActivity": true,
+    "loudness": true
+  },
+  "convertedWith": "existing MusicAnalyzer.convert without algorithm changes",
+  "summary": {
+    "bars": 104,
+    "bassActivity": 4186,
+    "bassRanges": 1,
+    "beats": 416,
+    "bpm": 119.49158477783203,
+    "drumActivity": 4186,
+    "drumRanges": 1,
+    "integratedLUFS": -9.824324607849121,
+    "keys": [
+      "E major"
+    ],
+    "momentary": 2081,
+    "otherActivity": 4186,
+    "otherRanges": 1,
+    "paceRanges": 4,
+    "peak": 0.1494654417037964,
+    "phrases": 52,
+    "sections": 13,
+    "segments": 26,
+    "shortTerm": 2081,
+    "streamingLoudnessCount": 2093,
+    "vocalActivity": 4186,
+    "vocalRanges": 6
+  },
+  "audioSaved": false,
+  "screenCaptureUsed": false,
+  "productImplementationChanged": false
+}
