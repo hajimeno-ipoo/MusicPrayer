@@ -59,6 +59,7 @@ struct AppleMusicSearchView: View {
                 }
             }
             .padding(24)
+            .background(AppleMusicAppearance.panel)
             Divider()
             results
             Divider()
@@ -66,13 +67,16 @@ struct AppleMusicSearchView: View {
                 Text("曲を一覧に追加し、再生する時は曲の一覧から選びます。")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("接続を確認", action: onSignIn)
+                Button("Apple Musicを開く", action: onSignIn)
                     .font(.caption)
-                    .help("Apple Musicの公式サインイン画面を開きます")
+                    .help("公式画面で曲を選び、MusicPrayerの一覧へ直接追加できます")
             }
             .padding(.horizontal, 24).padding(.vertical, 16)
+            .background(AppleMusicAppearance.panel)
         }
         .frame(minWidth: 620, idealWidth: 720, minHeight: 560, idealHeight: 640)
+        .background(AppleMusicAppearance.background)
+        .presentationBackground(AppleMusicAppearance.background)
         .onAppear { searchFocused = true }
         .onDisappear { store.cancelSearch() }
     }
@@ -96,6 +100,7 @@ struct AppleMusicSearchView: View {
                 .help("一覧に追加")
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
         } else {
             VStack(spacing: 12) {
                 Image(systemName: store.hasSearched ? "magnifyingglass" : "music.note.list")

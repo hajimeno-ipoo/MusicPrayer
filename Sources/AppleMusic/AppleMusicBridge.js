@@ -3,8 +3,86 @@ if (location.protocol !== "https:" || location.hostname !== "music.apple.com") r
 let music;
 try { music = window.MusicKit?.getInstance(); } catch { return null; }
 if (!music) {
-    if (command === "search" || command === "playSong" || command === "prepareSong") throw new Error("Apple Music is not ready");
+    if (command === "search" || command === "currentSong" || command === "playSong" || command === "prepareSong") throw new Error("Apple Music is not ready");
     return null;
+}
+
+const finite = value => Number.isFinite(value) ? Math.max(0, value) : 0;
+const catalogSong = item => {
+    const attributes = item.attributes || {};
+    const artwork = attributes.artwork?.url;
+    return {
+        id: item.id, title: attributes.name || "", artist: attributes.artistName || "",
+        album: attributes.albumName || "", duration: finite(attributes.durationInMillis) / 1000,
+        artworkURL: typeof artwork === "string" ? artwork.replaceAll("{w}", "300").replaceAll("{h}", "300") : null
+    };
+};
+
+// Reading the official browser never installs native queue listeners or writes player state.
+const snapshot = completedID => {
+    const item = music.nowPlayingItem;
+    const attributes = item?.attributes;
+    const artwork = attributes?.artwork?.url;
+    // MusicKit's clock can be quantized to whole seconds. Use the actual media
+    // clock for continuous visual motion and lyric timing, including while paused.
+    const media = typeof document !== "undefined" ? document.getElementById?.("apple-music-player") : null;
+    const playbackTime = media && media.readyState >= 2 && Number.isFinite(media.currentTime)
+        ? media.currentTime : music.currentPlaybackTime;
+    return {
+        id: String(item?.id || completedID || ""),
+        isReady: true,
+        isAuthorized: !!music.isAuthorized,
+        available: !!item,
+        title: item?.title || attributes?.name || "",
+        artist: item?.artistName || attributes?.artistName || "",
+        artworkURL: typeof artwork === "string" ? artwork.replaceAll("{w}", "600").replaceAll("{h}", "600") : null,
+        isPlaying: !!music.isPlaying,
+        ended: completedID !== null || (window.MusicKit?.PlaybackStates?.completed !== undefined && music.playbackState === window.MusicKit.PlaybackStates.completed),
+        time: finite(playbackTime),
+        playbackRate: media ? media.playbackRate : null,
+        preservesPitch: media ? media.preservesPitch : null,
+        duration: finite(music.currentPlaybackDuration),
+        canNext: !!music.queue?.nextPlayableItem,
+        canPrevious: !!music.queue?.previousPlayableItem || finite(music.currentPlaybackTime) > 3
+    };
+
+};
+if (command === "browserSnapshot") return snapshot(null);
+
+// Read the clicked song without touching the official player's queue or completion state.
+if (command === "currentSong") {
+    const item = music.nowPlayingItem;
+    if (!item) return { songs: [] };
+    const id = String(item.playParams?.catalogId || item.attributes?.playParams?.catalogId || item.id || "");
+    if (!/^\d+$/.test(id)) throw new Error("The current item has no catalog song ID");
+    const response = await music.api.music("/v1/catalog/" + encodeURIComponent(music.storefrontId) + "/songs/" + id);
+    const song = response.data?.data?.find(song => song.type === "songs" && String(song.id) === id);
+    if (!song?.attributes?.name || !Number.isFinite(song.attributes.durationInMillis) || song.attributes.durationInMillis <= 0) {
+        throw new Error("The current song is unavailable in the catalog");
+    }
+    return { songs: [catalogSong(song)] };
+}
+
+switch (command) {
+case "lyrics": {
+    if (typeof value !== "string" || !/^\d+$/.test(value)) throw new Error("Invalid song ID");
+    const response = await music.api.music("/v1/catalog/" + encodeURIComponent(music.storefrontId) + "/songs/" + value,
+        { include: "syllable-lyrics,lyrics" });
+    const catalog = response.data || {};
+    const song = catalog.data?.[0];
+    const related = [...(song?.relationships?.["syllable-lyrics"]?.data || []), ...(song?.relationships?.lyrics?.data || [])];
+    const resources = [...related, ...(catalog.included || [])];
+    const lyrics = ["syllable-lyrics", "lyrics"].map(type =>
+        resources.find(item => item.type === type && typeof item.attributes?.ttml === "string" && item.attributes.ttml.length > 0)
+    ).find(Boolean);
+    return { songID: value, ttml: lyrics?.attributes?.ttml || null };
+}
+case "search": {
+    if (typeof value !== "string" || !value.trim()) return { songs: [] };
+    const response = await music.api.music("/v1/catalog/" + encodeURIComponent(music.storefrontId) + "/search",
+        { term: value.trim(), types: "songs", limit: 25 });
+    return { songs: (response.data?.results?.songs?.data || []).map(catalogSong) };
+}
 }
 
 // The official page clears the current item after completion. Keep the completion event
@@ -39,35 +117,7 @@ if (!window.__musicPrayerQueueState || window.__musicPrayerQueueState.music !== 
 }
 const queueState = window.__musicPrayerQueueState;
 
-const finite = value => Number.isFinite(value) ? Math.max(0, value) : 0;
 switch (command) {
-case "lyrics": {
-    if (typeof value !== "string" || !/^\d+$/.test(value)) throw new Error("Invalid song ID");
-    const response = await music.api.music("/v1/catalog/" + encodeURIComponent(music.storefrontId) + "/songs/" + value,
-        { include: "syllable-lyrics,lyrics" });
-    const catalog = response.data || {};
-    const song = catalog.data?.[0];
-    const related = [...(song?.relationships?.["syllable-lyrics"]?.data || []), ...(song?.relationships?.lyrics?.data || [])];
-    const resources = [...related, ...(catalog.included || [])];
-    const lyrics = ["syllable-lyrics", "lyrics"].map(type =>
-        resources.find(item => item.type === type && typeof item.attributes?.ttml === "string" && item.attributes.ttml.length > 0)
-    ).find(Boolean);
-    return { songID: value, ttml: lyrics?.attributes?.ttml || null };
-}
-case "search": {
-    if (typeof value !== "string" || !value.trim()) return { songs: [] };
-    const response = await music.api.music("/v1/catalog/" + encodeURIComponent(music.storefrontId) + "/search",
-        { term: value.trim(), types: "songs", limit: 25 });
-    return { songs: (response.data?.results?.songs?.data || []).map(item => {
-        const attributes = item.attributes || {};
-        const artwork = attributes.artwork?.url;
-        return {
-            id: item.id, title: attributes.name || "", artist: attributes.artistName || "",
-            album: attributes.albumName || "", duration: finite(attributes.durationInMillis) / 1000,
-            artworkURL: typeof artwork === "string" ? artwork.replaceAll("{w}", "300").replaceAll("{h}", "300") : null
-        };
-    }) };
-}
 case "prepareSong":
 case "playSong":
     if (typeof value !== "string" || !/^\d+$/.test(value)) throw new Error("Invalid song ID");
@@ -111,33 +161,9 @@ case "seek": queueState.completedID = null; await music.seekToTime(Math.min(fini
 case "volume": music.volume = Math.min(1, finite(value)); break;
 case "snapshot":
     if (queueState.analysisRate === 2) queueState.applyAnalysisRate(document.getElementById("apple-music-player"));
-    if (Number.isFinite(value) && music.volume !== value) music.volume = Math.max(0, Math.min(1, value));
     break;
 default: throw new Error("Unknown playback command");
 }
 const item = music.nowPlayingItem;
 if (item?.id) queueState.lastID = String(item.id);
-const attributes = item?.attributes;
-const artwork = attributes?.artwork?.url;
-// MusicKit's clock can be quantized to whole seconds. Use the actual media
-// clock for continuous visual motion and lyric timing, including while paused.
-const media = typeof document !== "undefined" ? document.getElementById?.("apple-music-player") : null;
-const playbackTime = media && media.readyState >= 2 && Number.isFinite(media.currentTime)
-    ? media.currentTime : music.currentPlaybackTime;
-return {
-    id: String(item?.id || queueState.completedID || ""),
-    isReady: true,
-    isAuthorized: !!music.isAuthorized,
-    available: !!item,
-    title: item?.title || attributes?.name || "",
-    artist: item?.artistName || attributes?.artistName || "",
-    artworkURL: typeof artwork === "string" ? artwork.replaceAll("{w}", "600").replaceAll("{h}", "600") : null,
-    isPlaying: !!music.isPlaying,
-    ended: queueState.completedID !== null || (window.MusicKit?.PlaybackStates?.completed !== undefined && music.playbackState === window.MusicKit.PlaybackStates.completed),
-    time: finite(playbackTime),
-    playbackRate: media ? media.playbackRate : null,
-    preservesPitch: media ? media.preservesPitch : null,
-    duration: finite(music.currentPlaybackDuration),
-    canNext: !!music.queue?.nextPlayableItem,
-    canPrevious: !!music.queue?.previousPlayableItem || finite(music.currentPlaybackTime) > 3
-};
+return snapshot(queueState.completedID);

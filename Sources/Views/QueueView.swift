@@ -23,7 +23,7 @@ struct QueueView: View {
                                             if let song = track.appleMusicSong {
                                                 Label("Apple Music", systemImage: "music.note")
                                                     .font(.system(size: 13)).foregroundStyle(.pink)
-                                                if store.appleMusic.preanalysis.songID == song.id {
+                                                if store.appleMusic.preanalysis.isAnalyzing(songID: song.id) {
                                                     AnalysisProgressView(status: store.appleMusic.preanalysis.status(for: song),
                                                                          progress: store.appleMusic.preanalysis.progress(for: song))
                                                         .tint(.cyan).foregroundStyle(.primary)

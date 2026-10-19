@@ -17,6 +17,7 @@ final class PlayerStore {
     var isAppleMusicBrowserVisible = false
     var isAppleMusicSearchVisible = false
     let appleMusic: AppleMusicStore
+    let appleMusicBrowser: AppleMusicStore
     @ObservationIgnored private var appleMusicTask: Task<Void, Never>?
     @ObservationIgnored private var appleMusicRequest: UInt64 = 0
     var visualizerStyle = VisualizerStyle.ribbons
@@ -95,6 +96,7 @@ final class PlayerStore {
 
     init(lyricDirectory: URL? = nil, lyricTranscriber: any LyricTranscribing = AppleLyricTranscriber(), appleMusicAnalysisDirectory: URL? = nil) {
         appleMusic = AppleMusicStore(analysisDirectory: appleMusicAnalysisDirectory)
+        appleMusicBrowser = AppleMusicStore(usesAnalysisWorkers: false, isOfficialBrowser: true)
         lyricStore = LyricStore(directory: lyricDirectory)
         self.lyricTranscriber = lyricTranscriber
         engine.onTrackTransition = { [weak self] url in self?.didTransition(to: url) }
@@ -180,9 +182,6 @@ final class PlayerStore {
 
     func select(_ index: Int, autoplay: Bool = true) {
         guard tracks.indices.contains(index) else { return }
-        let keepsPreanalysis = !autoplay && appleMusic.preanalysis.isWorking &&
-            tracks[index].appleMusicSong?.id == appleMusic.preanalysis.songID
-        if !keepsPreanalysis { appleMusic.setPreanalysisAllowed(false) }
         if tracks[index].isAppleMusic { selectAppleMusic(index, autoplay: autoplay); return }
         if isAppleMusicActive {
             let trackID = tracks[index].id
@@ -216,7 +215,6 @@ final class PlayerStore {
     }
 
     func togglePlayback() {
-        appleMusic.setPreanalysisAllowed(false)
         if isAppleMusicActive {
             if appleMusicSelectionPending { selectAppleMusic(currentIndex, autoplay: true, resumeTime: position); return }
             if appleMusic.playback.id != currentQueueTrack?.appleMusicSong?.id || !appleMusic.playback.available {
@@ -367,7 +365,8 @@ final class PlayerStore {
         loadCurrentLyrics(); publishLyricEvent()
     }
     private func tick() {
-        appleMusic.setPreanalysisAllowed(!isPlaying && !appleMusicSelectionPending && !isAppleMusicBrowserVisible && !isAppleMusicSearchVisible)
+        appleMusic.startPreanalysisIfReady(connectionReady: appleMusicBrowser.playback.isReady)
+        if appleMusicBrowser.isInitialized { appleMusicBrowser.pollPlayback() }
         let now = Date()
         let dt = Float(min(0.1, now.timeIntervalSince(previousTick))); previousTick = now
         if appleMusic.isInitialized { appleMusic.pollPlayback() }
@@ -460,7 +459,7 @@ final class PlayerStore {
         do { try QueuePersistence.save(tracks: tracks, current: index, time: restoredLocalSelection?.time ?? (isAppleMusicActive ? position : engine.currentTime), volume: volume) }
         catch { playbackError = "再生位置を保存できませんでした：\(error.localizedDescription)" }
     }
-    func shutdown() { cancelAppleMusicCommand(); appleMusic.stop(); persist(); analysisTask?.cancel(); warmTask?.cancel(); lyricLoadTask?.cancel(); lyricTask?.cancel(); timer?.invalidate(); engine.stop(); openedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
+    func shutdown() { cancelAppleMusicCommand(); appleMusic.stop(); appleMusicBrowser.stop(); persist(); analysisTask?.cancel(); warmTask?.cancel(); lyricLoadTask?.cancel(); lyricTask?.cancel(); timer?.invalidate(); engine.stop(); openedURLs.forEach { $0.stopAccessingSecurityScopedResource() } }
 
     func openAppleMusic() {
         isAppleMusicBrowserVisible = false
@@ -472,14 +471,20 @@ final class PlayerStore {
         isAppleMusicBrowserVisible = true
     }
 
-    func addAppleMusicSong(_ song: AppleMusicSong) {
+    @discardableResult
+    func addAppleMusicSong(_ song: AppleMusicSong, selectIfEmpty: Bool = true) -> Bool {
         let wasEmpty = tracks.isEmpty
-        if !tracks.contains(where: { $0.appleMusicSong?.id == song.id }) {
+        let isNew = !tracks.contains(where: { $0.appleMusicSong?.id == song.id })
+        if isNew {
             tracks.append(Track(appleMusicSong: song))
         }
         isAppleMusicSearchVisible = false
-        if wasEmpty { select(0, autoplay: false) }
-        else { planNext(); persist() }
+        if wasEmpty, selectIfEmpty { select(0, autoplay: false) }
+        else {
+            if wasEmpty { currentIndex = -1 }
+            planNext(); persist()
+        }
+        return isNew
     }
 
     private func selectAppleMusic(_ index: Int, autoplay: Bool, resumeTime: Double = 0) {
@@ -490,13 +495,6 @@ final class PlayerStore {
         appleMusic.musicAnalysis.select(song)
         restoredLocalSelection = nil
         position = resumeTime; duration = song.duration
-        if !autoplay, appleMusic.selectDuringPreanalysis(song) {
-            appleMusicSelectionPending = false
-            appleMusicEndHandled = false
-            updateVolume()
-            planNext(); persist(); nowPlaying?.update()
-            return
-        }
         appleMusicSelectionPending = true
         appleMusicEndHandled = false
         planNext(); persist(); nowPlaying?.update()
@@ -507,7 +505,7 @@ final class PlayerStore {
             await self.appleMusic.allowPlayback()
             guard !Task.isCancelled, request == self.appleMusicRequest else { return }
             self.updateVolume()
-            // The view creates the connection; selecting a saved song waits for its initialization.
+            // The hidden native connection is separate from the visible official browser.
             for _ in 0..<160 {
                 guard !Task.isCancelled, request == self.appleMusicRequest else { return }
                 self.appleMusic.pollPlayback()
@@ -554,7 +552,6 @@ final class PlayerStore {
 
     func showAppleMusicPlayer() {
         isAppleMusicBrowserVisible = false
-        appleMusic.pollPlayback()
     }
 
     // The local queue and resume position stay intact while the official web player is shown.
@@ -589,7 +586,7 @@ final class PlayerStore {
             self.isAppleMusicActive = false
             self.isAppleMusicBrowserVisible = false
             self.isAppleMusicSearchVisible = false
-            self.appleMusic.cancelSearch()
+            self.appleMusicBrowser.cancelSearch()
             action(self)
             self.nowPlaying = NowPlayingController(store: self)
         }

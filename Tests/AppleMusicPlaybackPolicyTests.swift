@@ -5,6 +5,37 @@ import XCTest
 
 final class AppleMusicPlaybackPolicyTests: XCTestCase {
     @MainActor
+    func testOfficialBrowserSurfacesFollowLightAndDarkAppearanceWithoutChangingArtwork() async throws {
+        _ = NSApplication.shared
+        let store = AppleMusicStore(websiteDataStore: .nonPersistent(), usesAnalysisWorkers: false, isOfficialBrowser: true)
+        let view = store.webViewForDisplay()
+        view.stopLoading()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        window.orderBack(nil)
+        defer { store.stop(); window.orderOut(nil); window.contentView = nil }
+        view.loadHTMLString("""
+        <html><head><style>.artwork{background-color:rgb(200,100,50)}</style></head>
+        <body><main class="scrollable-page"><div class="artwork">ジャケット</div><button>再生</button></main></body></html>
+        """, baseURL: URL(string: "https://music.apple.com/"))
+        for (appearance, expected) in [(NSAppearance.Name.aqua, "rgb(255, 255, 255)"), (.darkAqua, "rgb(31, 31, 31)")] {
+            window.appearance = NSAppearance(named: appearance)
+            view.appearance = NSAppearance(named: appearance)
+            var background: String?
+            for _ in 0..<100 {
+                background = try? await view.evaluateJavaScript("getComputedStyle(document.querySelector('.scrollable-page')).backgroundColor") as? String
+                if background == expected { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            XCTAssertEqual(background, expected)
+            let artwork = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('.artwork')).backgroundColor") as? String
+            XCTAssertEqual(artwork, "rgb(200, 100, 50)")
+            let button = try await view.evaluateJavaScript("document.querySelector('button').textContent") as? String
+            XCTAssertEqual(button, "再生")
+        }
+    }
+
+    @MainActor
     func testNativePlayerConnectionCanStartAudioWithoutClickingWebPage() async throws {
         _ = NSApplication.shared
         let store = AppleMusicStore()
@@ -84,17 +115,8 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTAssertTrue(store.playback.isPlaying)
-        store.setPreanalysisAllowed(true)
-        XCTAssertFalse(store.preanalysis.isWorking, "UIの再生表示の更新前でも、実際のApple Musicが再生中なら事前解析を始めない")
-        _ = try await view.evaluateJavaScript("window.player.isPlaying=false")
-        for _ in 0..<100 {
-            store.pollPlayback()
-            if !store.playback.isPlaying { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        XCTAssertFalse(store.playback.isPlaying)
         let previous = store.playback
-        store.setPreanalysisAllowed(true)
+        store.startPreanalysisIfReady()
         XCTAssertTrue(store.preanalysis.isWorking)
         for _ in 0..<100 {
             if !store.preanalysis.isWorking { break }
@@ -105,7 +127,7 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
         XCTAssertEqual(store.playback, previous)
         XCTAssertTrue(store.webViewForDisplay() === view)
         let calls = try await view.evaluateJavaScript("window.playCalls") as? Int
-        XCTAssertEqual(calls, 0, "保存済みの結果がある曲は、接続を使い回し、内部再生も始めない")
+        XCTAssertEqual(calls, 0, "保存済みの結果がある曲は、公式画面の再生を変更せず、内部再生も始めない")
         let reused = await store.musicAnalysis.loadSavedAnalysis(for: song)
         XCTAssertTrue(reused)
         XCTAssertEqual(store.musicAnalysis.analysis?.beats, [1, 2])

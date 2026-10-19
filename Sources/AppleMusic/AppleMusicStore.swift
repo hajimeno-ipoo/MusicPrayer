@@ -9,23 +9,53 @@ final class AppleMusicStore: NSObject {
     private(set) var isLoading = false
     private(set) var canGoBack = false
     private(set) var playback = AppleMusicPlayback()
+    private(set) var workerPhase = AppleMusicPreanalysis.Phase.preparing
+    private(set) var workerPosition: Double = 0
     var audioCaptureError: String?
     let musicAnalysis: AppleMusicAnalysis
     let preanalysis = AppleMusicPreanalysis()
     @ObservationIgnored private let silentAnalysis: AppleMusicAnalysis
     @ObservationIgnored private var stopping = false
-    @ObservationIgnored private var foregroundPreparations = 0
-    init(analysisDirectory: URL? = nil) {
+    @ObservationIgnored private let isOfficialBrowser: Bool
+    @ObservationIgnored private let websiteDataStore: WKWebsiteDataStore
+    @ObservationIgnored private var workerAudioPIDs: [UUID: Int32] = [:]
+    @ObservationIgnored private let workerStartup = AppleMusicWorkerStartupGate()
+    init(analysisDirectory: URL? = nil, websiteDataStore: WKWebsiteDataStore? = nil, usesAnalysisWorkers: Bool = true, isOfficialBrowser: Bool = false) {
+        self.isOfficialBrowser = isOfficialBrowser
+        self.websiteDataStore = websiteDataStore ?? .default()
         let cache = AppleMusicAnalysisCache(directory: analysisDirectory)
         musicAnalysis = AppleMusicAnalysis(cache: cache)
         silentAnalysis = AppleMusicAnalysis(cache: cache, managesQueueCache: false)
         super.init()
+        // Capture the host baseline before either native or browsing WebView creates its shared GPU.
+        audioCapture.prepareForWebView()
+        guard usesAnalysisWorkers else { return }
         preanalysis.operation = { [weak self] song in
             guard let self else { throw CancellationError() }
-            await self.musicAnalysis.finishStorageBeforeTermination()
-            if await self.silentAnalysis.loadSavedAnalysis(for: song) { return }
+            await self.musicAnalysis.queueRegistration?.value
+            if await cache.load(id: song.id, duration: song.duration) != nil { return }
+            guard let ticket = await cache.ticket(for: song.id) else { throw CancellationError() }
+            let session = try await AppleMusicWorkerSession.capture(from: self.websiteDataStore)
+            let permit = try await self.workerStartup.acquire()
+            defer {
+                self.workerStartup.release(permit)
+                self.workerAudioPIDs[permit] = nil
+                self.audioCapture.setExcludedProcesses(Set(self.workerAudioPIDs.values))
+            }
+            if self.webView != nil { _ = try await self.audioCapture.identifyProcess() }
             try Task.checkCancellation()
-            try await self.analyzeSilently(song)
+            let result = try await AppleMusicAnalysisWorker.run(song: song, session: session,
+                onProgress: { [weak self] phase, position in
+                    self?.preanalysis.update(songID: song.id, phase: phase, position: position)
+                }, onReady: { [weak self] pid in
+                    guard let self else { return }
+                    self.workerAudioPIDs[permit] = pid
+                    self.audioCapture.setExcludedProcesses(Set(self.workerAudioPIDs.values))
+                    self.workerStartup.release(permit)
+                })
+            try Task.checkCancellation()
+            guard try await cache.save(result, id: song.id, ticket: ticket) else { throw CancellationError() }
+            self.musicAnalysis.refreshSavedAnalysis(for: song)
         }
     }
     private(set) var artworkData: Data?
@@ -50,8 +80,9 @@ final class AppleMusicStore: NSObject {
         preanalysis.setSongs(songs)
     }
 
-    func setPreanalysisAllowed(_ allowed: Bool) {
-        preanalysis.setAllowed(allowed && !stopping && !playback.isPlaying && webView != nil && playback.isReady && foregroundPreparations == 0 && commandTask == nil && songTask == nil && mediaTask == nil)
+    func startPreanalysisIfReady(connectionReady: Bool = false) {
+        guard !stopping, connectionReady || (webView != nil && playback.isReady) else { return }
+        preanalysis.setAllowed(true)
     }
 
     var needsStorageBeforeTermination: Bool {
@@ -66,7 +97,6 @@ final class AppleMusicStore: NSObject {
     }
 
     func audioFeatures(isPlaying: Bool) -> AudioFeatures {
-        guard !preanalysis.isWorking else { return AudioFeatures() }
         let input = musicAnalysis.update(position: playback.time, isPlaying: isPlaying && !playbackSuspended, volume: desiredVolume)
         audioCapture.setAnalysisInput(input)
         guard isPlaying, !playbackSuspended else {
@@ -84,10 +114,9 @@ final class AppleMusicStore: NSObject {
     }
 
     func stopPlayback() {
-        preanalysis.setAllowed(false)
         if playback.ended { finishAnalysis() }
         else { musicAnalysis.stopUnfinishedAnalysis(); audioCapture.setAnalysisInput(nil) }
-        if !preanalysis.isWorking { audioCapture.stop() }
+        audioCapture.stop()
         let pendingSong = songTask
         guard pendingSong != nil else { command("stop"); return }
         bridgeGeneration &+= 1
@@ -181,24 +210,24 @@ final class AppleMusicStore: NSObject {
         isSearching = false
     }
 
-    /// Selecting the song already being analyzed changes the display, not its hidden media queue.
-    func selectDuringPreanalysis(_ song: AppleMusicSong) -> Bool {
-        guard preanalysis.isWorking, preanalysis.songID == song.id else { return false }
-        selectedSong = song
-        var state = playback
-        state.id = song.id; state.duration = song.duration; state.time = 0
-        state.isPlaying = false; state.ended = false; state.available = false
-        playback = withCatalogMetadata(state)
-        musicAnalysis.select(song)
-        loadArtwork(for: song)
-        loadLyrics(for: song)
-        return true
+    func currentBrowserSong() async throws -> AppleMusicSong? {
+        guard let result = try await evaluateValue("currentSong"), !(result is NSNull) else {
+            throw URLError(.resourceUnavailable)
+        }
+        return try JSONDecoder().decode(AppleMusicSearchResult.self,
+            from: JSONSerialization.data(withJSONObject: result)).songs.first
+    }
+
+    func analyzeInWorker(_ song: AppleMusicSong, onReady: @MainActor (Int32) -> Void) async throws -> MusicAnalysis {
+        setQueueSongs([song])
+        await silentAnalysis.finishStorageBeforeTermination()
+        silentAnalysis.select(song, force: true)
+        try await analyzeSilently(song, onReady: onReady)
+        guard let result = silentAnalysis.analysis else { throw SilentAnalysisError.noAudio }
+        return result
     }
 
     func playSong(_ song: AppleMusicSong, autoplay: Bool = true) async -> Bool {
-        foregroundPreparations += 1
-        defer { foregroundPreparations -= 1 }
-        await preanalysis.yieldToPlayback()
         guard !playbackSuspended, startingSongID == nil else { return false }
         startingSongID = song.id
         bridgeGeneration &+= 1
@@ -246,13 +275,12 @@ final class AppleMusicStore: NSObject {
 
     func setVolume(_ value: Float) {
         desiredVolume = value
-        guard !preanalysis.isWorking else { return }
         audioCapture.setPlaybackVolume(value)
         command("volume", value: Double(value))
     }
 
     func pollPlayback() {
-        guard !preanalysis.isWorking, webView != nil, pollTask == nil, commandTask == nil, startingSongID == nil,
+        guard webView != nil, pollTask == nil, commandTask == nil, startingSongID == nil,
               Date().timeIntervalSince(lastPoll) >= (playback.isPlaying ? 1.0 / 30.0 : 0.5) else { return }
         lastPoll = Date()
         let generation = bridgeGeneration
@@ -260,7 +288,7 @@ final class AppleMusicStore: NSObject {
             guard let self else { return }
             defer { self.pollTask = nil }
             do {
-                let snapshot = try await self.evaluate("snapshot", value: Double(self.desiredVolume))
+                let snapshot = try await self.evaluate(self.isOfficialBrowser ? "browserSnapshot" : "snapshot")
                 if generation == self.bridgeGeneration { self.playback = self.withCatalogMetadata(snapshot) }
             } catch {
                 // Navigation can invalidate a poll. The next poll reads the new page.
@@ -270,7 +298,6 @@ final class AppleMusicStore: NSObject {
     }
 
     func command(_ name: String, value: Double = 0) {
-        preanalysis.setAllowed(false)
         if name == "seek" { musicAnalysis.interrupt(); audioCapture.setAnalysisInput(nil) }
         guard webView != nil, !playbackSuspended, startingSongID == nil else { return }
         if name == "toggle", !playback.isPlaying {
@@ -283,7 +310,6 @@ final class AppleMusicStore: NSObject {
         commandTask = Task { @MainActor [weak self] in
             await previous?.value
             guard let self else { return }
-            await self.preanalysis.yieldToPlayback()
             guard !self.playbackSuspended else { return }
             do {
                 let snapshot = try await self.evaluate(name, value: value)
@@ -300,7 +326,7 @@ final class AppleMusicStore: NSObject {
         }
     }
 
-    private func analyzeSilently(_ song: AppleMusicSong) async throws {
+    private func analyzeSilently(_ song: AppleMusicSong, onReady: @MainActor (Int32) -> Void) async throws {
         let pendingPoll = pollTask, pendingCommand = commandTask, pendingSong = songTask
         await pendingPoll?.value
         try Task.checkCancellation()
@@ -324,6 +350,8 @@ final class AppleMusicStore: NSObject {
                 try await Task.sleep(for: .milliseconds(100))
             }
             guard ready else { throw SilentAnalysisError.noAudioProcess }
+            guard let processID = await audioCapture.capturedProcessID() else { throw SilentAnalysisError.noAudioProcess }
+            onReady(processID)
             _ = try await evaluate("pause")
             _ = try await evaluate("seek", value: 0)
             audioCapture.reset()
@@ -334,15 +362,16 @@ final class AppleMusicStore: NSObject {
             _ = try await evaluate("volume", value: 0.12)
             _ = try await evaluate("toggle")
             _ = try await evaluate("analysisRate", value: 2)
-            preanalysis.phase = .capturing
+            workerPhase = .capturing
             let began = Date()
             while true {
                 try Task.checkCancellation()
                 let state = try await evaluate("snapshot", value: 0.12)
+                guard state.id == song.id else { throw SilentAnalysisError.noAudio }
                 if state.ended {
                     audioCapture.setRecording(nil)
-                    preanalysis.position = song.duration
-                    preanalysis.phase = .analyzing
+                    workerPosition = song.duration
+                    workerPhase = .analyzing
                     let captured = try recording.takeAudio(endingAt: song.duration)
                     let expansion = Task.detached(priority: .utility) {
                         try AppleMusicTimeExpansion.expand(captured.buffer)
@@ -360,13 +389,13 @@ final class AppleMusicStore: NSObject {
                 }
                 guard Date().timeIntervalSince(began) < song.duration + 30 else { throw SilentAnalysisError.didNotFinish }
                 guard state.playbackRate == 2, state.preservesPitch == true else { throw SilentAnalysisError.playbackRateChanged }
-                preanalysis.position = state.time
+                workerPosition = state.time
                 recording.update(position: state.isPlaying ? state.time : nil)
                 if let error = silentAnalysis.error { throw SilentAnalysisError.analysis(error) }
                 try await Task.sleep(for: .milliseconds(50))
             }
         } catch { failure = error }
-        preanalysis.phase = .restoring
+        workerPhase = .restoring
         audioCapture.setRecording(nil)
         audioCapture.setAnalysisInput(nil)
         silentAnalysis.stopUnfinishedAnalysis()
@@ -413,9 +442,12 @@ final class AppleMusicStore: NSObject {
 
     func webViewForDisplay() -> WKWebView {
         if let webView { return webView }
-        audioCapture.prepareForWebView()
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
+        configuration.websiteDataStore = websiteDataStore
+        if isOfficialBrowser {
+            configuration.userContentController.addUserScript(WKUserScript(
+                source: AppleMusicAppearance.browserStyle, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         // Playback is controlled by the native queue and buttons, including track-end advances.
         configuration.mediaTypesRequiringUserActionForPlayback = []
@@ -454,7 +486,7 @@ final class AppleMusicStore: NSObject {
         audioCapture.setRecording(nil)
         musicAnalysis.interrupt()
         audioCapture.setAnalysisInput(nil)
-        if !preanalysis.isWorking { audioCapture.stop() }
+        audioCapture.stop()
         artworkTask?.cancel(); artworkTask = nil
         guard webView != nil else { return }
         lyricsGeneration &+= 1
@@ -481,9 +513,6 @@ final class AppleMusicStore: NSObject {
     }
 
     private func updatePlaybackSuspension(_ suspended: Bool) async {
-        foregroundPreparations += 1
-        defer { foregroundPreparations -= 1 }
-        await preanalysis.yieldToPlayback()
         guard webView != nil else { return }
         mediaGeneration &+= 1
         let generation = mediaGeneration

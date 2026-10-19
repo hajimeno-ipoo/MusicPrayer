@@ -12,6 +12,7 @@ final class AppleMusicAudioCapture {
     private var updatePending = false
     private var wantsCapture = false
     private var existingPIDs: Set<pid_t>?
+    private var excludedPIDs: Set<pid_t> = []
     private var target: AudioProcess?
     private var tap: AudioObjectID = 0
     private var device: AudioObjectID = 0
@@ -28,6 +29,36 @@ final class AppleMusicAudioCapture {
         // Record before constructing WKWebView, including WebKit processes used
         // by other apps. Never tap every process with the shared WebKit bundle ID.
         existingPIDs = try? Set(AudioProcess.all().map(\.pid))
+    }
+
+    /// Pins this connection's process before another analysis host starts output.
+    /// Identifying a process does not create a tap or change its mute behavior.
+    func identifyProcess() async throws -> pid_t? {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<pid_t?, Error>) in
+            workQueue.async { [self] in
+                do { continuation.resume(returning: try identifyProcessOnQueue()?.pid) }
+                catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
+    func setExcludedProcesses(_ pids: Set<pid_t>) {
+        workQueue.async { [self] in
+            excludedPIDs = pids
+            if let target, pids.contains(target.pid) {
+                stopOnQueue()
+                self.target = nil
+            }
+        }
+    }
+
+    /// Called after capture readiness, without changing the capture state.
+    func capturedProcessID() async -> pid_t? {
+        await withCheckedContinuation { continuation in
+            workQueue.async { [self] in
+                continuation.resume(returning: tap != 0 ? target?.pid : nil)
+            }
+        }
     }
 
     /// Changes only this connection's output route; the captured PCM remains available.
@@ -112,26 +143,29 @@ final class AppleMusicAudioCapture {
     private func updateOnQueue() throws {
         guard Date().timeIntervalSince(lastProcessCheck) >= 0.5 else { return }
         lastProcessCheck = Date()
+        guard let process = try identifyProcessOnQueue() else { return }
+        if tap == 0 { try start(process: process.id) }
+    }
+
+    private func identifyProcessOnQueue() throws -> AudioProcess? {
         guard let existingPIDs else { throw CaptureError.message("音声プロセスの一覧を取得できませんでした。") }
         let processes = try AudioProcess.all()
-        if let target, processes.contains(target) {
-            if tap != 0 { return }
+        if let target, processes.contains(target), !excludedPIDs.contains(target.pid) {
+            return target
         } else {
             stopOnQueue()
             target = nil
         }
-        if target == nil {
-            let candidates = processes.filter {
-                $0.bundleID == "com.apple.WebKit.GPU" && !existingPIDs.contains($0.pid) && $0.isRunningOutput
-            }
-            guard candidates.count <= 1 else {
-                throw CaptureError.message("Apple Musicの音声プロセスを特定できませんでした。")
-            }
-            // The audio process appears only once WebKit starts outputting sound.
-            guard let process = candidates.first else { return }
-            target = process
+        let candidates = processes.filter {
+            $0.bundleID == "com.apple.WebKit.GPU" && !existingPIDs.contains($0.pid)
+                && !excludedPIDs.contains($0.pid) && $0.isRunningOutput
         }
-        try start(process: target!.id)
+        guard candidates.count <= 1 else {
+            throw CaptureError.message("Apple Musicの音声プロセスを特定できませんでした。")
+        }
+        // The audio process appears only once WebKit starts outputting sound.
+        target = candidates.first
+        return target
     }
 
     func features() -> AudioFeatures {

@@ -4,6 +4,117 @@ import XCTest
 
 final class AppleMusicBridgeTests: XCTestCase {
     @MainActor
+    func testBrowserSnapshotReadsOfficialPlaybackWithoutChangingItOrInstallingNativeQueueTracking() async throws {
+        let context = try XCTUnwrap(JSContext())
+        context.evaluateScript("""
+        var location={protocol:'https:',hostname:'music.apple.com'};
+        var writes=0,listeners=0;
+        var media={currentTime:24,readyState:4,playbackRate:1,preservesPitch:true};
+        var document={getElementById:()=>media,addEventListener:()=>listeners++};
+        var player={isAuthorized:true,isPlaying:true,currentPlaybackTime:24,currentPlaybackDuration:180,
+            nowPlayingItem:{id:'456',title:'公式の曲'},_volume:0.15,
+            get volume(){return this._volume},set volume(value){writes++;this._volume=value},
+            pause:async()=>{throw new Error('must not pause')},setQueue:async()=>{throw new Error('must not set queue')}};
+        var window={MusicKit:{getInstance:()=>player}};
+        """)
+        for _ in 0..<3 {
+            let playback = try AppleMusicBridge.decode(await execute("browserSnapshot", value: 0.9, in: context))
+            XCTAssertEqual(playback.id, "456")
+            XCTAssertEqual(playback.time, 24)
+            XCTAssertTrue(playback.isPlaying)
+        }
+        XCTAssertEqual(context.evaluateScript("player.volume")?.toDouble(), 0.15)
+        XCTAssertEqual(context.evaluateScript("writes")?.toInt32(), 0)
+        XCTAssertEqual(context.evaluateScript("listeners")?.toInt32(), 0)
+        XCTAssertTrue(context.evaluateScript("window.__musicPrayerQueueState === undefined")?.toBool() == true)
+    }
+
+    @MainActor
+    func testCurrentSongUsesFullCatalogMetadataWithoutChangingPlayback() async throws {
+        let context = try XCTUnwrap(JSContext())
+        context.evaluateScript("""
+        var location={protocol:'https:',hostname:'music.apple.com'};
+        var calls=[];
+        var player={storefrontId:'jp',isPlaying:true,currentPlaybackTime:18,volume:0.4,
+            nowPlayingItem:{id:'123',title:'プレビューの表示名'},
+            setQueue:async()=>{throw new Error('must not set queue')},
+            pause:async()=>{throw new Error('must not pause')},
+            play:async()=>{throw new Error('must not play')},
+            api:{music:async path=>{calls.push(path);return {data:{data:[
+                {id:'123',type:'songs',attributes:{name:'曲名',artistName:'歌手',albumName:'アルバム',durationInMillis:242000,
+                    artwork:{url:'https://example.com/{w}x{h}.jpg'}}}
+            ]}};}}};
+        var window={MusicKit:{getInstance:()=>player}};
+        """)
+        let value = try await execute("currentSong", in: context)
+        let result = try JSONDecoder().decode(AppleMusicSearchResult.self, from: JSONSerialization.data(withJSONObject: value))
+        XCTAssertEqual(result.songs, [AppleMusicSong(id: "123", title: "曲名", artist: "歌手", album: "アルバム",
+            artworkURL: "https://example.com/300x300.jpg", duration: 242)])
+        XCTAssertEqual(context.evaluateScript("player.isPlaying")?.toBool(), true)
+        XCTAssertEqual(context.evaluateScript("player.currentPlaybackTime")?.toDouble(), 18)
+        XCTAssertEqual(context.evaluateScript("player.volume")?.toDouble(), 0.4)
+        XCTAssertEqual(context.evaluateScript("player.nowPlayingItem.id")?.toString(), "123")
+        XCTAssertTrue(context.evaluateScript("window.__musicPrayerQueueState === undefined")?.toBool() == true)
+        XCTAssertEqual(context.objectForKeyedSubscript("calls")?.toArray() as? [String], ["/v1/catalog/jp/songs/123"])
+    }
+
+    @MainActor
+    func testCurrentLibrarySongUsesCatalogIDAndKeepsClickedSongWhenPlaybackAdvances() async throws {
+        let context = try XCTUnwrap(JSContext())
+        context.evaluateScript("""
+        var location={protocol:'https:',hostname:'music.apple.com'};
+        var calls=[];
+        var player={storefrontId:'jp',isPlaying:false,nowPlayingItem:{id:'i.library',attributes:{playParams:{catalogId:'456'}}},
+            api:{music:async path=>{
+                calls.push(path);
+                player.nowPlayingItem={id:'789'};
+                return {data:{data:[{id:'456',type:'songs',attributes:{name:'選んだ曲',artistName:'歌手',durationInMillis:200000}}]}};
+            }}};
+        var window={MusicKit:{getInstance:()=>player}};
+        """)
+        let value = try await execute("currentSong", in: context)
+        let result = try JSONDecoder().decode(AppleMusicSearchResult.self, from: JSONSerialization.data(withJSONObject: value))
+        XCTAssertEqual(result.songs.first?.id, "456")
+        XCTAssertEqual(result.songs.first?.album, "")
+        XCTAssertNil(result.songs.first?.artworkURL)
+        XCTAssertEqual(context.evaluateScript("player.isPlaying")?.toBool(), false, "一時停止中も登録できる")
+        XCTAssertEqual(context.evaluateScript("player.nowPlayingItem.id")?.toString(), "789")
+        XCTAssertEqual(context.objectForKeyedSubscript("calls")?.toArray() as? [String], ["/v1/catalog/jp/songs/456"])
+        context.evaluateScript("player.nowPlayingItem={id:'i.library',playParams:{catalogId:'456'}};")
+        _ = try await execute("currentSong", in: context)
+        XCTAssertEqual(context.objectForKeyedSubscript("calls")?.toArray()?.count, 2)
+    }
+
+    @MainActor
+    func testCurrentSongRejectsMissingIDsAndUnavailableCatalogSongs() async throws {
+        let context = try XCTUnwrap(JSContext())
+        context.evaluateScript("""
+        var location={protocol:'https:',hostname:'music.apple.com'};
+        var calls=0;
+        var resources=[];
+        var player={storefrontId:'jp',nowPlayingItem:null,api:{music:async()=>{calls++;return {data:{data:resources}};}}};
+        var window={MusicKit:{getInstance:()=>player}};
+        """)
+        let value = try await execute("currentSong", in: context)
+        let result = try JSONDecoder().decode(AppleMusicSearchResult.self, from: JSONSerialization.data(withJSONObject: value))
+        XCTAssertTrue(result.songs.isEmpty)
+        for id in ["i.upload", "../other", ""] {
+            context.setObject(id, forKeyedSubscript: "badID" as NSString)
+            context.evaluateScript("player.nowPlayingItem={id:badID};")
+            do { _ = try await execute("currentSong", in: context); XCTFail("配信曲IDがない項目は登録しない") } catch {}
+        }
+        XCTAssertEqual(context.objectForKeyedSubscript("calls")?.toInt32(), 0)
+        context.evaluateScript("player.nowPlayingItem={id:'123'};")
+        do { _ = try await execute("currentSong", in: context); XCTFail("取得できない曲を登録しない") } catch {}
+        context.evaluateScript("resources=[{id:'123',type:'music-videos',attributes:{name:'動画',durationInMillis:1000}}];")
+        do { _ = try await execute("currentSong", in: context); XCTFail("曲以外は登録しない") } catch {}
+        context.evaluateScript("resources=[{id:'456',type:'songs',attributes:{name:'別の曲',durationInMillis:1000}}];")
+        do { _ = try await execute("currentSong", in: context); XCTFail("異なる曲を登録しない") } catch {}
+        context.evaluateScript("player.api.music=async()=>{throw new Error('offline')};")
+        do { _ = try await execute("currentSong", in: context); XCTFail("通信失敗で登録しない") } catch {}
+    }
+
+    @MainActor
     func testAnalysisKeepsFastRateAfterPageResetsRateOrReplacesMedia() async throws {
         let context = try XCTUnwrap(JSContext())
         context.evaluateScript("""

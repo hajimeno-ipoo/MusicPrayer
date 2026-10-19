@@ -4,6 +4,7 @@ import CryptoKit
 import Darwin
 import Foundation
 import XCTest
+import WebKit
 @testable import MusicPrayer
 
 final class PlayerStoreTransitionTests: XCTestCase {
@@ -53,6 +54,196 @@ final class PlayerStoreTransitionTests: XCTestCase {
             XCTAssertFalse(store.isAppleMusicSearchVisible)
             XCTAssertFalse(store.isPlaying)
             XCTAssertFalse(store.appleMusic.isInitialized)
+        }
+    }
+
+    @MainActor
+    func testRegisteringSongsAcrossBrowserVisitsKeepsBothAnalysesRunning() async throws {
+        try await withLyricFixture { store, _ in
+            let first = self.catalogSong
+            let second = AppleMusicSong(id: "654321", title: "次の配信曲", artist: "歌手", album: "アルバム", duration: 180)
+            var starts: [String: Int] = [:], cancellations = 0, finish = false
+            store.appleMusic.preanalysis.operation = { song in
+                starts[song.id, default: 0] += 1
+                store.appleMusic.preanalysis.update(songID: song.id, phase: .capturing, position: 45)
+                do {
+                    while !finish { try await Task.sleep(for: .milliseconds(5)) }
+                } catch {
+                    cancellations += 1
+                    throw error
+                }
+            }
+            defer { finish = true; store.appleMusic.preanalysis.setAllowed(false) }
+            let view = store.appleMusicBrowser.webViewForDisplay()
+            view.stopLoading()
+            view.loadHTMLString("""
+            <script>
+            window.MusicKit={getInstance:()=>({isAuthorized:true,isPlaying:true,volume:0.75})};
+            </script>
+            """, baseURL: URL(string: "https://music.apple.com/"))
+            store.openAppleMusicSignIn()
+            XCTAssertTrue(store.addAppleMusicSong(first, selectIfEmpty: false))
+            store.showAppleMusicPlayer()
+            try await self.waitUntil("1曲目の解析が始まりませんでした") { starts[first.id] == 1 }
+            XCTAssertEqual(store.tracks.last?.appleMusicSong, first)
+            XCTAssertEqual(store.appleMusic.preanalysis.progress(for: first), 45 / first.duration)
+            store.openAppleMusic()
+            store.openAppleMusicSignIn()
+            XCTAssertTrue(store.isAppleMusicBrowserVisible)
+            // Page navigation temporarily clears MusicKit readiness; it must not cancel any worker.
+            view.loadHTMLString("<html>Loading next page</html>", baseURL: URL(string: "https://music.apple.com/"))
+            try await Task.sleep(for: .milliseconds(250))
+            XCTAssertEqual(cancellations, 0)
+            XCTAssertEqual(starts[first.id], 1)
+            XCTAssertTrue(store.addAppleMusicSong(second, selectIfEmpty: false))
+            store.showAppleMusicPlayer()
+            try await self.waitUntil("2曲目が並行して解析されませんでした") { starts[second.id] == 1 }
+            XCTAssertFalse(store.appleMusic.isInitialized, "公式画面からの登録・解析にnative再生接続の初期化を要求しない")
+            XCTAssertEqual(store.tracks.suffix(2).compactMap(\.appleMusicSong), [first, second])
+            for song in [first, second] {
+                XCTAssertTrue(store.appleMusic.preanalysis.isAnalyzing(songID: song.id))
+                XCTAssertEqual(store.appleMusic.preanalysis.status(for: song), "解析中")
+                XCTAssertEqual(store.appleMusic.preanalysis.progress(for: song), 45 / song.duration)
+                XCTAssertEqual(starts[song.id], 1)
+            }
+            XCTAssertEqual(cancellations, 0)
+            finish = true
+            try await self.waitUntil("2曲の解析が完了しませんでした") { !store.appleMusic.preanalysis.isWorking }
+            for song in [first, second] {
+                XCTAssertEqual(store.appleMusic.preanalysis.status(for: song), "解析済み")
+                XCTAssertEqual(starts[song.id], 1)
+            }
+        }
+    }
+
+    @MainActor
+    func testNativePlaybackAndLocalSelectionLeaveOfficialBrowserControlsIndependent() async throws {
+        try await withLyricFixture { store, _ in
+            store.appleMusic.preanalysis.operation = { _ in }
+            let native = store.appleMusic.webViewForDisplay()
+            let browser = store.appleMusicBrowser.webViewForDisplay()
+            XCTAssertFalse(native === browser)
+            try await self.installFakeAppleMusic(in: native, songID: "native", playing: false, time: 0, volume: 0.75)
+            try await self.installFakeAppleMusic(in: browser, songID: "official", playing: true, time: 37, volume: 0.23)
+            let originalBrowser = try await browser.evaluateJavaScript("JSON.stringify({id:player.nowPlayingItem.id,time:player.currentPlaybackTime,volume:player.volume,isPlaying:player.isPlaying,calls})") as? String
+            store.addAppleMusicSong(self.catalogSong)
+            store.select(2, autoplay: false)
+            try await self.waitUntil("nativeの一覧曲が準備されませんでした") {
+                store.appleMusic.playback.id == self.catalogSong.id && store.appleMusic.startingSongID == nil
+            }
+            store.volume = 0.61
+            store.appleMusic.command("pause")
+            store.appleMusic.command("seek", value: 8)
+            try await self.waitUntil("nativeのシークが反映されませんでした") { store.appleMusic.playback.time == 8 }
+            store.openAppleMusicSignIn()
+            store.showAppleMusicPlayer()
+            store.openAppleMusicSignIn()
+            store.select(0, autoplay: false)
+            try await self.waitUntil("ローカル曲へ移動しませんでした") { !store.isAppleMusicActive && store.currentIndex == 0 }
+            store.openAppleMusicSignIn()
+            store.showAppleMusicPlayer()
+            let afterBrowser = try await browser.evaluateJavaScript("JSON.stringify({id:player.nowPlayingItem.id,time:player.currentPlaybackTime,volume:player.volume,isPlaying:player.isPlaying,calls})") as? String
+            XCTAssertEqual(afterBrowser, originalBrowser, "nativeの選曲・音量・停止・シーク・ローカル移動・画面往復が公式プレイヤーを書き換えない")
+        }
+    }
+
+    @MainActor
+    func testOfficialBrowserCompletionAndControlsNeverAdvanceOrSeekNativeQueue() async throws {
+        try await withLyricFixture { store, _ in
+            store.appleMusic.preanalysis.operation = { _ in }
+            let native = store.appleMusic.webViewForDisplay()
+            let browser = store.appleMusicBrowser.webViewForDisplay()
+            try await self.installFakeAppleMusic(in: native, songID: "native", playing: false, time: 0, volume: 0.75)
+            try await self.installFakeAppleMusic(in: browser, songID: "official", playing: true, time: 37, volume: 0.23)
+            let next = AppleMusicSong(id: "654321", title: "nativeの次曲", artist: "", album: "", duration: 209)
+            store.addAppleMusicSong(self.catalogSong)
+            store.addAppleMusicSong(next)
+            store.select(2, autoplay: false)
+            try await self.waitUntil("nativeの一覧曲が準備されませんでした") {
+                store.appleMusic.playback.id == self.catalogSong.id && store.appleMusic.startingSongID == nil
+            }
+            store.appleMusic.command("seek", value: 42)
+            try await self.waitUntil("nativeの位置が反映されませんでした") { store.position == 42 }
+            let nativeBefore = try await native.evaluateJavaScript("JSON.stringify({id:player.nowPlayingItem.id,time:player.currentPlaybackTime,volume:player.volume,isPlaying:player.isPlaying,calls})") as? String
+            let selected = store.currentQueueTrack?.id
+            store.openAppleMusicSignIn()
+            _ = try await browser.evaluateJavaScript("player.isPlaying=false;player.currentPlaybackTime=209;player.playbackState=10")
+            try await self.waitUntil("公式プレイヤーの終了状態が取得されませんでした") { store.appleMusicBrowser.playback.ended }
+            store.showAppleMusicPlayer()
+            try await Task.sleep(for: .milliseconds(200))
+            XCTAssertEqual(store.currentQueueTrack?.id, selected, "公式曲末でnative一覧の次曲へ進まない")
+            XCTAssertEqual(store.position, 42, "公式再生位置をnative側へ反映しない")
+            _ = try await browser.evaluateJavaScript("player.playbackState=0;player.isPlaying=true;player.currentPlaybackTime=81;player.volume=0.12")
+            store.openAppleMusicSignIn()
+            store.showAppleMusicPlayer()
+            try await Task.sleep(for: .milliseconds(100))
+            let nativeAfter = try await native.evaluateJavaScript("JSON.stringify({id:player.nowPlayingItem.id,time:player.currentPlaybackTime,volume:player.volume,isPlaying:player.isPlaying,calls})") as? String
+            XCTAssertEqual(nativeAfter, nativeBefore, "公式の再生・シーク・音量変更と画面往復をnative側から独立させる")
+        }
+    }
+
+    @MainActor
+    private func installFakeAppleMusic(in view: WKWebView, songID: String, playing: Bool, time: Double, volume: Double) async throws {
+        view.stopLoading()
+        view.loadHTMLString("""
+        <script>
+        window.calls=[];
+        window.player={isAuthorized:true,isPlaying:\(playing),currentPlaybackTime:\(time),currentPlaybackDuration:209,volume:\(volume),
+            nowPlayingItem:{id:'\(songID)',title:'fixture'},playbackState:0,
+            setQueue:async function(queue){calls.push('queue:'+queue.song);this.nowPlayingItem={id:queue.song,title:'native selected'};this.currentPlaybackTime=0;},
+            play:async function(){calls.push('play');this.isPlaying=true;},
+            pause:async function(){calls.push('pause');this.isPlaying=false;},
+            stop:async function(){calls.push('stop');this.isPlaying=false;},
+            seekToTime:async function(time){calls.push('seek:'+time);this.currentPlaybackTime=time;}};
+        window.MusicKit={getInstance:()=>player,PlaybackStates:{completed:10}};
+        </script>
+        """, baseURL: URL(string: "https://music.apple.com/"))
+        try await waitUntilAsync("独立接続のMusicKit fixtureを読み込めませんでした") {
+            (try? await view.evaluateJavaScript("typeof window.player !== 'undefined'") as? Bool) == true
+        }
+    }
+
+    @MainActor
+    func testBrowserRegistrationKeepsPlayingLocalSelectionAndBrowserOpen() async throws {
+        try await withLyricFixture { store, _ in
+            store.select(0, autoplay: false)
+            store.seek(0.7)
+            store.togglePlayback()
+            store.openAppleMusicSignIn()
+            let id = store.currentQueueTrack?.id
+            let generation = store.playbackGeneration
+            XCTAssertTrue(store.addAppleMusicSong(self.catalogSong, selectIfEmpty: false))
+            XCTAssertFalse(store.addAppleMusicSong(self.catalogSong, selectIfEmpty: false))
+            XCTAssertEqual(store.tracks.count, 3)
+            XCTAssertEqual(store.currentQueueTrack?.id, id)
+            XCTAssertEqual(store.playbackGeneration, generation)
+            XCTAssertTrue(store.engine.isPlaying)
+            XCTAssertTrue(store.isAppleMusicBrowserVisible)
+            XCTAssertFalse(store.isAppleMusicActive)
+            let session = try XCTUnwrap(QueuePersistence.restore())
+            XCTAssertEqual(session.tracks.last?.appleMusicSong, self.catalogSong)
+            XCTAssertEqual(session.current, 0)
+        }
+    }
+
+    @MainActor
+    func testBrowserRegistrationIntoEmptyQueueDoesNotPrepareOrPauseTheOfficialPlayer() async throws {
+        try await withLyricFixture { store, _ in
+            store.tracks = []
+            store.openAppleMusicSignIn()
+            let generation = store.playbackGeneration
+            XCTAssertTrue(store.addAppleMusicSong(self.catalogSong, selectIfEmpty: false))
+            XCTAssertFalse(store.addAppleMusicSong(self.catalogSong, selectIfEmpty: false))
+            await Task.yield()
+            XCTAssertEqual(store.tracks.map(\.appleMusicSong), [self.catalogSong])
+            XCTAssertNil(store.currentQueueTrack)
+            XCTAssertFalse(store.isAppleMusicActive)
+            XCTAssertTrue(store.isAppleMusicBrowserVisible)
+            XCTAssertNil(store.appleMusic.startingSongID)
+            XCTAssertEqual(store.playbackGeneration, generation)
+            let session = try XCTUnwrap(QueuePersistence.restore())
+            XCTAssertEqual(session.tracks.first?.appleMusicSong, self.catalogSong)
+            XCTAssertEqual(session.current, -1)
         }
     }
 

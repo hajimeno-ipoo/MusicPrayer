@@ -22,6 +22,12 @@ struct PlayerView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
+                if store.isAppleMusicActive || store.appleMusic.isInitialized {
+                    AppleMusicWebView(store: store.appleMusic)
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 ZStack {
                     MetalVisualizerView(source: store.visualSource).ignoresSafeArea()
                     if store.isAppleMusicActive && store.visualizerStyle != .cassette {
@@ -85,8 +91,10 @@ struct PlayerView: View {
                 .allowsHitTesting(!store.isAppleMusicBrowserVisible)
                 .accessibilityHidden(store.isAppleMusicBrowserVisible)
 
-                if store.isAppleMusicActive || store.isAppleMusicSearchVisible || store.isAppleMusicBrowserVisible || store.appleMusic.isInitialized {
-                    AppleMusicBrowserView(store: store.appleMusic, onReturnToPlayer: store.showAppleMusicPlayer)
+                if store.isAppleMusicSearchVisible || store.isAppleMusicBrowserVisible || store.appleMusicBrowser.isInitialized {
+                    AppleMusicBrowserView(store: store.appleMusicBrowser, onAdd: { song in
+                        store.addAppleMusicSong(song, selectIfEmpty: false)
+                    }, onReturnToPlayer: store.showAppleMusicPlayer)
                         .opacity(store.isAppleMusicBrowserVisible ? 1 : 0)
                         .allowsHitTesting(store.isAppleMusicBrowserVisible)
                         .accessibilityHidden(!store.isAppleMusicBrowserVisible)
@@ -94,14 +102,14 @@ struct PlayerView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 800)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(store.isAppleMusicSearchVisible || store.isAppleMusicBrowserVisible ? nil : .dark)
         .sheet(isPresented: $store.isAppleMusicSearchVisible, onDismiss: {
             if showQueueAfterSearch {
                 showQueueAfterSearch = false
                 showQueue = true
             }
         }) {
-            AppleMusicSearchView(store: store.appleMusic, onAdd: { song in
+            AppleMusicSearchView(store: store.appleMusicBrowser, onAdd: { song in
                 showQueueAfterSearch = true
                 store.addAppleMusicSong(song)
             }, onSignIn: store.openAppleMusicSignIn,
@@ -289,7 +297,7 @@ struct PlayerView: View {
     private var analysisInformation: some View {
         HStack(spacing: 14) {
             if store.isAppleMusicActive, let song = store.currentQueueTrack?.appleMusicSong,
-               store.appleMusic.preanalysis.songID == song.id {
+               store.appleMusic.preanalysis.isAnalyzing(songID: song.id) {
                 AnalysisProgressView(status: store.appleMusic.preanalysis.status(for: song),
                                      progress: store.appleMusic.preanalysis.progress(for: song))
                     .tint(cyan).frame(width: 240)

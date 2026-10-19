@@ -1,7 +1,6 @@
 import SwiftUI
 import AppKit
 
-@main
 struct MusicPrayerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = PlayerStore()
@@ -39,6 +38,18 @@ struct MusicPrayerApp: App {
                 Button("前の曲", action: store.previous).keyboardShortcut(.leftArrow, modifiers: .command).disabled(store.isAppleMusicBrowserVisible || store.isAppleMusicSearchVisible || !store.canSkipPrevious)
                 Button("次の曲", action: store.next).keyboardShortcut(.rightArrow, modifiers: .command).disabled(store.isAppleMusicBrowserVisible || store.isAppleMusicSearchVisible || !store.canSkipNext)
             }
+        }
+    }
+}
+
+@main
+enum MusicPrayerMain {
+    @MainActor
+    static func main() {
+        if CommandLine.arguments.contains("--apple-music-analysis-worker") {
+            AppleMusicAnalysisWorker.runMain()
+        } else {
+            MusicPrayerApp.main()
         }
     }
 }
