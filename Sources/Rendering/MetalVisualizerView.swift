@@ -4,12 +4,16 @@ import SwiftUI
 
 struct MetalVisualizerView: NSViewRepresentable {
     let source: VisualFrameSource
+    let sceneOpacity: Double
 
     func makeNSView(context: Context) -> VisualizerHostView {
-        VisualizerHostView(source: source)
+        let view = VisualizerHostView(source: source)
+        view.setSceneOpacity(sceneOpacity)
+        return view
     }
 
     func updateNSView(_ nsView: VisualizerHostView, context: Context) {
+        nsView.setSceneOpacity(sceneOpacity)
     }
 }
 
@@ -23,7 +27,7 @@ final class VisualizerHostView: NSView {
         metalView = WaterInteractiveMetalView(device: device, source: source)
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor(red: 0.005, green: 0.012, blue: 0.04, alpha: 1).cgColor
+        layer?.backgroundColor = NSColor.clear.cgColor
         metalView.colorPixelFormat = .bgra8Unorm_srgb
         metalView.framebufferOnly = true
         metalView.preferredFramesPerSecond = 60
@@ -64,6 +68,10 @@ final class VisualizerHostView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setSceneOpacity(_ opacity: Double) {
+        metalView.alphaValue = opacity
+    }
 
     private func showError(_ message: String) {
         NSLog("Visualizer: %@", message)

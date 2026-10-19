@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct PlayerView: View {
     @Bindable var store: PlayerStore
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @AppStorage(LyricFont.preferenceKey) private var lyricFont = LyricFont.system
     @State private var showQueue = false
     @State private var showQueueAfterSearch = false
@@ -29,7 +30,8 @@ struct PlayerView: View {
                         .accessibilityHidden(true)
                 }
                 ZStack {
-                    MetalVisualizerView(source: store.visualSource).ignoresSafeArea()
+                    MetalVisualizerView(source: store.visualSource, sceneOpacity: reduceTransparency ? 1 : 0.85)
+                        .ignoresSafeArea()
                     if store.isAppleMusicActive && store.visualizerStyle != .cassette {
                         appleMusicArtwork
                             .frame(width: min(240, geometry.size.height * 0.26), height: min(240, geometry.size.height * 0.26))
@@ -48,6 +50,7 @@ struct PlayerView: View {
                         Spacer(minLength: 20)
                         VStack(spacing: 18) {
                             trackInformation
+                                .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
                                 .opacity(overlayVisible ? 1 : 0)
                                 .allowsHitTesting(overlayVisible)
                                 .accessibilityHidden(!overlayVisible)
@@ -68,6 +71,7 @@ struct PlayerView: View {
                                     .frame(height: min(400, max(280, geometry.size.height - 460)))
                             }
                             MusicalTimeline(store: store)
+                                .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
                                 .opacity(overlayVisible ? 1 : 0)
                                 .allowsHitTesting(overlayVisible)
                                 .accessibilityHidden(!overlayVisible)
@@ -75,11 +79,6 @@ struct PlayerView: View {
                         }
                         .padding(.horizontal, geometry.size.width < 1000 ? 32 : 58)
                         .padding(.bottom, 26)
-                        .background {
-                            LinearGradient(colors: [.clear, Color(red: 0.005, green: 0.012, blue: 0.06).opacity(0.85)], startPoint: .top, endPoint: .bottom)
-                                .padding(.top, -38)
-                                .allowsHitTesting(false)
-                        }
                     }
                     if dropTarget {
                         RoundedRectangle(cornerRadius: 24).stroke(cyan, style: StrokeStyle(lineWidth: 2, dash: [8, 8])).padding(14)
@@ -242,9 +241,7 @@ struct PlayerView: View {
     }
 
     private var welcome: some View {
-        let foreground = store.visualizerStyle == .cassette
-            ? Color(red: 0.08, green: 0.12, blue: 0.18) : .white
-        return VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("曲を追加して、再生をはじめる")
                 .font(.system(size: 20, weight: .semibold))
             Text("音声ファイルを選ぶか、この画面へドロップしてください。")
@@ -252,7 +249,6 @@ struct PlayerView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: store.openFiles) {
                 Label("曲を追加", systemImage: "plus")
-                    .foregroundStyle(foreground)
                     .padding(.horizontal, 20).padding(.vertical, 8)
             }
                 .buttonStyle(.glass).padding(.top, 4)
@@ -260,7 +256,8 @@ struct PlayerView: View {
                 Label("Apple Musicから選ぶ", systemImage: "music.note")
             }.buttonStyle(.glass)
         }
-        .foregroundStyle(foreground)
+        .foregroundStyle(.primary)
+        .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
         .frame(maxWidth: 360, alignment: .leading)
         .padding(20)
     }

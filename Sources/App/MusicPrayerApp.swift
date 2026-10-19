@@ -8,7 +8,11 @@ struct MusicPrayerApp: App {
     @State private var showFontLicenses = false
     var body: some Scene {
         Window("Music Prayer", id: "player") {
-            PlayerView(store: store)
+            PlayerGlassContainer(store: store,
+                                 usesDarkAppearance: !store.isAppleMusicSearchVisible && !store.isAppleMusicBrowserVisible)
+                .frame(minWidth: 860, minHeight: 800)
+                .ignoresSafeArea()
+                .containerBackground(.clear, for: .window)
                 .modifier(PlayerWindowRecovery(delegate: delegate))
                 .sheet(isPresented: $showFontLicenses) { FontLicensesView() }
                 .task {
