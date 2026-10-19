@@ -2,6 +2,29 @@ import XCTest
 @testable import MusicPrayer
 
 final class LyricMusicContextTests: XCTestCase {
+    func testUntimedRowColourFollowsVocalActivityAndPausesWithoutMovingRowTimes() {
+        var music = MusicAnalysis(duration: 8)
+        music.vocal = [TimeValue(time: 0, value: 1), TimeValue(time: 2, value: 1),
+                       TimeValue(time: 2.1, value: 0), TimeValue(time: 5.9, value: 0),
+                       TimeValue(time: 6, value: 1), TimeValue(time: 8, value: 1)]
+        let context = LyricMusicContext(analysis: music)
+        let row = LyricCharacterTiming(start: 0, end: 8)
+        XCTAssertEqual(context.colourProgress(in: row, at: 0), 0)
+        XCTAssertEqual(context.colourProgress(in: row, at: 8), 1)
+        XCTAssertEqual(context.colourProgress(in: row, at: 3), 0.5, accuracy: 0.001)
+        XCTAssertEqual(context.colourProgress(in: row, at: 5), 0.5, accuracy: 0.001)
+        XCTAssertGreaterThan(context.colourProgress(in: row, at: 1), 1 / 8.0)
+        XCTAssertGreaterThan(context.colourProgress(in: row, at: 7), 0.5)
+        XCTAssertEqual(context.colourProgress(in: row, at: 1), context.colourProgress(in: row, at: 1))
+        XCTAssertEqual(row.start, 0)
+        XCTAssertEqual(row.end, 8)
+    }
+
+    func testUntimedRowColourUsesOfficialTimeWhenVocalMeasurementsAreUnavailable() {
+        let context = LyricMusicContext(analysis: MusicAnalysis(duration: 10))
+        XCTAssertEqual(context.colourProgress(in: LyricCharacterTiming(start: 2, end: 6), at: 3), 0.25)
+    }
+
     private func analysis() -> MusicAnalysis {
         let range = TimeSpan(start: 0, duration: 100)
         return MusicAnalysis(fingerprint: String(repeating: "a", count: 64), duration: 100,

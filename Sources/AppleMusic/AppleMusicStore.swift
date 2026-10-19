@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Observation
+import OSLog
 import WebKit
 
 @MainActor @Observable
@@ -14,6 +15,7 @@ final class AppleMusicStore: NSObject {
     var audioCaptureError: String?
     let musicAnalysis: AppleMusicAnalysis
     let preanalysis = AppleMusicPreanalysis()
+    @ObservationIgnored private let analysisCache: AppleMusicAnalysisCache
     @ObservationIgnored private let silentAnalysis: AppleMusicAnalysis
     @ObservationIgnored private var stopping = false
     @ObservationIgnored private let isOfficialBrowser: Bool
@@ -24,6 +26,7 @@ final class AppleMusicStore: NSObject {
         self.isOfficialBrowser = isOfficialBrowser
         self.websiteDataStore = websiteDataStore ?? .default()
         let cache = AppleMusicAnalysisCache(directory: analysisDirectory)
+        analysisCache = cache
         musicAnalysis = AppleMusicAnalysis(cache: cache)
         silentAnalysis = AppleMusicAnalysis(cache: cache, managesQueueCache: false)
         super.init()
@@ -33,7 +36,8 @@ final class AppleMusicStore: NSObject {
         preanalysis.operation = { [weak self] song in
             guard let self else { throw CancellationError() }
             await self.musicAnalysis.queueRegistration?.value
-            if await cache.load(id: song.id, duration: song.duration) != nil { return }
+            let savedAnalysis = await cache.load(id: song.id, duration: song.duration)
+            if savedAnalysis != nil, await cache.loadLyricTiming(for: song) != nil { return }
             guard let ticket = await cache.ticket(for: song.id) else { throw CancellationError() }
             let session = try await AppleMusicWorkerSession.capture(from: self.websiteDataStore)
             let permit = try await self.workerStartup.acquire()
@@ -44,7 +48,7 @@ final class AppleMusicStore: NSObject {
             }
             if self.webView != nil { _ = try await self.audioCapture.identifyProcess() }
             try Task.checkCancellation()
-            let result = try await AppleMusicAnalysisWorker.run(song: song, session: session,
+            let result = try await AppleMusicAnalysisWorker.run(song: song, session: session, existingAnalysis: savedAnalysis,
                 onProgress: { [weak self] phase, position in
                     self?.preanalysis.update(songID: song.id, phase: phase, position: position)
                 }, onReady: { [weak self] pid in
@@ -54,8 +58,12 @@ final class AppleMusicStore: NSObject {
                     self.workerStartup.release(permit)
                 })
             try Task.checkCancellation()
-            guard try await cache.save(result, id: song.id, ticket: ticket) else { throw CancellationError() }
+            guard try await cache.save(result.analysis, id: song.id, ticket: ticket),
+                  try await cache.saveLyricTiming(result.lyricTiming, ticket: ticket) else { throw CancellationError() }
+            let rows = result.lyricTiming.derivedLines ?? result.lyricTiming.timeline?.lines ?? []
+            Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AppleMusicLyrics").notice("Saved song=\(song.id, privacy: .public) rows=\(rows.count) timed=\(rows.filter(\.hasValidCharacterTimings).count)")
             self.musicAnalysis.refreshSavedAnalysis(for: song)
+            await self.refreshLyricTiming(for: song)
         }
     }
     private(set) var artworkData: Data?
@@ -71,6 +79,22 @@ final class AppleMusicStore: NSObject {
     @ObservationIgnored private var searchGeneration: UInt64 = 0
     @ObservationIgnored private var selectedSong: AppleMusicSong?
     private(set) var lyrics: AppleMusicLyrics?
+    private(set) var lyricTimingMessage: String?
+    private var lyricTimingFailure: String?
+    var lyricTimingError: String? {
+        guard let selectedSong, let sourceLyrics,
+              sourceLyrics.lines.isEmpty || !sourceLyrics.lines.allSatisfy(\.hasValidCharacterTimings),
+              lyrics == sourceLyrics else { return nil }
+        return lyricTimingFailure ?? preanalysis.errors[selectedSong.id].map { "歌詞の時刻を解析できませんでした：" + $0 }
+    }
+    var lyricTimingStatus: String? {
+        guard selectedSong != nil, let sourceLyrics,
+              sourceLyrics.lines.isEmpty || !sourceLyrics.lines.allSatisfy(\.hasValidCharacterTimings),
+              lyrics == sourceLyrics else { return nil }
+        guard lyricTimingError == nil else { return nil }
+        return lyricTimingMessage
+    }
+    @ObservationIgnored private var sourceLyrics: AppleMusicLyrics?
     @ObservationIgnored private var lyricsTask: Task<Void, Never>?
     @ObservationIgnored private var lyricsGeneration: UInt64 = 0
 
@@ -149,6 +173,9 @@ final class AppleMusicStore: NSObject {
         let generation = lyricsGeneration
         lyricsTask?.cancel()
         lyrics = nil
+        sourceLyrics = nil
+        lyricTimingMessage = nil
+        lyricTimingFailure = nil
         lyricsTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer {
@@ -157,16 +184,87 @@ final class AppleMusicStore: NSObject {
                 }
             }
             do {
-                guard let response = try await self.evaluateValue("lyrics", value: song.id) as? [String: Any] else {
-                    throw URLError(.cannotParseResponse)
-                }
+                let fetched = try await self.fetchLyrics(for: song)
                 guard !Task.isCancelled, generation == self.lyricsGeneration,
                       self.selectedSong?.id == song.id else { return }
-                if let ttml = response["ttml"] as? String, !ttml.isEmpty {
-                    self.lyrics = try AppleMusicLyricsParser.parse(ttml: ttml, songID: song.id)
-                }
+                self.sourceLyrics = fetched
+                self.lyrics = fetched
+                Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AppleMusicLyrics").notice("Loaded song=\(song.id, privacy: .public) lines=\(fetched?.lines.count ?? 0) timed=\(fetched?.lines.filter(\.hasValidCharacterTimings).count ?? 0)")
+                await self.refreshLyricTiming(for: song)
             } catch {
-                // A missing or unavailable lyric does not interrupt playback.
+                Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AppleMusicLyrics").error("Fetch failed song=\(song.id, privacy: .public) domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code)")
+            }
+        }
+    }
+
+    private func fetchLyrics(for song: AppleMusicSong) async throws -> AppleMusicLyrics? {
+        guard let response = try await evaluateValue("lyrics", value: song.id) as? [String: Any] else {
+            throw URLError(.cannotParseResponse)
+        }
+        guard let ttml = response["ttml"] as? String, !ttml.isEmpty else { return nil }
+        return try AppleMusicLyricsParser.parse(ttml: ttml, songID: song.id)
+    }
+
+    private func refreshLyricTiming(for song: AppleMusicSong) async {
+        let generation = lyricsGeneration
+        let timing = await analysisCache.loadLyricTiming(for: song)
+        let analysis = await analysisCache.load(id: song.id, duration: song.duration)
+        guard generation == lyricsGeneration, selectedSong?.id == song.id,
+              let source = sourceLyrics, source.songID == song.id else { return }
+        if let timing, let analysis, let recognized = timing.applying(to: source, song: song, analysis: analysis) {
+            lyrics = recognized
+            lyricTimingMessage = nil
+            lyricTimingFailure = nil
+        } else {
+            lyrics = source
+            if !source.lines.isEmpty, source.lines.allSatisfy(\.hasValidCharacterTimings) {
+                lyricTimingMessage = nil
+                lyricTimingFailure = nil
+            } else if let timing, timing.sourceText == source.text, let error = timing.errorMessage {
+                lyricTimingMessage = nil
+                lyricTimingFailure = "歌詞の同期を生成できませんでした：" + error
+            } else {
+                lyricTimingMessage = "音声から歌詞の時刻を解析しています"
+                lyricTimingFailure = nil
+                if timing != nil {
+                    do {
+                        try await analysisCache.invalidateLyricTiming(for: song)
+                        guard generation == lyricsGeneration, selectedSong?.id == song.id else { return }
+                        preanalysis.retry(songID: song.id)
+                    } catch {
+                        guard generation == lyricsGeneration, selectedSong?.id == song.id else { return }
+                        lyricTimingMessage = nil
+                        lyricTimingFailure = "歌詞の時刻を更新できませんでした。"
+                    }
+                } else if !preanalysis.isAnalyzing(songID: song.id) {
+                    preanalysis.retry(songID: song.id)
+                }
+            }
+        }
+    }
+
+    /// Retry only lyric timing; keep the existing music analysis available.
+    func retryLyricTiming() {
+        guard !stopping, let song = selectedSong, let source = sourceLyrics else { return }
+        lyricsGeneration &+= 1
+        let generation = lyricsGeneration
+        lyricsTask?.cancel()
+        lyrics = source
+        lyricTimingMessage = "音声から歌詞の時刻を解析しています"
+        lyricTimingFailure = nil
+        lyricsTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if generation == self.lyricsGeneration { self.lyricsTask = nil } }
+            do {
+                try await self.analysisCache.invalidateLyricTiming(for: song)
+                guard !Task.isCancelled, generation == self.lyricsGeneration,
+                      self.selectedSong?.id == song.id else { return }
+                self.preanalysis.retry(songID: song.id)
+            } catch {
+                guard !Task.isCancelled, generation == self.lyricsGeneration,
+                      self.selectedSong?.id == song.id else { return }
+                self.lyricTimingMessage = nil
+                self.lyricTimingFailure = "歌詞の時刻を更新できませんでした。"
             }
         }
     }
@@ -218,12 +316,24 @@ final class AppleMusicStore: NSObject {
             from: JSONSerialization.data(withJSONObject: result)).songs.first
     }
 
-    func analyzeInWorker(_ song: AppleMusicSong, onReady: @MainActor (Int32) -> Void) async throws -> MusicAnalysis {
+    func analyzeInWorker(_ song: AppleMusicSong, existingAnalysis: MusicAnalysis? = nil,
+                         onReady: @MainActor (Int32) -> Void) async throws -> AppleMusicWorkerResult {
         setQueueSongs([song])
         await silentAnalysis.finishStorageBeforeTermination()
         silentAnalysis.select(song, force: true)
-        try await analyzeSilently(song, onReady: onReady)
-        guard let result = silentAnalysis.analysis else { throw SilentAnalysisError.noAudio }
+        var lyrics: AppleMusicLyrics?
+        var lyricError: String?
+        do { lyrics = try await fetchLyrics(for: song) }
+        catch is CancellationError { throw CancellationError() }
+        catch { lyricError = "歌詞を取得できませんでした。" }
+        try Task.checkCancellation()
+        if let existingAnalysis, lyrics == nil || (lyrics?.lines.isEmpty == false && lyrics!.lines.allSatisfy(\.hasValidCharacterTimings)) {
+            return AppleMusicWorkerResult(analysis: existingAnalysis,
+                lyricTiming: AppleMusicLyricTiming(songID: song.id, duration: song.duration,
+                    sourceText: lyrics?.text ?? "", timeline: nil, errorMessage: lyricError))
+        }
+        var result = try await analyzeSilently(song, lyrics: lyrics, existingAnalysis: existingAnalysis, onReady: onReady)
+        if let lyricError { result.lyricTiming.errorMessage = lyricError }
         return result
     }
 
@@ -250,6 +360,7 @@ final class AppleMusicStore: NSObject {
                 self.audioCapture.reset()
                 self.loadArtwork(for: song)
                 self.loadLyrics(for: song)
+                Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AppleMusicLyrics").notice("Selected song=\(song.id, privacy: .public) ready=\(self.playback.isReady) authorized=\(self.playback.isAuthorized)")
                 return true
             } catch {
                 guard generation == self.bridgeGeneration else { return false }
@@ -326,7 +437,8 @@ final class AppleMusicStore: NSObject {
         }
     }
 
-    private func analyzeSilently(_ song: AppleMusicSong, onReady: @MainActor (Int32) -> Void) async throws {
+    private func analyzeSilently(_ song: AppleMusicSong, lyrics: AppleMusicLyrics?, existingAnalysis: MusicAnalysis?,
+                                 onReady: @MainActor (Int32) -> Void) async throws -> AppleMusicWorkerResult {
         let pendingPoll = pollTask, pendingCommand = commandTask, pendingSong = songTask
         await pendingPoll?.value
         try Task.checkCancellation()
@@ -337,6 +449,7 @@ final class AppleMusicStore: NSObject {
         let restoreSong = selectedSong
         let restorePosition = playback.ended ? 0 : playback.time
         var failure: Error?
+        var result: AppleMusicWorkerResult?
         let recording = AppleMusicPCMRecording(volume: 0.12)
         do {
             // Warm the existing media process at volume zero. Raise gain only after the muted tap is ready.
@@ -380,10 +493,15 @@ final class AppleMusicStore: NSObject {
                         try await expansion.value
                     } onCancel: { expansion.cancel() }
                     try Task.checkCancellation()
-                    await silentAnalysis.analyzePreparedAudio(restored, origin: captured.origin)
+                    if existingAnalysis == nil {
+                        await silentAnalysis.analyzePreparedAudio(restored, origin: captured.origin)
+                    }
                     try Task.checkCancellation()
                     if let error = silentAnalysis.error { throw SilentAnalysisError.analysis(error) }
-                    guard silentAnalysis.analysis != nil else { throw SilentAnalysisError.noAudio }
+                    guard let analysis = existingAnalysis ?? silentAnalysis.analysis else { throw SilentAnalysisError.noAudio }
+                    let timing = try await recognizeLyrics(lyrics, song: song, analysis: analysis,
+                                                           buffer: restored, origin: captured.origin)
+                    result = AppleMusicWorkerResult(analysis: analysis, lyricTiming: timing)
                     musicAnalysis.refreshSavedAnalysis(for: song)
                     break
                 }
@@ -424,6 +542,14 @@ final class AppleMusicStore: NSObject {
         catch { if failure == nil { failure = error } }
         if stopping { audioCapture.stop() }
         if let failure { throw failure }
+        guard let result else { throw SilentAnalysisError.noAudio }
+        return result
+    }
+
+    private func recognizeLyrics(_ lyrics: AppleMusicLyrics?, song: AppleMusicSong, analysis: MusicAnalysis,
+                                 buffer: AVAudioPCMBuffer, origin: Double) async throws -> AppleMusicLyricTiming {
+        try await AppleMusicLyricTiming.generate(lyrics: lyrics, song: song, analysis: analysis,
+                                                  audioBuffer: buffer, startTime: origin)
     }
 
     private func evaluate(_ command: String, value: Double = 0) async throws -> AppleMusicPlayback {
@@ -444,10 +570,6 @@ final class AppleMusicStore: NSObject {
         if let webView { return webView }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = websiteDataStore
-        if isOfficialBrowser {
-            configuration.userContentController.addUserScript(WKUserScript(
-                source: AppleMusicAppearance.browserStyle, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         // Playback is controlled by the native queue and buttons, including track-end advances.
         configuration.mediaTypesRequiringUserActionForPlayback = []
@@ -492,6 +614,8 @@ final class AppleMusicStore: NSObject {
         lyricsGeneration &+= 1
         lyricsTask?.cancel(); lyricsTask = nil
         lyrics = nil
+        sourceLyrics = nil
+        lyricTimingMessage = nil
         mediaGeneration &+= 1
         playbackSuspended = true
         bridgeGeneration &+= 1
@@ -625,7 +749,7 @@ extension AppleMusicStore: WKUIDelegate, NSWindowDelegate {
     }
 }
 
-private enum SilentAnalysisError: LocalizedError {
+enum SilentAnalysisError: LocalizedError {
     case noAudioProcess, noAudio, didNotFinish, playbackRateChanged, analysis(String)
     var errorDescription: String? {
         switch self {

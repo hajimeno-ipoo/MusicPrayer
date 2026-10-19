@@ -434,6 +434,52 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testSharedRendererColoursEstimatedRowsAndKeepsRecognizedTimesFirst() throws {
+        _ = NSApplication.shared
+        let line = TimedLyricLine(id: "estimated", ordinal: 0, text: "色の進行を確認する",
+                                  start: 1, end: 5, textWeight: 9, confidence: 1)
+        let motion = try XCTUnwrap(LyricMotion.parameters(for: line, time: 3, vocal: nil,
+                                                         beat: 0, beatPhase: 0, barPhase: 0))
+        func cyanCount(_ progress: Double, timings: [LyricCharacterTiming] = []) throws -> Int {
+            let rendered = try pixels(ImageRenderer(content: LyricMotionLineView(line: line, colourTimings: timings,
+                motion: motion, time: 3, viewport: CGSize(width: 600, height: 220), font: .system,
+                estimatedProgress: progress).background(.black)))
+            return stride(from: 0, to: rendered.bytes.count, by: 4).filter { offset in
+                Int(rendered.bytes[offset + 1]) > Int(rendered.bytes[offset]) + 50 && rendered.bytes[offset + 2] > 120
+            }.count
+        }
+        let early = try cyanCount(0.25)
+        XCTAssertGreaterThan(early, 0)
+        XCTAssertGreaterThan(try cyanCount(0.75), early + 100)
+        XCTAssertEqual(try cyanCount(0), 0)
+        XCTAssertEqual(try cyanCount(0.25), early)
+        XCTAssertEqual(try cyanCount(1, timings: line.text.map { _ in LyricCharacterTiming(start: 4, end: 5) }), 0)
+        XCTAssertTrue(line.characterTimings.isEmpty)
+    }
+
+    @MainActor
+    func testSharedRendererDoesNotInventColourProgressWithoutCharacterTimestamps() throws {
+        _ = NSApplication.shared
+        let line = TimedLyricLine(id: "line-progress", ordinal: 0, text: "歌詞の色を確認します",
+                                  start: 1, end: 5, textWeight: 10, confidence: 1)
+        func cyanCount(at time: Double) throws -> Int {
+            let motion = try XCTUnwrap(LyricMotion.parameters(for: line, time: time, vocal: nil,
+                                                             beat: 0, beatPhase: 0, barPhase: 0))
+            let rendered = try pixels(ImageRenderer(content: LyricMotionLineView(line: line, colourTimings: [],
+                motion: motion, time: time, viewport: CGSize(width: 600, height: 220), font: .system).background(.black)))
+            return stride(from: 0, to: rendered.bytes.count, by: 4).filter { offset in
+                Int(rendered.bytes[offset + 1]) > Int(rendered.bytes[offset]) + 50 && rendered.bytes[offset + 2] > 120
+            }.count
+        }
+        let start = try cyanCount(at: 1), middle = try cyanCount(at: 3), end = try cyanCount(at: 4.99)
+        XCTAssertEqual(start, 0)
+        XCTAssertEqual(middle, 0, "時刻のない文字を行の時間で均等に塗らない")
+        XCTAssertEqual(end, 0)
+        XCTAssertEqual(try cyanCount(at: 1), 0)
+        XCTAssertTrue(line.characterTimings.isEmpty, "表示のために文字時刻を捏造・保存しない")
+    }
+
+    @MainActor
     func testSharedLineRendererUsesCharacterTimesAndRestoresColourAfterSeek() throws {
         _ = NSApplication.shared
         let text = "歌詞の色を確認"

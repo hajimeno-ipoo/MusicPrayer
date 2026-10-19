@@ -15,7 +15,11 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
         window.orderBack(nil)
         defer { store.stop(); window.orderOut(nil); window.contentView = nil }
         view.loadHTMLString("""
-        <html><head><style>.artwork{background-color:rgb(200,100,50)}</style></head>
+        <html><head><style>
+        .scrollable-page { background-color: #fff }
+        @media(prefers-color-scheme:dark) { .scrollable-page { background-color:#1f1f1f } }
+        .artwork{background-color:rgb(200,100,50)}
+        </style></head>
         <body><main class="scrollable-page"><div class="artwork">ジャケット</div><button>再生</button></main></body></html>
         """, baseURL: URL(string: "https://music.apple.com/"))
         for (appearance, expected) in [(NSAppearance.Name.aqua, "rgb(255, 255, 255)"), (.darkAqua, "rgb(31, 31, 31)")] {
@@ -32,6 +36,52 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
             XCTAssertEqual(artwork, "rgb(200, 100, 50)")
             let button = try await view.evaluateJavaScript("document.querySelector('button').textContent") as? String
             XCTAssertEqual(button, "再生")
+        }
+    }
+
+    @MainActor
+    func testOfficialAlbumPaletteKeepsSongTextAndBackgroundTogetherAcrossSystemAppearances() async throws {
+        _ = NSApplication.shared
+        let store = AppleMusicStore(websiteDataStore: .nonPersistent(), usesAnalysisWorkers: false, isOfficialBrowser: true)
+        let view = store.webViewForDisplay()
+        view.stopLoading()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view; window.orderBack(nil)
+        defer { store.stop(); window.orderOut(nil); window.contentView = nil }
+        // The official site pairs --joe-color with is-light-theme/is-dark-theme song text.
+        view.loadHTMLString("""
+        <html><head><style>
+        .app-container.has-theme-override .scrollable-page { background:var(--joe-color) }
+        .app-container.is-dark-theme .section { color:var(--systemPrimary-onDark) }
+        .app-container.is-light-theme .section { color:var(--systemPrimary-onLight) }
+        .artwork { background:rgb(200,100,50) }
+        .unavailable { opacity:.4 }
+        </style></head><body>
+        <div class="app-container has-theme-override is-dark-theme"
+          style="--joe-color:rgb(32,40,48);--systemPrimary-onDark:rgb(255,255,255);--systemPrimary-onLight:rgb(0,0,0)">
+          <main class="scrollable-page"><section class="section"><span id="song">曲名</span>
+          <button class="unavailable" disabled>配信対象外</button></section><div class="artwork">ジャケット</div></main>
+        </div></body></html>
+        """, baseURL: URL(string: "https://music.apple.com/"))
+        for _ in 0..<100 {
+            if (try? await view.evaluateJavaScript("!!document.querySelector('#song')") as? Bool) == true { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            window.appearance = NSAppearance(named: appearance); view.appearance = NSAppearance(named: appearance)
+            for darkAlbum in [true, false] {
+                let background = darkAlbum ? "rgb(32, 40, 48)" : "rgb(240, 232, 220)"
+                _ = try await view.evaluateJavaScript("""
+                document.querySelector('.app-container').className='app-container has-theme-override \(darkAlbum ? "is-dark-theme" : "is-light-theme")';
+                document.querySelector('.app-container').style.setProperty('--joe-color','\(background)'); true;
+                """)
+                let actualBackground = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('.scrollable-page')).backgroundColor") as? String
+                let text = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('#song')).color") as? String
+                XCTAssertEqual(actualBackground, background, "アルバムの文字色に対応する公式背景を上書きしない")
+                XCTAssertEqual(text, darkAlbum ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)")
+                let disabled = try await view.evaluateJavaScript("document.querySelector('.unavailable').disabled && getComputedStyle(document.querySelector('.unavailable')).opacity === '0.4'") as? Bool
+                XCTAssertEqual(disabled, true, "公式の無効状態や透明度を一律に変更しない")
+            }
         }
     }
 
@@ -88,6 +138,8 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
         let ticketValue = await seed.ticket(for: song.id)
         let ticket = try XCTUnwrap(ticketValue)
         try await seed.save(MusicAnalysis(fingerprint: "appleMusic:123", duration: 60, beats: [1, 2], bpm: 120), id: song.id, ticket: ticket)
+        try await seed.saveLyricTiming(AppleMusicLyricTiming(songID: song.id, duration: song.duration,
+            sourceText: "", timeline: nil, errorMessage: nil), ticket: ticket)
         let store = AppleMusicStore(analysisDirectory: directory)
         store.setQueueSongs([song])
         let view = store.webViewForDisplay()

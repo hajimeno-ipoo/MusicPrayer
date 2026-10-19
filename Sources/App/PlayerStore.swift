@@ -32,12 +32,14 @@ final class PlayerStore {
     var playbackError: String?
     var devices: [OutputDevice] = []
     var outputID: UInt32 = 0
+    private var appleMusicOutputID: UInt32 = 0
+    var selectedOutputID: UInt32 { isAppleMusicActive ? appleMusicOutputID : outputID }
     var defaultOutputName: String?
     var outputDeviceName: String {
-        if outputID == 0 { return defaultOutputName ?? "Macの既定の出力先" }
-        return devices.first { $0.id == outputID }?.name ?? "選択した出力先（未接続）"
+        if selectedOutputID == 0 { return defaultOutputName ?? "Macの既定の出力先" }
+        return devices.first { $0.id == selectedOutputID }?.name ?? "選択した出力先（未接続）"
     }
-    var outputName: String { outputID == 0 ? "Macの既定：\(outputDeviceName)" : outputDeviceName }
+    var outputName: String { selectedOutputID == 0 ? "Macの既定：\(outputDeviceName)" : outputDeviceName }
     var previewTime: Double? { didSet { publishLyricEvent() } }
     var lyricText = ""
     var lyricTimeline: LyricTimeline?
@@ -80,13 +82,14 @@ final class PlayerStore {
     @ObservationIgnored private var loadedURL: URL?
     @ObservationIgnored private var restoredLocalSelection: (url: URL, time: Double)?
     @ObservationIgnored private var appleMusicSelectionPending = false
+    @ObservationIgnored private var appleMusicSelectionSeek: Double?
     @ObservationIgnored private var appleMusicEndHandled = false
     var currentQueueTrack: Track? { tracks.indices.contains(currentIndex) ? tracks[currentIndex] : nil }
     var currentTrack: Track? { !isAppleMusicActive && currentQueueTrack?.isAppleMusic == false ? currentQueueTrack : nil }
     var canTogglePlayback: Bool { !isAppleMusicActive || currentQueueTrack != nil }
     var canSkipNext: Bool { plannedIndex != nil }
     var canSkipPrevious: Bool { currentIndex > 0 || position > 3 }
-    var canSeekPlayback: Bool { !isAppleMusicActive || (!appleMusicSelectionPending && appleMusic.playback.id == currentQueueTrack?.appleMusicSong?.id && appleMusic.playback.available && appleMusic.playback.duration > 0) }
+    var canSeekPlayback: Bool { !isAppleMusicActive || (currentQueueTrack?.isAppleMusic == true && duration > 0) }
 
     private func updateVolume() {
         let value = isMuted ? 0 : volume
@@ -247,7 +250,11 @@ final class PlayerStore {
         if isAppleMusicActive {
             previewTime = nil
             guard canSeekPlayback, time.isFinite else { return }
-            appleMusic.command("seek", value: min(max(0, time), duration)); return
+            let target = min(max(0, time), duration)
+            position = target
+            if appleMusicSelectionPending { appleMusicSelectionSeek = target }
+            else { appleMusic.command("seek", value: target) }
+            persist(); return
         }
         do { try engine.seek(to: min(max(0, time), duration)); position = engine.currentTime; previewTime = nil; visualTransition = nil; publishLyricEvent(); planNext(); persist() }
         catch { playbackError = error.localizedDescription }
@@ -288,12 +295,24 @@ final class PlayerStore {
         if removingCurrent { publishLyricEvent() }
     }
     func chooseOutput(_ id: UInt32) {
-        do { try engine.setOutputDevice(id == 0 ? nil : id); outputID = id; refreshDevices(); playbackError = nil }
+        do {
+            if isAppleMusicActive {
+                // WebKit follows the Mac output route; the local engine has its own route.
+                if id != 0 { try AudioOutputs.setDefaultDevice(id) }
+                appleMusicOutputID = id
+            } else {
+                try engine.setOutputDevice(id == 0 ? nil : id)
+                outputID = id
+            }
+            refreshDevices(); playbackError = nil
+        }
         catch { playbackError = error.localizedDescription }
     }
     func refreshDevices() {
         devices = AudioOutputs.devices()
-        defaultOutputName = AudioOutputs.defaultDevice().flatMap { AudioOutputs.name(of: $0) }
+        let defaultID = AudioOutputs.defaultDevice()
+        defaultOutputName = defaultID.flatMap { AudioOutputs.name(of: $0) }
+        if appleMusicOutputID != 0, appleMusicOutputID != defaultID { appleMusicOutputID = 0 }
     }
     func retryAnalysis() {
         if isAppleMusicActive, let song = currentQueueTrack?.appleMusicSong {
@@ -496,6 +515,7 @@ final class PlayerStore {
         restoredLocalSelection = nil
         position = resumeTime; duration = song.duration
         appleMusicSelectionPending = true
+        appleMusicSelectionSeek = resumeTime > 0 ? resumeTime : nil
         appleMusicEndHandled = false
         planNext(); persist(); nowPlaying?.update()
         let id = tracks[index].id
@@ -517,20 +537,11 @@ final class PlayerStore {
             if self.appleMusic.playback.isReady,
                await self.appleMusic.playSong(song, autoplay: autoplay) {
                 guard !Task.isCancelled, request == self.appleMusicRequest else { return }
-                if resumeTime > 0, autoplay {
-                    for _ in 0..<80 {
-                        guard !Task.isCancelled, request == self.appleMusicRequest else { return }
-                        if self.appleMusic.playback.id == song.id, self.appleMusic.playback.duration > 0 { break }
-                        self.appleMusic.pollPlayback()
-                        try? await Task.sleep(for: .milliseconds(50))
-                    }
-                    guard !Task.isCancelled, request == self.appleMusicRequest else { return }
-                    if self.appleMusic.playback.id == song.id, self.appleMusic.playback.duration > 0 {
-                        self.appleMusic.command("seek", value: resumeTime)
-                    } else {
-                        self.appleMusic.command("pause")
-                        self.playbackError = "Apple Musicの再生位置を復元できませんでした。曲の一覧から選び直してください。"
-                    }
+                if let seek = self.appleMusicSelectionSeek {
+                    // MusicKit may not have created media yet. The bridge retains
+                    // this position without starting playback and applies it when ready.
+                    self.appleMusic.command("seek", value: seek)
+                    self.appleMusicSelectionSeek = nil
                 }
                 self.isPlaying = autoplay && self.playbackError == nil
             } else {
@@ -574,6 +585,7 @@ final class PlayerStore {
         appleMusicRequest &+= 1
         appleMusicTask?.cancel(); appleMusicTask = nil
         appleMusicSelectionPending = false
+        appleMusicSelectionSeek = nil
     }
 
     private func switchToLocalPlayback(_ action: @escaping @MainActor (PlayerStore) -> Void) {

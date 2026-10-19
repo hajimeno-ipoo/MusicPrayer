@@ -34,6 +34,48 @@ final class AppleMusicPreanalysisTests: XCTestCase {
         await queue.yieldToPlayback()
     }
 
+    func testRetryDuringActiveJobRunsOnceAfterItsCleanup() async throws {
+        let queue = AppleMusicPreanalysis(), first = Gate(), second = Gate()
+        var attempts = 0, active = 0, maximumActive = 0
+        queue.operation = { _ in
+            attempts += 1
+            active += 1; maximumActive = max(maximumActive, active)
+            defer { active -= 1 }
+            if attempts == 1 { await first.wait() }
+            else { await second.wait() }
+        }
+        defer { first.open(); second.open(); queue.setAllowed(false) }
+        queue.setSongs([song("same")]); queue.setAllowed(true)
+        try await waitUntil("最初の解析が始まりませんでした") { attempts == 1 }
+        queue.retry(songID: "same")
+        queue.retry(songID: "same")
+        XCTAssertEqual(attempts, 1, "進行中の解析と再試行を同時に実行しない")
+        first.open()
+        try await waitUntil("後片付け後の再試行が始まりませんでした") { attempts == 2 }
+        second.open()
+        try await waitUntil("再試行が完了しませんでした") { !queue.isWorking }
+        for _ in 0..<5 { queue.setAllowed(true); await Task.yield() }
+        XCTAssertEqual(attempts, 2, "同じjob中の再試行要求を1回へまとめる")
+        XCTAssertEqual(maximumActive, 1)
+        XCTAssertTrue(queue.errors.isEmpty)
+    }
+
+    func testExplicitRetryClearsFailureAndRunsAgain() async throws {
+        let queue = AppleMusicPreanalysis()
+        var attempts = 0
+        queue.operation = { _ in
+            attempts += 1
+            if attempts == 1 { throw TestFailure.timeout }
+        }
+        queue.setSongs([song("same")]); queue.setAllowed(true)
+        try await waitUntil("失敗結果が届きませんでした") { !queue.isWorking && queue.errors["same"] != nil }
+        queue.retry(songID: "same")
+        try await waitUntil("明示的な再試行が完了しませんでした") { attempts == 2 && !queue.isWorking }
+        XCTAssertNil(queue.errors["same"])
+        XCTAssertEqual(queue.status(for: song("same")), "解析済み")
+        await queue.yieldToPlayback()
+    }
+
     func testTwoSongsRunTogetherAndThirdWaitsForAFreeWorker() async throws {
         let queue = AppleMusicPreanalysis()
         let gates = ["first": Gate(), "second": Gate(), "third": Gate()]

@@ -19,7 +19,7 @@ const catalogSong = item => {
 };
 
 // Reading the official browser never installs native queue listeners or writes player state.
-const snapshot = completedID => {
+const snapshot = (completedID, pendingSeek = null, selectedID = "") => {
     const item = music.nowPlayingItem;
     const attributes = item?.attributes;
     const artwork = attributes?.artwork?.url;
@@ -29,7 +29,7 @@ const snapshot = completedID => {
     const playbackTime = media && media.readyState >= 2 && Number.isFinite(media.currentTime)
         ? media.currentTime : music.currentPlaybackTime;
     return {
-        id: String(item?.id || completedID || ""),
+        id: String(item?.id || completedID || selectedID || ""),
         isReady: true,
         isAuthorized: !!music.isAuthorized,
         available: !!item,
@@ -38,7 +38,7 @@ const snapshot = completedID => {
         artworkURL: typeof artwork === "string" ? artwork.replaceAll("{w}", "600").replaceAll("{h}", "600") : null,
         isPlaying: !!music.isPlaying,
         ended: completedID !== null || (window.MusicKit?.PlaybackStates?.completed !== undefined && music.playbackState === window.MusicKit.PlaybackStates.completed),
-        time: finite(playbackTime),
+        time: pendingSeek === null ? finite(playbackTime) : pendingSeek,
         playbackRate: media ? media.playbackRate : null,
         preservesPitch: media ? media.preservesPitch : null,
         duration: finite(music.currentPlaybackDuration),
@@ -88,7 +88,7 @@ case "search": {
 // The official page clears the current item after completion. Keep the completion event
 // until the app advances its own queue instead of relying on a later polling sample.
 if (!window.__musicPrayerQueueState || window.__musicPrayerQueueState.music !== music) {
-    const state = { music, lastID: "", completedID: null, analysisRate: null };
+    const state = { music, lastID: "", completedID: null, analysisRate: null, pendingSeek: null };
     state.applyAnalysisRate = media => {
         if (state.analysisRate !== 2 || media?.id !== "apple-music-player") return;
         if ('playbackRate' in music && music.playbackRate !== 2) Reflect.set(music, 'playbackRate', 2);
@@ -116,11 +116,19 @@ if (!window.__musicPrayerQueueState || window.__musicPrayerQueueState.music !== 
     }
 }
 const queueState = window.__musicPrayerQueueState;
+const applyPendingSeek = async () => {
+    const duration = finite(music.currentPlaybackDuration);
+    if (queueState.pendingSeek === null || duration <= 0) return;
+    const target = Math.min(queueState.pendingSeek, duration);
+    await music.seekToTime(target);
+    queueState.pendingSeek = null;
+};
 
 switch (command) {
 case "prepareSong":
 case "playSong":
     if (typeof value !== "string" || !/^\d+$/.test(value)) throw new Error("Invalid song ID");
+    if (command === "prepareSong" || queueState.lastID !== value) queueState.pendingSeek = null;
     queueState.completedID = null;
     queueState.lastID = value;
     music.shuffleMode = 0;
@@ -130,7 +138,8 @@ case "playSong":
     if (typeof invocationIsCurrent === "function" && !invocationIsCurrent()) throw new Error("Selection expired");
     queueState.completedID = null;
     queueState.lastID = value;
-    if (command === "playSong") await music.play(); else await music.pause();
+    if (command === "playSong") { await music.play(); await applyPendingSeek(); }
+    else await music.pause();
     break;
 case "analysisRate": {
     if (value !== 1 && value !== 2) throw new Error("Invalid analysis playback rate");
@@ -146,10 +155,10 @@ case "analysisRate": {
     break;
 }
 case "toggle":
-    if (music.isPlaying) await music.pause(); else { queueState.completedID = null; await music.play(); }
+    if (music.isPlaying) await music.pause(); else { queueState.completedID = null; await music.play(); await applyPendingSeek(); }
     break;
 case "pause": await music.pause(); break;
-case "stop": queueState.completedID = null; await music.stop(); break;
+case "stop": queueState.completedID = null; queueState.pendingSeek = null; await music.stop(); break;
 case "next":
     if (music.queue?.nextPlayableItem) await music.skipToNextItem();
     break;
@@ -157,13 +166,18 @@ case "previous":
     if (music.currentPlaybackTime > 3) await music.seekToTime(0);
     else if (music.queue?.previousPlayableItem) await music.skipToPreviousItem();
     break;
-case "seek": queueState.completedID = null; await music.seekToTime(Math.min(finite(value), finite(music.currentPlaybackDuration))); break;
+case "seek":
+    queueState.completedID = null;
+    queueState.pendingSeek = finite(value);
+    await applyPendingSeek();
+    break;
 case "volume": music.volume = Math.min(1, finite(value)); break;
 case "snapshot":
+    if (music.isPlaying) await applyPendingSeek();
     if (queueState.analysisRate === 2) queueState.applyAnalysisRate(document.getElementById("apple-music-player"));
     break;
 default: throw new Error("Unknown playback command");
 }
 const item = music.nowPlayingItem;
 if (item?.id) queueState.lastID = String(item.id);
-return snapshot(queueState.completedID);
+return snapshot(queueState.completedID, queueState.pendingSeek, queueState.lastID);

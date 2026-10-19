@@ -173,8 +173,14 @@ struct LyricProgressAttribute: TextAttribute {
     var timing: LyricCharacterTiming
 }
 
+private struct LyricEstimatedProgressAttribute: TextAttribute {
+    var start: Double
+    var end: Double
+}
+
 private struct LyricTextRenderer: TextRenderer {
     var time: Double
+    var estimatedProgress: Double?
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
@@ -182,8 +188,14 @@ private struct LyricTextRenderer: TextRenderer {
             for run in line {
                 for slice in run {
                     context.draw(slice)
-                    guard let weight = slice[LyricProgressAttribute.self] else { continue }
-                    let emphasis = LyricMotion.emphasis(time: time, timing: weight.timing)
+                    let emphasis: Double
+                    if let weight = slice[LyricProgressAttribute.self] {
+                        emphasis = LyricMotion.emphasis(time: time, timing: weight.timing)
+                    } else if let weight = slice[LyricEstimatedProgressAttribute.self], let progress = estimatedProgress {
+                        emphasis = weight.end > weight.start
+                            ? LyricMotion.clamp((progress - weight.start) / (weight.end - weight.start))
+                            : (progress >= weight.end ? 1 : 0)
+                    } else { continue }
                     if emphasis > 0 {
                         var highlight = context
                         highlight.opacity *= emphasis
@@ -250,13 +262,20 @@ struct LyricMotionLineView: View {
     let time: Double
     let viewport: CGSize
     let font: LyricFont
+    var estimatedProgress: Double? = nil
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
 
     private func lyricText(breakOffset: Int? = nil) -> Text {
+        let total = max(1, line.text.reduce(0.0) { $0 + LyricParser.characterWeight($1) })
+        var offset = 0.0
         return line.text.enumerated().reduce(Text("")) { text, element in
             let character = Text(String(element.element))
+            let end = offset + LyricParser.characterWeight(element.element) / total
             let fragment = colourTimings.indices.contains(element.offset)
-                ? character.customAttribute(LyricProgressAttribute(timing: colourTimings[element.offset])) : character
+                ? character.customAttribute(LyricProgressAttribute(timing: colourTimings[element.offset]))
+                : (estimatedProgress != nil
+                    ? character.customAttribute(LyricEstimatedProgressAttribute(start: offset, end: end)) : character)
+            offset = end
             if element.offset == breakOffset { return Text("\(text)\n\(fragment)") }
             return Text("\(text)\(fragment)")
         }
@@ -270,7 +289,7 @@ struct LyricMotionLineView: View {
             .lineSpacing(6)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .center)
-            .textRenderer(LyricTextRenderer(time: time))
+            .textRenderer(LyricTextRenderer(time: time, estimatedProgress: estimatedProgress))
             .accessibilityHidden(true)
     }
 
@@ -313,7 +332,7 @@ struct LyricMotionView: View {
                         if lyrics.lines.isEmpty {
                             Text(lyrics.text)
                                 .font(font.font(size: 28))
-                                .foregroundStyle(Color(red: 0.24, green: 0.87, blue: 1))
+                                .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(12)
                         } else {
@@ -344,6 +363,16 @@ struct LyricMotionView: View {
             }
             .frame(width: viewport.width, height: viewport.height)
             .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            .overlay(alignment: .bottom) {
+                if store.isAppleMusicActive, let message = store.appleMusic.lyricTimingStatus {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 4)
+                }
+            }
         }
         .allowsHitTesting(false)
     }
@@ -360,7 +389,10 @@ struct LyricMotionView: View {
                     LyricMotionLineView(line: line,
                                        colourTimings: line.hasValidCharacterTimings
                                            ? LyricMotion.colourTimings(for: line, displayStart: displayStarts[line.ordinal]) : [],
-                                       motion: motion, time: time, viewport: viewport, font: font)
+                                       motion: motion, time: time, viewport: viewport, font: font,
+                                       estimatedProgress: store.isAppleMusicActive && !line.hasValidCharacterTimings
+                                           ? store.analysis.map { LyricMusicContext(analysis: $0).colourProgress(
+                                                in: LyricCharacterTiming(start: line.start, end: line.end), at: time) } ?? motion.progress : nil)
                 }
             }
         }

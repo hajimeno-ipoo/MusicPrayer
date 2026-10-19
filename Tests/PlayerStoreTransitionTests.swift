@@ -183,6 +183,47 @@ final class PlayerStoreTransitionTests: XCTestCase {
     }
 
     @MainActor
+    func testAppleMusicCanSeekWhileSelectionIsPreparingAndBeforeFirstPlayback() async throws {
+        _ = NSApplication.shared
+        let queueBackup = try FileBackup(QueuePersistence.file)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MusicPrayerSeek-\(UUID().uuidString)")
+        let store = PlayerStore(lyricDirectory: directory.appendingPathComponent("Lyrics"),
+                                appleMusicAnalysisDirectory: directory.appendingPathComponent("AppleMusic"))
+        defer {
+            store.shutdown()
+            try? queueBackup.restore()
+            try? FileManager.default.removeItem(at: directory)
+        }
+        store.appleMusic.preanalysis.operation = { _ in }
+        let native = store.appleMusic.webViewForDisplay()
+        try await installFakeAppleMusic(in: native, songID: "native", playing: false, time: 0, volume: 0.75)
+        _ = try await native.evaluateJavaScript("""
+        player.currentPlaybackDuration=0;
+        player.play=async function(){calls.push('play');this.isPlaying=true;this.currentPlaybackDuration=209;};
+        true;
+        """)
+        store.tracks = [Track(appleMusicSong: catalogSong)]
+        store.select(0, autoplay: false)
+        XCTAssertTrue(store.canSeekPlayback, "カタログの曲長があれば再生準備中もシークを受け付ける")
+        store.seek(85)
+        XCTAssertEqual(store.position, 85)
+        try await waitUntil("停止中の指定位置が接続へ反映されませんでした") {
+            store.appleMusic.playback.id == self.catalogSong.id && store.appleMusic.playback.time == 85
+        }
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(store.position, 85, "停止中のポーリングで0秒へ戻さない")
+        XCTAssertFalse(store.isPlaying)
+        let pausedCalls = try await native.evaluateJavaScript("calls") as? [String]
+        XCTAssertFalse(pausedCalls?.contains("play") ?? true)
+        store.togglePlayback()
+        try await waitUntil("選択位置から再生されませんでした") {
+            store.appleMusic.playback.isPlaying && store.appleMusic.playback.time == 85
+        }
+        XCTAssertNil(store.playbackError)
+        await store.appleMusic.finishStorageBeforeTermination()
+    }
+
+    @MainActor
     private func installFakeAppleMusic(in view: WKWebView, songID: String, playing: Bool, time: Double, volume: Double) async throws {
         view.stopLoading()
         view.loadHTMLString("""

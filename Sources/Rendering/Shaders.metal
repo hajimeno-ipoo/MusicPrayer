@@ -11,7 +11,7 @@ struct FrameUniforms {
     float4 viewport;               // aspect, width, height, horizon
     float4 tempoPhase;             // BPM / 120, beat phase, bar phase, unused
     float4 sceneLayout;            // Section mean: separation, thickness, depth, glow
-    float4 sceneWater;             // Section mean: water intensity, unused
+    float4 sceneWater;             // Section water intensity, background transparency
     float4 cameraEye;
     float4 cameraTarget;
 };
@@ -123,7 +123,12 @@ vertex RibbonOut ribbonVertex(uint vertexID [[vertex_id]], uint ribbon [[instanc
     return out;
 }
 
-fragment float4 ribbonFragment(RibbonOut in [[stage_in]], constant FrameUniforms& f [[buffer(0)]]) {
+struct RibbonPixel {
+    float4 color [[color(0)]];
+    float coverage [[color(1)]];
+};
+
+fragment RibbonPixel ribbonFragment(RibbonOut in [[stage_in]], constant FrameUniforms& f [[buffer(0)]]) {
     float edgeSoftness = smoothstep(0.0, 0.025, in.uv.y) * smoothstep(0.0, 0.025, 1 - in.uv.y);
     float sideFade = smoothstep(0.0, 0.06, in.uv.x) * smoothstep(0.0, 0.06, 1 - in.uv.x);
     float threadCoordinate = in.uv.y * 72 + in.uv.x * 3;
@@ -142,7 +147,9 @@ fragment float4 ribbonFragment(RibbonOut in [[stage_in]], constant FrameUniforms
     float brightness = 0.92 + threads * 0.85 + fresnel * 0.50 + rim * 1.65 + foldLight * 0.20 + in.glow;
     brightness *= 1 + f.structureColor.z * f.lightState.y * 0.035;
     float3 color = in.color * brightness;
-    return float4(color * alpha, alpha);
+    // Cloth transparency blends the ribbons together; geometry coverage keeps the
+    // desktop from washing through their bodies when the window is transparent.
+    return {float4(color * alpha, alpha), edgeSoftness * sideFade * clamp(f.lightState.z, 0.0, 1.0)};
 }
 
 vertex ScreenOut fullscreenVertex(uint id [[vertex_id]]) {
@@ -152,12 +159,16 @@ vertex ScreenOut fullscreenVertex(uint id [[vertex_id]]) {
 
 fragment float4 resolveRibbonsFragment(ScreenOut in [[stage_in]],
                                       texture2d_array<float> colors [[texture(0)]],
-                                      depth2d_array<float> depths [[texture(1)]]) {
+                                      depth2d_array<float> depths [[texture(1)]],
+                                      texture2d_array<float> coverage [[texture(2)]]) {
     float4 layers[4];
     float z[4];
+    float geometryCoverage = 0;
     for (uint i = 0; i < 4; ++i) {
         layers[i] = colors.sample(nearestSampler, in.uv, i);
         z[i] = depths.sample(nearestSampler, in.uv, i);
+        float mask = coverage.sample(nearestSampler, in.uv, i).r;
+        geometryCoverage = mask + geometryCoverage * (1 - mask);
     }
     // The order can differ at every pixel, including a crossing within the same pair of ribbons.
     for (uint i = 1; i < 4; ++i) {
@@ -176,16 +187,25 @@ fragment float4 resolveRibbonsFragment(ScreenOut in [[stage_in]],
     for (uint i = 0; i < 4; ++i) {
         result = layers[i] + result * (1 - layers[i].a);
     }
-    return result;
+    return float4(result.rgb, geometryCoverage);
 }
 
 fragment float4 brightFragment(ScreenOut in [[stage_in]], texture2d<float> scene [[texture(0)]]) {
-    float3 color = scene.sample(linearSampler, in.uv).rgb;
+    float4 sample = scene.sample(linearSampler, in.uv);
+    float3 color = sample.rgb;
     float luminance = max(color.r, max(color.g, color.b));
-    return float4(color * smoothstep(0.36, 0.90, luminance), 1);
+    float extraction = smoothstep(0.36, 0.90, luminance);
+    return float4(color * extraction, clamp(sample.a, 0.0, 1.0) * extraction);
 }
 
 float3 toneMap(float3 color) { return clamp((color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14), 0.0, 1.0); }
+
+float3 ribbonLinearToSRGB(float3 color) {
+    return select(1.055 * pow(color, float3(1.0 / 2.4)) - 0.055, color * 12.92, color <= 0.0031308);
+}
+float3 ribbonSRGBToLinear(float3 color) {
+    return select(pow((color + 0.055) / 1.055, float3(2.4)), color / 12.92, color <= 0.04045);
+}
 
 fragment float4 compositeFragment(ScreenOut in [[stage_in]], texture2d<float> scene [[texture(0)]],
                                   texture2d<float> bloom [[texture(1)]], texture2d<float> waves [[texture(2)]],
@@ -204,8 +224,12 @@ fragment float4 compositeFragment(ScreenOut in [[stage_in]], texture2d<float> sc
     float skyGlow = exp(-pow((uv.x - 0.48) * 1.8, 2) - pow((uv.y - 0.40) * 4.8, 2));
     background += float3(0.002, 0.007, 0.032) * skyGlow * backgroundDensity;
     float3 color;
+    float coverage;
     if (uv.y <= horizon) {
-        color = scene.sample(linearSampler, uv).rgb + bloom.sample(linearSampler, uv).rgb * bloomStrength;
+        float4 cloth = scene.sample(linearSampler, uv);
+        float4 glow = bloom.sample(linearSampler, uv);
+        color = cloth.rgb + glow.rgb * bloomStrength;
+        coverage = clamp(cloth.a + glow.a * (1 - cloth.a), 0.0, 1.0);
     } else {
         float distance = uv.y - horizon;
         float depth = distance / (1 - horizon);
@@ -236,10 +260,14 @@ fragment float4 compositeFragment(ScreenOut in [[stage_in]], texture2d<float> sc
         distortion += waveOffset / (1 + abs(waveOffset) / limit);
         reflected += distortion;
         float attenuation = (0.65 + f.structureColor.w * analysis * 0.12) * pow(1 - depth, 1.15) * mix(0.78, 1.22, water);
-        color = (scene.sample(linearSampler, reflected).rgb + bloom.sample(linearSampler, reflected).rgb * (bloomStrength - 0.04))
-              * attenuation * 0.68 * presence;
+        float4 cloth = scene.sample(linearSampler, reflected);
+        float4 glow = bloom.sample(linearSampler, reflected);
+        float reflectionStrength = attenuation * 0.68 * presence;
+        color = (cloth.rgb + glow.rgb * (bloomStrength - 0.04)) * reflectionStrength;
+        coverage = clamp((cloth.a + glow.a * (1 - cloth.a)) * reflectionStrength, 0.0, 1.0);
         // Surface normals catch cyan/magenta light, making waves visible even on dark reflection.
         float crest = min(1.0, length(slope) * 2.0 + abs(waveHeight) * 0.06);
+        coverage = max(coverage, crest * (0.55 + 0.45 * (1 - depth)));
         color += mix(float3(0.003, 0.07, 0.14), float3(0.10, 0.005, 0.09), uv.x)
                * crest * (0.55 + 0.45 * (1 - depth));
         background += float3(0.001, 0.004, 0.018) * (1 - depth);
@@ -247,5 +275,12 @@ fragment float4 compositeFragment(ScreenOut in [[stage_in]], texture2d<float> sc
     float horizonGlow = exp(-abs(uv.y - horizon) * 48) * exp(-pow((uv.x - 0.5) * 3, 2));
     background += float3(0.002, 0.025, 0.065) * horizonGlow;
     float vignette = 1 - 0.24 * pow(length((uv - float2(0.5, 0.45)) * float2(1.15, 1)), 1.8);
-    return float4(toneMap((color + background) * vignette), 1);
+    float backgroundOpacity = clamp(1 - f.sceneWater.y, 0.0, 1.0);
+    if (backgroundOpacity >= 1) {
+        return float4(toneMap((color + background) * vignette), 1);
+    }
+    float alpha = backgroundOpacity + coverage * (1 - backgroundOpacity);
+    float3 straight = toneMap((color + background * backgroundOpacity) * vignette / max(alpha, 0.00001));
+    // The sRGB drawable stores premultiplied display values for Core Animation.
+    return float4(ribbonSRGBToLinear(ribbonLinearToSRGB(straight) * alpha), alpha);
 }

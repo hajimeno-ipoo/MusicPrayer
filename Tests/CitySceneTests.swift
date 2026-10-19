@@ -6,6 +6,57 @@ import XCTest
 
 final class CitySceneTests: XCTestCase {
     @MainActor
+    func testCityGlassSeparatesBackgroundFromOpaqueGeometryWithoutFadingColor() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else { throw XCTSkip("Metal unavailable") }
+        let queue = try XCTUnwrap(device.makeCommandQueue())
+        let renderer = try CitySceneRenderer(device: device)
+        var frame = musicalFrame()
+        frame.isPlaying = false
+        let width = 960, height = 540
+        let opaque = try render(renderer, device: device, queue: queue, frame: frame,
+                                width: width, height: height, backgroundOpacity: 1).pixels
+        let glass = try render(renderer, device: device, queue: queue, frame: frame,
+                               width: width, height: height, backgroundOpacity: 0.18).pixels
+        XCTAssertEqual(opaque.count, width * height * 4)
+        XCTAssertEqual(glass.count, opaque.count)
+        guard opaque.count == width * height * 4, glass.count == opaque.count else { return }
+        var translucentBackground = 0, opaqueGeometry = 0, visibleGeometry = 0
+        var maximumGeometryDifference = 0, invalidPremultipliedPixels = 0, nonOpaqueReferencePixels = 0
+        for index in stride(from: 0, to: glass.count, by: 4) {
+            let alpha = Int(glass[index + 3])
+            if opaque[index + 3] != 255 { nonOpaqueReferencePixels += 1 }
+            if alpha < 80 { translucentBackground += 1 }
+            if (0..<3).contains(where: { Int(glass[index + $0]) > alpha + 1 }) {
+                invalidPremultipliedPixels += 1
+            }
+            if alpha == 255 {
+                opaqueGeometry += 1
+                // Compare visible surfaces, where uniformly fading RGB would be
+                // measurable. Dark background pixels cannot satisfy this check.
+                let referencePeak = max(opaque[index], max(opaque[index + 1], opaque[index + 2]))
+                if referencePeak >= 64 {
+                    visibleGeometry += 1
+                    for channel in 0..<3 {
+                        maximumGeometryDifference = max(maximumGeometryDifference,
+                            abs(Int(glass[index + channel]) - Int(opaque[index + channel])))
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(nonOpaqueReferencePixels, 0, "Reduce Transparency must retain an opaque drawable.")
+        XCTAssertGreaterThan(translucentBackground, width * height / 4,
+                             "The studio surround must reveal glass across a substantial area.")
+        XCTAssertGreaterThan(opaqueGeometry, width * height / 100,
+                             "Solid city geometry must remain opaque in the same frame as the transparent surround.")
+        XCTAssertGreaterThan(visibleGeometry, 500,
+                             "The color comparison must cover visible city surfaces, not just black pixels.")
+        XCTAssertLessThanOrEqual(maximumGeometryDifference, 3,
+                                 "Background transparency must not fade the RGB of solid city surfaces.")
+        XCTAssertEqual(invalidPremultipliedPixels, 0,
+                       "Stored sRGB channels must be premultiplied for Core Animation compositing.")
+    }
+
+    @MainActor
     func testGoldLightDisappearsDuringSilenceAndPauseWithCachedAnalysis() throws {
         guard let device = MTLCreateSystemDefaultDevice() else { throw XCTSkip("Metal unavailable") }
         let queue = try XCTUnwrap(device.makeCommandQueue())
@@ -59,8 +110,8 @@ final class CitySceneTests: XCTestCase {
         let routeBuffer = try XCTUnwrap(device.makeBuffer(bytes: route, length: route.count * MemoryLayout<SIMD4<Float>>.stride))
         let output = try XCTUnwrap(device.makeBuffer(length: 257 * MemoryLayout<SIMD4<Float>>.stride, options: .storageModeShared))
         func positions(phase: Float) throws -> [SIMD4<Float>] {
-            // CityUniforms: two matrices followed by nine float4 values.
-            var uniforms = Array(repeating: SIMD4<Float>.zero, count: 17)
+            // CityUniforms: two matrices followed by ten float4 values.
+            var uniforms = Array(repeating: SIMD4<Float>.zero, count: 18)
             uniforms[14] = SIMD4(repeating: 0.5)
             uniforms[15] = SIMD4(0, phase, 1, 1)
             let command = try XCTUnwrap(queue.makeCommandBuffer())
@@ -389,7 +440,7 @@ final class CitySceneTests: XCTestCase {
 
     private func render(_ renderer: CitySceneRenderer, device: MTLDevice, queue: MTLCommandQueue,
                         frame: VisualFrame, width: Int = 640, height: Int = 384,
-                        readPixels: Bool = true) throws -> (pixels: [UInt8], gpuMilliseconds: Double) {
+                        readPixels: Bool = true, backgroundOpacity: Float = 1) throws -> (pixels: [UInt8], gpuMilliseconds: Double) {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm_srgb,
                                                                   width: width, height: height, mipmapped: false)
         descriptor.storageMode = .private; descriptor.usage = [.renderTarget]
@@ -398,7 +449,8 @@ final class CitySceneTests: XCTestCase {
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = output
         pass.colorAttachments[0].loadAction = .clear; pass.colorAttachments[0].storeAction = .store
-        try renderer.encode(command: command, descriptor: pass, frame: frame, size: CGSize(width: width, height: height))
+        try renderer.encode(command: command, descriptor: pass, frame: frame, size: CGSize(width: width, height: height),
+                            backgroundOpacity: backgroundOpacity)
         var buffer: MTLBuffer?
         if readPixels {
             buffer = try XCTUnwrap(device.makeBuffer(length: width * height * 4, options: .storageModeShared))

@@ -218,7 +218,8 @@ final class TapeSceneRenderer {
         }
     }
 
-    func encode(command: MTLCommandBuffer, target: MTLTexture, frame: VisualFrame, size: CGSize) throws {
+    func encode(command: MTLCommandBuffer, target: MTLTexture, frame: VisualFrame, size: CGSize,
+                backgroundOpacity: Float = 1) throws {
         try updateLabels(frame)
         if depth?.width != target.width || depth?.height != target.height {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .depth32Float, width: target.width, height: target.height, mipmapped: false)
@@ -227,11 +228,15 @@ final class TapeSceneRenderer {
         }
         guard let depth else { throw RenderFailure.message("カセットの深度textureを作成できません。") }
         var uniforms = Uniforms(frame: frame, size: size)
+        let backgroundAlpha = min(1, max(0, backgroundOpacity))
+        uniforms.transport.y = backgroundAlpha
         currentUniforms = uniforms
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = target
         pass.colorAttachments[0].loadAction = .clear; pass.colorAttachments[0].storeAction = .store
-        pass.colorAttachments[0].clearColor = MTLClearColorMake(0.24, 0.27, 0.32, 1)
+        pass.colorAttachments[0].clearColor = MTLClearColorMake(0.24 * Double(backgroundAlpha),
+                                                              0.27 * Double(backgroundAlpha),
+                                                              0.32 * Double(backgroundAlpha), Double(backgroundAlpha))
         pass.depthAttachment.texture = depth
         pass.depthAttachment.loadAction = .clear; pass.depthAttachment.storeAction = .store; pass.depthAttachment.clearDepth = 1
         guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else {

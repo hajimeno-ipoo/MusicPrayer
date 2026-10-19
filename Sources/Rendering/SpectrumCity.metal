@@ -3,7 +3,7 @@ using namespace metal;
 struct CityUniforms {
     float4x4 viewProjection;
     float4x4 lightViewProjection;
-    float4 eye, clockAudio, bandsBeat, instruments, rhythm, structure, layout, phasesPresence, colorViewport;
+    float4 eye, clockAudio, bandsBeat, instruments, rhythm, structure, layout, phasesPresence, colorViewport, presentation;
 };
 struct CityVertex { float4 position; float4 normal; float4 surface; };
 struct CityVarying {
@@ -152,7 +152,10 @@ fragment float4 cityGoldFragment(CityGoldVarying in [[stage_in]], constant CityU
     float light=cityGoldTail(in.behind)*cityGoldActivity(u)*clamp(u.phasesPresence.z,0.0,1.0);
     if (light<0.001) discard_fragment();
     float3 color=in.glow!=0 ? float3(0.48,0.19,0.018)*pow(in.profile,2.0) : float3(7.5,4.0,0.80);
-    return float4(color*light,0);
+    // Alpha records the actual tube geometry, including its outer glow profile.
+    // RGB remains additive; alpha uses source-over coverage in the pipeline.
+    float coverage=in.glow!=0 ? clamp(in.profile*in.profile*light,0.0,1.0) : 1.0;
+    return float4(color*light,coverage);
 }
 CityVarying cityBuilding(CityVertex v, uint band, constant CityUniforms &u, float spectral) {
     float height=cityBuildingHeight(band,spectral,u);
@@ -446,7 +449,10 @@ fragment float4 cityBaseFragment(CityVarying in [[stage_in]], constant CityUnifo
         color=cityMaterial(float3(0.002,0.003,0.006),in.world,in.normal,0.24,0.72,
                            float3(0.03,0.08,0.16),1,u,environment)*0.32;
     }
-    return float4(color*presence,1);
+    // Material 7 is the 60x60 studio surround, not the raised city foundation.
+    // Keep the foundation and buildings solid while the surround reveals glass.
+    float alpha=in.material==7 ? u.presentation.x : 1.0;
+    return float4(color*presence*alpha,alpha);
 }
 struct CityFullscreen { float4 position [[position]]; float2 uv; };
 vertex CityFullscreen cityFullscreenVertex(uint id [[vertex_id]]) {
@@ -465,8 +471,22 @@ fragment float4 cityBrightFragment(CityFullscreen in [[stage_in]], texture2d<flo
 fragment float4 cityCompositeFragment(CityFullscreen in [[stage_in]], constant CityUniforms &u [[buffer(0)]],
                                       texture2d<float> scene [[texture(0)]], texture2d<float> bloom [[texture(1)]]) {
     constexpr sampler s(filter::linear,address::clamp_to_edge);
-    float3 color=scene.sample(s,in.uv).rgb+bloom.sample(s,in.uv).rgb*(0.23+u.clockAudio.w*0.09);
+    float4 sceneColor=scene.sample(s,in.uv);
+    float3 color=sceneColor.rgb+bloom.sample(s,in.uv).rgb*(0.23+u.clockAudio.w*0.09);
+    float alpha=clamp(sceneColor.a,0.0,1.0);
+    // The MSAA scene carries premultiplied linear RGB and geometry coverage.
+    // Tone mapping needs straight RGB to avoid darkening silhouette edges twice.
+    if (u.presentation.x<1.0) color=alpha>0.0 ? color/alpha : float3(0);
     color*=1-dot(in.uv-0.5,in.uv-0.5)*0.20;
     float3 mapped=(color*(2.51*color+0.03))/(color*(2.43*color+0.59)+0.14);
-    return float4(clamp(mapped,0.0,1.0),1);
+    mapped=clamp(mapped,0.0,1.0);
+    if (u.presentation.x>=1.0) return float4(mapped,1);
+    // bgra8Unorm_srgb encodes the shader output on store. Core Animation needs
+    // the stored sRGB values premultiplied, so encode, multiply, then decode.
+    float3 encoded=select(1.055*pow(mapped,float3(1.0/2.4))-0.055,
+                          mapped*12.92,mapped<=0.0031308);
+    encoded*=alpha;
+    float3 premultiplied=select(pow((encoded+0.055)/1.055,float3(2.4)),
+                                encoded/12.92,encoded<=0.04045);
+    return float4(premultiplied,alpha);
 }

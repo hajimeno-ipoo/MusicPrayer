@@ -55,4 +55,13 @@ enum AudioOutputs {
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id) == noErr, id != 0 else { return nil }
         return id
     }
+
+    static func setDefaultDevice(_ id: AudioDeviceID) throws {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var device = id
+        let status = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil,
+                                               UInt32(MemoryLayout<AudioDeviceID>.size), &device)
+        guard status == noErr else { throw PlaybackError.outputDevice(status) }
+        guard defaultDevice() == id else { throw PlaybackError.outputDevice(kAudioHardwareBadDeviceError) }
+    }
 }

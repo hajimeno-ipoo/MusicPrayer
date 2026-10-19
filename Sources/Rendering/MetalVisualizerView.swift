@@ -4,16 +4,16 @@ import SwiftUI
 
 struct MetalVisualizerView: NSViewRepresentable {
     let source: VisualFrameSource
-    let sceneOpacity: Double
+    let backgroundOpacity: Float
 
     func makeNSView(context: Context) -> VisualizerHostView {
         let view = VisualizerHostView(source: source)
-        view.setSceneOpacity(sceneOpacity)
+        view.setBackgroundOpacity(backgroundOpacity)
         return view
     }
 
     func updateNSView(_ nsView: VisualizerHostView, context: Context) {
-        nsView.setSceneOpacity(sceneOpacity)
+        nsView.setBackgroundOpacity(backgroundOpacity)
     }
 }
 
@@ -29,6 +29,9 @@ final class VisualizerHostView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         metalView.colorPixelFormat = .bgra8Unorm_srgb
+        metalView.wantsLayer = true
+        metalView.layer?.isOpaque = false
+        metalView.clearColor = MTLClearColorMake(0, 0, 0, 0)
         metalView.framebufferOnly = true
         metalView.preferredFramesPerSecond = 60
         metalView.isPaused = false
@@ -69,8 +72,10 @@ final class VisualizerHostView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func setSceneOpacity(_ opacity: Double) {
-        metalView.alphaValue = opacity
+    func setBackgroundOpacity(_ opacity: Float) {
+        guard let renderer, renderer.backgroundOpacity != opacity else { return }
+        renderer.backgroundOpacity = opacity
+        renderer.resumeIfNeeded(in: metalView)
     }
 
     private func showError(_ message: String) {
@@ -83,6 +88,7 @@ final class VisualizerHostView: NSView {
 
 /// Native pointer handling only receives the uncovered background, below SwiftUI controls.
 private final class WaterInteractiveMetalView: MTKView {
+    override var isOpaque: Bool { false }
     private let source: VisualFrameSource
     private let interactions: WaterInteractions
     private var draggingWater = false

@@ -377,6 +377,54 @@ final class AppleMusicBridgeTests: XCTestCase {
     }
 
     @MainActor
+    func testSeekBeforeFirstPlayRetainsPositionWithoutPlayingThenAppliesIt() async throws {
+        let context = try XCTUnwrap(JSContext())
+        context.evaluateScript("""
+        var location={protocol:'https:',hostname:'music.apple.com'};
+        var calls=[];
+        var player={isPlaying:false,currentPlaybackTime:0,currentPlaybackDuration:0,
+            setQueue:async function(q){calls.push('queue:'+q.song);this.nowPlayingItem={id:q.song};},
+            play:async function(){calls.push('play');this.isPlaying=true;this.currentPlaybackDuration=209;},
+            pause:async function(){calls.push('pause');this.isPlaying=false;},
+            seekToTime:async function(time){calls.push('seek:'+time);this.currentPlaybackTime=time;}};
+        var window={MusicKit:{getInstance:()=>player}};
+        """)
+        _ = try await execute("prepareSong", value: "123", in: context)
+        let pausedSeek = try await run("seek", value: 85, in: context)
+        XCTAssertEqual(pausedSeek.time, 85)
+        XCTAssertFalse(pausedSeek.isPlaying)
+        XCTAssertEqual(context.objectForKeyedSubscript("calls")?.toArray() as? [String], ["queue:123", "pause"])
+        let pausedPoll = try await run("snapshot", in: context)
+        XCTAssertEqual(pausedPoll.time, 85, "未再生のMusicKitの0秒で選択位置を上書きしない")
+        let playing = try await run("toggle", in: context)
+        XCTAssertTrue(playing.isPlaying)
+        XCTAssertEqual(playing.time, 85)
+        XCTAssertEqual(context.objectForKeyedSubscript("calls")?.toArray() as? [String], ["queue:123", "pause", "play", "seek:85"])
+    }
+
+    @MainActor
+    func testPendingSeekUsesLatestPositionAndIsDiscardedForDifferentSong() async throws {
+        let context = try XCTUnwrap(JSContext())
+        context.evaluateScript("""
+        var location={protocol:'https:',hostname:'music.apple.com'};
+        var player={isPlaying:false,currentPlaybackTime:0,currentPlaybackDuration:0,
+            setQueue:async function(q){this.nowPlayingItem={id:q.song};this.currentPlaybackTime=0;},
+            pause:async function(){this.isPlaying=false;},
+            seekToTime:async function(time){this.currentPlaybackTime=time;}};
+        var window={MusicKit:{getInstance:()=>player}};
+        """)
+        _ = try await execute("prepareSong", value: "123", in: context)
+        _ = try await run("seek", value: 85, in: context)
+        let latest = try await run("seek", value: 0, in: context)
+        XCTAssertEqual(latest.time, 0)
+        _ = try await run("seek", value: 42, in: context)
+        let different = try AppleMusicBridge.decode(await execute("prepareSong", value: "456", in: context))
+        XCTAssertEqual(different.id, "456")
+        XCTAssertEqual(different.time, 0)
+        XCTAssertFalse(different.isPlaying)
+    }
+
+    @MainActor
     func testMediaEndStaysVisibleAfterOfficialPlayerClearsCurrentItem() async throws {
         let context = try XCTUnwrap(JSContext())
         context.evaluateScript("""

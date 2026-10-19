@@ -13,7 +13,7 @@ struct TapeUniforms {
     float4 layout;
     float4 viewportProgress;
     float4 phasesPresence;
-    float4 transport; // x: track duration; angles are derived below from the same winding radii.
+    float4 transport; // x: track duration; y: floor/background opacity.
 };
 struct TapeVertex { float4 position; float4 normal; float4 surface; };
 struct TapeVarying {
@@ -250,7 +250,11 @@ fragment float4 tapeFloorFragment(TapeVarying in [[stage_in]], constant TapeUnif
     base = mix(base,float3(0.18,0.63,0.60)*(0.35+active*0.65),line*0.95);
     float cursor = 1-smoothstep(0.025,0.039,abs(length(p-float2(progress,1.65))-0.04));
     base = mix(base,float3(0.18,0.70,0.65),cursor);
-    return float4(base,1);
+    // The floor writes associated color directly. Preserve the progress marks as
+    // foreground coverage while letting the tabletop reveal the window glass.
+    float marks = max(line*0.95,cursor);
+    float alpha = mix(u.transport.y,1.0,marks);
+    return float4(base*alpha,alpha);
 }
 
 // Face-local quads form real cuboids; their side faces carry lighting and depth.
@@ -327,19 +331,30 @@ fragment float4 tapeCompositeFragment(TapeFullscreen in [[stage_in]], texture2d<
     float distance=0.1*80/(80-d*79.9);
     float focalDistance=length(u.eye.xyz-float3(0,0.22,0));
     float blur=clamp((distance-focalDistance-0.8)*0.30,0.0,2.5);
-    float3 color=scene.sample(s,in.uv).rgb;
+    float4 color=scene.sample(s,in.uv);
     if(blur>0.01) {
-        float3 sum=color*2;
+        float4 sum=color*2;
         float2 pixel=blur/u.viewportProgress.xy;
         for(int i=0;i<8;i++) {
             float angle=float(i)*0.785398;
             float2 offset=float2(cos(angle),sin(angle))*pixel;
-            sum+=scene.sample(s,in.uv+offset).rgb;
+            sum+=scene.sample(s,in.uv+offset);
         }
         color=sum/10;
     }
     float vignette=1-dot(in.uv-0.5,in.uv-0.5)*0.24;
-    color*=vignette;
-    // Linear HDR scene is written into an sRGB drawable by Metal.
-    return float4(clamp(color,0.0,1.0),1);
+    color.rgb*=vignette;
+    float alpha=clamp(color.a,0.0,1.0);
+    if(alpha>=1.0) return float4(clamp(color.rgb,0.0,1.0),1);
+    if(alpha<=0.0) return float4(0);
+    float3 straight=clamp(color.rgb/alpha,0.0,1.0);
+    // CAMetalLayer needs premultiplied sRGB bytes. Metal will encode this
+    // linear output into the sRGB drawable, so associate in encoded space and
+    // decode once before the hardware's final conversion.
+    float3 encoded=select(1.055*pow(straight,float3(1.0/2.4))-0.055,
+                          straight*12.92,straight<=0.0031308);
+    float3 associated=encoded*alpha;
+    float3 linear=select(pow((associated+0.055)/1.055,float3(2.4)),
+                        associated/12.92,associated<=0.04045);
+    return float4(linear,alpha);
 }

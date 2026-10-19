@@ -5,6 +5,36 @@ struct LyricMusicContext {
     let analysis: MusicAnalysis
     private static let epsilon = 1e-6
 
+    /// Presentation progress for a timed row without recognized character times.
+    /// Integrate measured vocal activity, keeping pauses out of colour progress.
+    /// This is a display estimate, not a saved pronunciation timestamp.
+    func colourProgress(in range: LyricCharacterTiming, at time: Double) -> Double {
+        guard range.end > range.start, time.isFinite else { return 0 }
+        if time <= range.start { return 0 }
+        if time >= range.end { return 1 }
+        let voices = analysis.instrumentRanges.vocal.isEmpty
+            ? [TimeSpan(start: range.start, duration: range.end - range.start)] : analysis.instrumentRanges.vocal
+        var total = 0.0, elapsed = 0.0
+        for (left, right) in zip(analysis.vocal, analysis.vocal.dropFirst()) {
+            if left.time >= range.end { break }
+            guard right.time > range.start, right.time > left.time else { continue }
+            for voice in voices {
+                let start = max(range.start, voice.start, left.time)
+                let end = min(range.end, voice.end, right.time)
+                guard end > start else { continue }
+                func value(_ t: Double) -> Double {
+                    let fraction = (t - left.time) / (right.time - left.time)
+                    return max(0, Double(left.value) + (Double(right.value) - Double(left.value)) * fraction)
+                }
+                total += (value(start) + value(end)) * (end - start) / 2
+                let played = min(end, max(start, time))
+                elapsed += (value(start) + value(played)) * (played - start) / 2
+            }
+        }
+        return total > 0 ? min(1, max(0, elapsed / total))
+            : min(1, max(0, (time - range.start) / (range.end - range.start)))
+    }
+
     func frames(for lines: [TimedLyricLine]) throws -> [LyricStructureFrame] {
         guard !analysis.sections.isEmpty, !analysis.segments.isEmpty, !analysis.phrases.isEmpty else {
             throw LyricAlignmentError.analysisUnavailable

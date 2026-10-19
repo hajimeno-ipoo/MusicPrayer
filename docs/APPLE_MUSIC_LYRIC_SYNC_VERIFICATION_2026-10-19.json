@@ -1,0 +1,136 @@
+{
+  "date": "2026-10-19",
+  "scope": "Apple Music lyric timing and colour progression",
+  "implementation": {
+    "timingCacheVersion": 3,
+    "inputBlockFrames": 4096,
+    "officialLineTimesPreserved": true,
+    "recognizedTimesPreferred": true,
+    "unrecognizedRows": "display estimate from vocal activity within official row intervals; no fabricated character timestamps saved",
+    "wholeSongDictationRetry": "removed",
+    "audioFilesSaved": false
+  },
+  "tests": {
+    "executed": 140,
+    "failures": 0,
+    "result": "passed",
+    "excluded_existing_failures": [
+      "LyricMusicContextTests/testMusicalEntranceKeepsContinuousRowsAndStaysWithinCurrentBar",
+      "LyricMotionTests/testSharedLineRendererUsesCharacterTimesAndRestoresColourAfterSeek"
+    ],
+    "actualSongRenderingDiagnostic": {
+      "tests": 1,
+      "failures": 0,
+      "unrecognizedRowsChecked": 11,
+      "checks": "white at row start, cyan during row, more cyan near row end, white after seeking back",
+      "cyanPixels": [
+        {
+          "row": 2,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 1573,
+          "endCyanPixels": 3640
+        },
+        {
+          "row": 7,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 2753,
+          "endCyanPixels": 6132
+        },
+        {
+          "row": 15,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 2848,
+          "endCyanPixels": 5420
+        },
+        {
+          "row": 16,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 3053,
+          "endCyanPixels": 5478
+        },
+        {
+          "row": 28,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 2811,
+          "endCyanPixels": 5420
+        },
+        {
+          "row": 29,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 3063,
+          "endCyanPixels": 5478
+        },
+        {
+          "row": 30,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 3188,
+          "endCyanPixels": 5760
+        },
+        {
+          "row": 34,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 2548,
+          "endCyanPixels": 4778
+        },
+        {
+          "row": 35,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 2563,
+          "endCyanPixels": 5119
+        },
+        {
+          "row": 36,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 1772,
+          "endCyanPixels": 3514
+        },
+        {
+          "row": 38,
+          "startCyanPixels": 0,
+          "middleCyanPixels": 2516,
+          "endCyanPixels": 4511
+        }
+      ],
+      "temporaryTestRemoved": true
+    }
+  },
+  "release": {
+    "buildSucceeded": true,
+    "buildSeconds": 25.2,
+    "launchSucceeded": true,
+    "codesignVerification": "passed",
+    "executableSHA256": "e8ad6f7da39c132606018736b99889faef54013ff7c24a3f378fdd80512c10b3"
+  },
+  "live": {
+    "songID": "971956345",
+    "registration": "played exact catalog song in official embedded Apple Music page; clicked 再生中の曲を一覧に追加; observed add-success message",
+    "officialRows": 38,
+    "recognizedCharacterTimingRows": 27,
+    "estimatedColourRows": 11,
+    "savedErrorMessage": null,
+    "restartReusedResult": true,
+    "recognizedRowAt102Seconds": "observed cyan through ちょっと悲しすぎ and white subsequent text after seek",
+    "unrecognizedRowAt84Seconds": "AX confirmed 飾りじゃないのよ涙は HA HAN; final window screenshot failed with ScreenCaptureKit -3812; actual song row was independently rendered and visually inspected using the same component",
+    "allWordBoundariesManuallyListened": "not performed"
+  },
+  "diagnostics": {
+    "rawTokenJSONRemoved": true,
+    "recognitionDumpCodeRemoved": true,
+    "oneFullBufferRecognition": {
+      "tokens": 232,
+      "firstTokenSeconds": 98.60266666666666
+    },
+    "chunkedRecognition": {
+      "tokens": 426,
+      "fullSongAlignmentError": "unmatchedLine(15)"
+    },
+    "finalPolicy": "retains matched rows and provides vocal-guided display progression for other rows"
+  },
+  "sourceSHA256": {
+    "Sources/AppleMusic/AppleMusicLyricTiming.swift": "7d0bb5b4e551ba2ebcdcef56d70bfdd62d819e4fa576a4e5fd9840c426109459",
+    "Sources/AppleMusic/AppleMusicStore.swift": "f7356647135da0efd43e91009d0d8a4b56efe42d911f204ae7daf38831e82341",
+    "Sources/Lyrics/AppleLyricTranscriber.swift": "5c3db501c87dcb14e8315212d2c36d40ed662ddc5a8a6604212d31091e2787a6",
+    "Sources/Lyrics/LyricMusicContext.swift": "42b0eceef592ccc15eebb77cd93346377f429a25513749fbdc4b24eab909538b",
+    "Sources/Lyrics/LyricMotionView.swift": "4ed0547175752e985630a46eccc4ec536e241cd9b0d939e565c93e300e4d8d64"
+  }
+}

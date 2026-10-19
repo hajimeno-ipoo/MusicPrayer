@@ -16,8 +16,9 @@ final class CitySceneRenderer {
         var layout: SIMD4<Float>
         var phasesPresence: SIMD4<Float>
         var colorViewport: SIMD4<Float>
+        var presentation: SIMD4<Float>
 
-        init(frame: VisualFrame, size: CGSize) {
+        init(frame: VisualFrame, size: CGSize, backgroundOpacity: Float) {
             let aspect = Float(max(1, size.width) / max(1, size.height))
             let eye3 = SIMD3<Float>(-30, 21.4, 30.6)
             let target = SIMD3<Float>(0, 1.0, 0)
@@ -43,6 +44,7 @@ final class CitySceneRenderer {
             layout = SIMD4(frame.sectionSeparation, frame.sectionThickness, frame.sectionDepth, frame.sectionGlow)
             phasesPresence = SIMD4(frame.beatPhase, frame.barPhase, frame.presence, frame.hasAnalysis)
             colorViewport = SIMD4(frame.hue, frame.modeBias, Float(size.width), Float(size.height))
+            presentation = SIMD4(backgroundOpacity, 0, 0, 0)
         }
 
         private static func view(eye: SIMD3<Float>, target: SIMD3<Float>) -> simd_float4x4 {
@@ -111,8 +113,8 @@ final class CitySceneRenderer {
                 descriptor.colorAttachments[0].isBlendingEnabled = true
                 descriptor.colorAttachments[0].sourceRGBBlendFactor = .one
                 descriptor.colorAttachments[0].destinationRGBBlendFactor = .one
-                descriptor.colorAttachments[0].sourceAlphaBlendFactor = .zero
-                descriptor.colorAttachments[0].destinationAlphaBlendFactor = .one
+                descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
+                descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
             }
             if transparent {
                 descriptor.colorAttachments[0].isBlendingEnabled = true
@@ -233,7 +235,8 @@ final class CitySceneRenderer {
         reflectionBlur.edgeMode = .clamp
     }
 
-    func encode(command: MTLCommandBuffer, descriptor: MTLRenderPassDescriptor, frame: VisualFrame, size: CGSize) throws {
+    func encode(command: MTLCommandBuffer, descriptor: MTLRenderPassDescriptor, frame: VisualFrame, size: CGSize,
+                backgroundOpacity: Float = 1) throws {
         guard let target = descriptor.colorAttachments[0].texture else {
             throw RenderFailure.message("都市の表示先textureがありません。")
         }
@@ -245,7 +248,9 @@ final class CitySceneRenderer {
               let reflectionMultisampleColor, let reflectionDepth else {
             throw RenderFailure.message("都市の描画textureがありません。")
         }
-        var uniforms = Uniforms(frame: frame, size: CGSize(width: compositionWidth, height: compositionHeight))
+        let backgroundOpacity = min(1, max(0, backgroundOpacity))
+        var uniforms = Uniforms(frame: frame, size: CGSize(width: compositionWidth, height: compositionHeight),
+                                backgroundOpacity: backgroundOpacity)
         // AudioFeatureAnalyzer supplies 0...1 for a fixed -80...0 dBFS range.
         let spectrum = CityMesh.displaySpectrum(frame.spectrum)
         func inputs(_ encoder: MTLRenderCommandEncoder) {
@@ -314,7 +319,9 @@ final class CitySceneRenderer {
         scenePass.colorAttachments[0].resolveTexture = scene
         scenePass.colorAttachments[0].loadAction = .clear
         scenePass.colorAttachments[0].storeAction = .multisampleResolve
-        scenePass.colorAttachments[0].clearColor = MTLClearColorMake(0.0005, 0.001, 0.003, 1)
+        let backgroundAlpha = Double(backgroundOpacity)
+        scenePass.colorAttachments[0].clearColor = MTLClearColorMake(0.0005 * backgroundAlpha,
+            0.001 * backgroundAlpha, 0.003 * backgroundAlpha, backgroundAlpha)
         scenePass.depthAttachment.texture = depth
         scenePass.depthAttachment.loadAction = .clear
         scenePass.depthAttachment.storeAction = .dontCare
@@ -363,7 +370,16 @@ final class CitySceneRenderer {
         blur.encode(commandBuffer: command, sourceTexture: bright, destinationTexture: bloom)
 
         descriptor.colorAttachments[0].loadAction = .clear
-        descriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0005, 0.001, 0.003, 1)
+        // The drawable stores sRGB values. Premultiply those stored values, not
+        // the linear clear color, so the letterbox matches Core Animation alpha.
+        func drawableClear(_ linear: Double) -> Double {
+            guard backgroundOpacity < 1 else { return linear }
+            let encoded = linear <= 0.0031308 ? linear * 12.92 : 1.055 * pow(linear, 1 / 2.4) - 0.055
+            let premultiplied = encoded * backgroundAlpha
+            return premultiplied <= 0.04045 ? premultiplied / 12.92 : pow((premultiplied + 0.055) / 1.055, 2.4)
+        }
+        descriptor.colorAttachments[0].clearColor = MTLClearColorMake(drawableClear(0.0005),
+            drawableClear(0.001), drawableClear(0.003), backgroundAlpha)
         guard let compositeEncoder = command.makeRenderCommandEncoder(descriptor: descriptor) else {
             throw RenderFailure.message("都市の表示encoderを作成できません。")
         }

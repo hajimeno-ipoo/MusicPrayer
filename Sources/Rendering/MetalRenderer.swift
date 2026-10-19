@@ -22,7 +22,7 @@ private struct RenderUniforms {
     var sceneWater: SIMD4<Float>
     var cameraEye: SIMD4<Float>
     var cameraTarget: SIMD4<Float>
-    init(frame: VisualFrame, size: CGSize) {
+    init(frame: VisualFrame, size: CGSize, backgroundOpacity: Float = 1) {
         clockAudio = SIMD4(frame.time, frame.rms, frame.peak, frame.bass)
         bandsBeat = SIMD4(frame.mid, frame.treble, frame.beat, frame.bar)
         rhythmInstruments = SIMD4(frame.pace, frame.vocal, frame.drums, frame.bassInstrument)
@@ -32,7 +32,8 @@ private struct RenderUniforms {
         viewport = SIMD4(Float(size.width / max(1, size.height)), Float(size.width), Float(size.height), frame.camera.horizon)
         tempoPhase = SIMD4(frame.tempo, frame.beatPhase, frame.barPhase, 0)
         sceneLayout = SIMD4(frame.sectionSeparation, frame.sectionThickness, frame.sectionDepth, frame.sectionGlow)
-        sceneWater = SIMD4(frame.sectionWater, 0, 0, 0)
+        // y is background transparency; zero retains the opaque presentation.
+        sceneWater = SIMD4(frame.sectionWater, 1 - backgroundOpacity, 0, 0)
         cameraEye = SIMD4(frame.camera.eye.x, frame.camera.eye.y, frame.camera.eye.z, 0)
         cameraTarget = SIMD4(frame.camera.target.x, frame.camera.target.y, frame.camera.target.z, 0)
     }
@@ -50,10 +51,10 @@ struct RenderInputs {
     private let size: CGSize
     private let groups: [SIMD4<Float>]
 
-    init(frame: VisualFrame, size: CGSize) {
+    init(frame: VisualFrame, size: CGSize, backgroundOpacity: Float = 1) {
         self.frame = frame
         self.size = size
-        groups = RenderUniforms(frame: frame, size: size).groups
+        groups = RenderUniforms(frame: frame, size: size, backgroundOpacity: backgroundOpacity).groups
     }
 
     func matches(_ other: RenderInputs) -> Bool {
@@ -102,6 +103,7 @@ final class WaterRenderActivity {
 }
 
 final class MetalRenderer: NSObject, MTKViewDelegate {
+    var backgroundOpacity: Float = 1
     var onError: ((String) -> Void)?
     private let device: MTLDevice
     private let source: VisualFrameSource
@@ -129,6 +131,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     private var scene: MTLTexture?
     private var ribbonColors: MTLTexture?
     private var ribbonDepths: MTLTexture?
+    private var ribbonCoverage: MTLTexture?
     private var bright: MTLTexture?
     private var bloom: MTLTexture?
     private var textureSize = CGSize.zero
@@ -156,6 +159,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             attachment.pixelFormat = format
             if ribbons {
                 descriptor.depthAttachmentPixelFormat = .depth32Float
+                descriptor.colorAttachments[1].pixelFormat = .r8Unorm
             }
             return try device.makeRenderPipelineState(descriptor: descriptor)
         }
@@ -208,7 +212,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     func resumeIfNeeded(in view: MTKView) {
         guard view.isPaused, !hasReportedError else { return }
         let snapshot = source.snapshot()
-        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize)
+        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize, backgroundOpacity: backgroundOpacity)
         if (lastRenderedInputs.map({ !inputs.matches($0) }) ?? true) ||
             (snapshot.style == .ribbons && source.waterInteractions.hasPendingPulses) {
             previousRenderTime = nil
@@ -235,6 +239,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         scene = try makeTexture(width: width, height: height, format: .rgba16Float, label: "HDR ribbons")
         ribbonColors = try makeTexture(width: width, height: height, format: .rgba16Float, label: "Four ribbon color layers", layers: 4)
         ribbonDepths = try makeTexture(width: width, height: height, format: .depth32Float, label: "Four ribbon depth layers", layers: 4)
+        ribbonCoverage = try makeTexture(width: width, height: height, format: .r8Unorm, label: "Four ribbon coverage layers", layers: 4)
         bright = try makeTexture(width: max(1, width / 2), height: max(1, height / 2), format: .rgba16Float, label: "Bright extraction")
         bloom = try makeTexture(width: max(1, width / 2), height: max(1, height / 2), format: .rgba16Float, label: "Gaussian bloom")
         textureSize = size
@@ -250,7 +255,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     func draw(in view: MTKView) {
         guard !hasReportedError, view.drawableSize.width > 0, view.drawableSize.height > 0 else { return }
         let snapshot = source.snapshot()
-        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize)
+        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize, backgroundOpacity: backgroundOpacity)
         if snapshot.style != .ribbons { _ = source.waterInteractions.drain() }
         if let previous = lastRenderedInputs, inputs.matches(previous), !source.waterInteractions.hasPendingPulses {
             if snapshot.style != .ribbons {
@@ -284,7 +289,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             previousRenderTime = nil
             do {
                 if city == nil { city = try CitySceneRenderer(device: device) }
-                try city?.encode(command: command, descriptor: finalPass, frame: snapshot, size: view.drawableSize)
+                try city?.encode(command: command, descriptor: finalPass, frame: snapshot, size: view.drawableSize,
+                                 backgroundOpacity: backgroundOpacity)
             } catch { report(error); return }
             command.label = "Spectrum city · 64 towers · Quarter-resolution bloom"
             command.present(drawable)
@@ -299,7 +305,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             return
         }
         do { try resize(view.drawableSize) } catch { report(error); return }
-        guard let scene, let ribbonColors, let ribbonDepths, let bright, let bloom,
+        guard let scene, let ribbonColors, let ribbonDepths, let ribbonCoverage, let bright, let bloom,
               let command = queue.makeCommandBuffer() else { report(RenderFailure.message("Metalフレームを準備できません。")); return }
         // Do not advance persistent simulations unless this command will be presented.
         guard let drawable = view.currentDrawable, let finalPass = view.currentRenderPassDescriptor else { return }
@@ -308,7 +314,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             previousRenderTime = nil
             do {
                 if tape == nil { tape = try TapeSceneRenderer(device: device) }
-                try tape?.encode(command: command, target: scene, frame: snapshot, size: view.drawableSize)
+                try tape?.encode(command: command, target: scene, frame: snapshot, size: view.drawableSize,
+                                 backgroundOpacity: backgroundOpacity)
                 try tape?.encodePresentation(command: command, descriptor: finalPass, scene: scene)
             } catch { report(error); return }
             command.label = "Cassette · Spectrum · Floor · Depth of field"
@@ -334,7 +341,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             try lightSwarm.encodeUpdate(command: command, frame: snapshot, deltaTime: Float(elapsed),
                                         aspect: aspect, cameraEye: snapshot.camera.eye, cameraTarget: snapshot.camera.target)
         } catch { report(error); return }
-        var uniform = RenderUniforms(frame: snapshot, size: view.drawableSize)
+        var uniform = RenderUniforms(frame: snapshot, size: view.drawableSize, backgroundOpacity: backgroundOpacity)
         withUnsafeBytes(of: &uniform) { uniforms[slot].contents().copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
         let spectrumPointer = spectra[slot].contents().assumingMemoryBound(to: Float.self)
         for index in 0..<64 { spectrumPointer[index] = index < snapshot.spectrum.count ? snapshot.spectrum[index] : 0 }
@@ -346,6 +353,11 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             layerPass.colorAttachments[0].loadAction = .clear
             layerPass.colorAttachments[0].storeAction = .store
             layerPass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0)
+            layerPass.colorAttachments[1].texture = ribbonCoverage
+            layerPass.colorAttachments[1].slice = ribbon
+            layerPass.colorAttachments[1].loadAction = .clear
+            layerPass.colorAttachments[1].storeAction = .store
+            layerPass.colorAttachments[1].clearColor = MTLClearColorMake(0, 0, 0, 0)
             layerPass.depthAttachment.texture = ribbonDepths
             layerPass.depthAttachment.slice = ribbon
             layerPass.depthAttachment.loadAction = .clear
@@ -371,6 +383,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
         resolveEncoder.setRenderPipelineState(resolvePipeline)
         resolveEncoder.setFragmentTexture(ribbonColors, index: 0)
         resolveEncoder.setFragmentTexture(ribbonDepths, index: 1)
+        resolveEncoder.setFragmentTexture(ribbonCoverage, index: 2)
         resolveEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         resolveEncoder.endEncoding()
         do { try lightSwarm.encodeRender(command: command, target: scene, ribbonDepths: ribbonDepths) }

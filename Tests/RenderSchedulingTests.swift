@@ -6,6 +6,39 @@ import XCTest
 
 final class RenderSchedulingTests: XCTestCase {
     @MainActor
+    func testBackgroundTransparencyChangeWakesPausedVisualizer() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
+        _ = NSApplication.shared
+        let source = VisualFrameSource()
+        var frame = VisualFrame()
+        frame.style = .cassette
+        source.publish(frame)
+        let host = VisualizerHostView(source: source)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 384, height: 256),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil) }
+        let view = try XCTUnwrap(host.subviews.compactMap { $0 as? MTKView }.first)
+        let renderer = try XCTUnwrap(view.delegate as? MetalRenderer)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while (renderer.submittedFrameCount == 0 || !view.isPaused), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(view.isPaused)
+        let before = renderer.submittedFrameCount
+        host.setBackgroundOpacity(0.18)
+        let redrawDeadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while (renderer.submittedFrameCount == before || !view.isPaused), ContinuousClock.now < redrawDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertGreaterThan(renderer.submittedFrameCount, before)
+        XCTAssertTrue(view.isPaused)
+        XCTAssertEqual(view.alphaValue, 1, "The native view must never fade the entire visualization.")
+        XCTAssertFalse(try XCTUnwrap(view.layer).isOpaque)
+    }
+
+    @MainActor
     func testPausedStoreDoesNotInvalidateUnchangedAnalysisDisplay() async throws {
         let manager = FileManager.default
         let saved = manager.fileExists(atPath: QueuePersistence.file.path) ? try Data(contentsOf: QueuePersistence.file) : nil

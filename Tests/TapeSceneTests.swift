@@ -36,6 +36,46 @@ final class TapeSceneTests: XCTestCase {
     }
 
     @MainActor
+    func testGlassBackgroundPreservesOpaqueCassettePixels() throws {
+        let (device, queue) = try environment()
+        let renderer = try TapeSceneRenderer(device: device)
+        let frame = musicalFrame()
+        let opaque = try render(renderer, device: device, queue: queue, frame: frame, backgroundOpacity: 1)
+        let glass = try render(renderer, device: device, queue: queue, frame: frame, backgroundOpacity: 0.18)
+
+        // These fixed background samples are outside the cassette, spectrum,
+        // time labels and progress marks in the 640x480 control view.
+        for y in stride(from: 20, through: 60, by: 10) {
+            for x in stride(from: 20, through: 60, by: 10) {
+                let index = (y * width + x) * 4
+                XCTAssertEqual(opaque[index + 3], 255)
+                XCTAssertLessThanOrEqual(abs(Int(glass[index + 3]) - 46), 1,
+                                         "Only the tabletop/background should reveal the glass beneath it.")
+                for channel in 0..<3 {
+                    XCTAssertLessThanOrEqual(glass[index + channel], glass[index + 3],
+                                             "The drawable must contain premultiplied color.")
+                }
+            }
+        }
+
+        // The center of the existing inspection-window crop has opaque cassette
+        // backing beneath its clear cover. It excludes the open reel apertures.
+        // A uniform view alpha would also fade these pixels and fail this check.
+        for y in 223..<230 {
+            for x in 320..<329 {
+                let index = (y * width + x) * 4
+                XCTAssertEqual(opaque[index + 3], 255)
+                XCTAssertEqual(glass[index + 3], 255,
+                               "The cassette must stay opaque while its surroundings become transparent.")
+                for channel in 0..<3 {
+                    XCTAssertLessThanOrEqual(abs(Int(glass[index + channel]) - Int(opaque[index + channel])), 1,
+                                             "Background transparency must preserve the cassette's visible color.")
+                }
+            }
+        }
+    }
+
+    @MainActor
     func testGPUUsesSpectrumRhythmInstrumentsLoudnessStructureAndKey() throws {
         let (device, queue) = try environment()
         let renderer = try TapeSceneRenderer(device: device)
@@ -476,7 +516,7 @@ final class TapeSceneTests: XCTestCase {
     }
 
     private func render(_ renderer: TapeSceneRenderer, device: MTLDevice, queue: MTLCommandQueue,
-                        frame: VisualFrame) throws -> [UInt8] {
+                        frame: VisualFrame, backgroundOpacity: Float = 1) throws -> [UInt8] {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
         descriptor.storageMode = .private
         descriptor.usage = [.renderTarget, .shaderRead]
@@ -487,7 +527,8 @@ final class TapeSceneTests: XCTestCase {
         let output = try XCTUnwrap(device.makeTexture(descriptor: outputDescriptor))
         let buffer = try XCTUnwrap(device.makeBuffer(length: width * height * 4, options: .storageModeShared))
         let command = try XCTUnwrap(queue.makeCommandBuffer())
-        try renderer.encode(command: command, target: scene, frame: frame, size: CGSize(width: width, height: height))
+        try renderer.encode(command: command, target: scene, frame: frame, size: CGSize(width: width, height: height),
+                            backgroundOpacity: backgroundOpacity)
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = output
         pass.colorAttachments[0].loadAction = .clear

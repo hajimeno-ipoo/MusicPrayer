@@ -8,6 +8,17 @@ protocol LyricTranscribing: Sendable {
     func transcribe(audioURL: URL, sourceText: String,
                     analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken]
+    func transcribe(audioBuffer: AVAudioPCMBuffer, startTime: Double, sourceText: String,
+                    analysis: MusicAnalysis,
+                    status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken]
+}
+
+extension LyricTranscribing {
+    func transcribe(audioBuffer: AVAudioPCMBuffer, startTime: Double = 0, sourceText: String,
+                    analysis: MusicAnalysis,
+                    status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
+        throw LyricRecognitionError.unavailable
+    }
 }
 
 enum LyricRecognitionError: Error, LocalizedError, Sendable {
@@ -15,6 +26,7 @@ enum LyricRecognitionError: Error, LocalizedError, Sendable {
     case unknownLanguage
     case unsupportedLanguage(String)
     case modelNotInstalled
+    case invalidAudioBuffer
 
     var errorDescription: String? {
         switch self {
@@ -22,16 +34,98 @@ enum LyricRecognitionError: Error, LocalizedError, Sendable {
         case .unknownLanguage: return "歌詞の言語を判定できませんでした。"
         case .unsupportedLanguage(let language): return "Appleの音声認識が歌詞の言語（\(language)）に対応していません。"
         case .modelNotInstalled: return "Appleの音声認識モデルを準備できませんでした。ネットワーク接続をご確認のうえ再試行してください。"
+        case .invalidAudioBuffer: return "歌詞の音声認識に必要な音声データを取得できませんでした。"
         }
     }
 }
 
-/// File transcription uses Apple's on-device model; no audio is recorded or uploaded.
+/// Apple's on-device recognition accepts local files or captured PCM held in memory.
 struct AppleLyricTranscriber: LyricTranscribing {
     private static let logger = Logger(subsystem: "com.hazimeno.MusicPrayer", category: "LyricRecognition")
     func transcribe(audioURL: URL, sourceText: String,
                     analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
+        let prepared = try await prepare(sourceText: sourceText, status: status)
+        let file = try AVAudioFile(forReading: audioURL)
+        let analyzer = SpeechAnalyzer(modules: [prepared.transcriber])
+        await status(.recognizing)
+        let primary = try await recognize(file: file, transcriber: prepared.transcriber, analyzer: analyzer)
+        return try await finish(primary, sourceText: sourceText, analysis: analysis,
+                                language: prepared.language, audioURL: audioURL, status: status)
+    }
+
+    /// The buffer must use the original song's time scale; startTime is its song position.
+    /// Captured Apple Music audio is never written to a temporary audio file.
+    func transcribe(audioBuffer: AVAudioPCMBuffer, startTime: Double = 0, sourceText: String,
+                    analysis: MusicAnalysis,
+                    status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
+        guard audioBuffer.frameLength > 0, startTime.isFinite, startTime >= 0 else {
+            throw LyricRecognitionError.invalidAudioBuffer
+        }
+        let prepared = try await prepare(sourceText: sourceText, status: status)
+        let analyzer = SpeechAnalyzer(modules: [prepared.transcriber])
+        await status(.recognizing)
+        let inputs = try await sequence(audioBuffer: audioBuffer, startTime: startTime, modules: [prepared.transcriber])
+        let tokens = try await recognize(analyzer: analyzer, analyze: {
+            try await analyzer.analyzeSequence(inputs)
+        }, collectResults: { try await collect(prepared.transcriber) })
+        await status(.generating)
+        return tokens
+    }
+
+    private func sequence(audioBuffer: AVAudioPCMBuffer, startTime: Double,
+                          modules: [any SpeechModule]) async throws -> AsyncStream<AnalyzerInput> {
+        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(
+            compatibleWith: modules, considering: audioBuffer.format) else {
+            throw LyricRecognitionError.unavailable
+        }
+        let inputs = try Self.analyzerInputs(audioBuffer: audioBuffer, format: format, startTime: startTime)
+        return AsyncStream { continuation in
+            for input in inputs { continuation.yield(input) }
+            continuation.finish()
+        }
+    }
+
+    static func analyzerInputs(audioBuffer: AVAudioPCMBuffer, format: AVAudioFormat,
+                               startTime: Double = 0) throws -> [AnalyzerInput] {
+        try Task.checkCancellation()
+        guard audioBuffer.frameLength > 0, audioBuffer.format.sampleRate.isFinite,
+              audioBuffer.format.sampleRate > 0, startTime.isFinite, startTime >= 0,
+              startTime * audioBuffer.format.sampleRate < Double(Int64.max) else {
+            throw LyricRecognitionError.invalidAudioBuffer
+        }
+        let converter = AnalyzerInputConverter(analyzerFormat: format)
+        let origin = AVAudioTime(sampleTime: AVAudioFramePosition((startTime * audioBuffer.format.sampleRate).rounded()),
+                                 atRate: audioBuffer.format.sampleRate)
+        var inputs: [AnalyzerInput] = []
+        var offset = 0
+        let source = UnsafeMutableAudioBufferListPointer(audioBuffer.mutableAudioBufferList)
+        while offset < Int(audioBuffer.frameLength) {
+            try Task.checkCancellation()
+            let count = min(4096, Int(audioBuffer.frameLength) - offset)
+            guard let chunk = AVAudioPCMBuffer(pcmFormat: audioBuffer.format, frameCapacity: AVAudioFrameCount(count)) else {
+                throw LyricRecognitionError.invalidAudioBuffer
+            }
+            chunk.frameLength = AVAudioFrameCount(count)
+            let destination = UnsafeMutableAudioBufferListPointer(chunk.mutableAudioBufferList)
+            for index in source.indices {
+                let bytesPerFrame = Int(source[index].mDataByteSize) / Int(audioBuffer.frameLength)
+                guard let from = source[index].mData, let to = destination[index].mData else {
+                    throw LyricRecognitionError.invalidAudioBuffer
+                }
+                memcpy(to, from.advanced(by: offset * bytesPerFrame), count * bytesPerFrame)
+            }
+            inputs += try converter.convert(chunk, at: offset == 0 ? origin : nil)
+            offset += count
+        }
+        inputs += try converter.flush()
+        guard !inputs.isEmpty else { throw LyricRecognitionError.invalidAudioBuffer }
+        return inputs
+    }
+
+    private func prepare(sourceText: String,
+                         status: @escaping @Sendable (LyricTimingState) async -> Void) async throws
+        -> (transcriber: SpeechTranscriber, language: String) {
         try Task.checkCancellation()
         guard SpeechTranscriber.isAvailable else { throw LyricRecognitionError.unavailable }
         let languageRecognizer = NLLanguageRecognizer()
@@ -51,12 +145,14 @@ struct AppleLyricTranscriber: LyricTranscribing {
         guard await AssetInventory.status(forModules: [transcriber]) == .installed else {
             throw LyricRecognitionError.modelNotInstalled
         }
-        let file = try AVAudioFile(forReading: audioURL)
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
-        await status(.recognizing)
-        let primary = try await recognize(file: file, transcriber: transcriber, analyzer: analyzer)
+        return (transcriber, language.rawValue)
+    }
+
+    private func finish(_ primary: [RecognizedLyricToken], sourceText: String, analysis: MusicAnalysis,
+                        language: String, audioURL: URL,
+                        status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
         guard !primary.isEmpty else { throw LyricAlignmentError.noRecognizedWords }
-        Self.logger.info("Recognized locale=\(locale.identifier, privacy: .public) tokens=\(primary.count)")
+        Self.logger.info("Recognized language=\(language, privacy: .public) tokens=\(primary.count)")
         await status(.generating)
         // Recovery supports Latin-script fragments only. PlayerStore performs
         // final alignment, so do not repeat it when recovery cannot run.
@@ -69,7 +165,7 @@ struct AppleLyricTranscriber: LyricTranscribing {
             case .unmatchedLine, .ambiguousMatch:
                 do {
                     return try await recover(audioURL: audioURL, sourceText: sourceText, analysis: analysis,
-                        primaryLanguage: language.rawValue, transcription: primary, status: status)
+                        primaryLanguage: language, transcription: primary, status: status)
                 } catch is CancellationError { throw CancellationError() }
                 catch {
                     Self.logger.info("Bounded second-language recognition unavailable: \(String(describing: error), privacy: .public)")
@@ -80,12 +176,12 @@ struct AppleLyricTranscriber: LyricTranscribing {
         }
     }
 
-    private func recognize(file: AVAudioFile, transcriber: SpeechTranscriber,
-                           analyzer: SpeechAnalyzer) async throws -> [RecognizedLyricToken] {
+    private func recognize(analyzer: SpeechAnalyzer, analyze: () async throws -> CMTime?,
+                           collectResults: @escaping () async throws -> [RecognizedLyricToken]) async throws -> [RecognizedLyricToken] {
         try await withTaskCancellationHandler {
-            async let tokens = collect(transcriber)
+            async let tokens = collectResults()
             do {
-                if let last = try await analyzer.analyzeSequence(from: file) {
+                if let last = try await analyze() {
                     try await analyzer.finalizeAndFinish(through: last)
                 } else { await analyzer.cancelAndFinishNow() }
                 let result = try await tokens
@@ -98,6 +194,13 @@ struct AppleLyricTranscriber: LyricTranscribing {
         } onCancel: {
             Task { await analyzer.cancelAndFinishNow() }
         }
+    }
+
+    private func recognize(file: AVAudioFile, transcriber: SpeechTranscriber,
+                           analyzer: SpeechAnalyzer) async throws -> [RecognizedLyricToken] {
+        try await recognize(analyzer: analyzer, analyze: {
+            try await analyzer.analyzeSequence(from: file)
+        }, collectResults: { try await collect(transcriber) })
     }
 
     private func recover(audioURL: URL, sourceText: String, analysis: MusicAnalysis,

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 
 /// Each song owns an independent worker. Two workers may capture and analyze at once.
 @MainActor @Observable
@@ -19,6 +20,7 @@ final class AppleMusicPreanalysis {
     @ObservationIgnored private var songs: [AppleMusicSong] = []
     @ObservationIgnored private var registrations: [String: UUID] = [:]
     @ObservationIgnored private var attempted: Set<String> = []
+    @ObservationIgnored private var pendingRetries: Set<String> = []
     @ObservationIgnored private var allowed = false
     @ObservationIgnored private var stopWaiters = 0
     private var jobs: [String: Job] = [:]
@@ -62,6 +64,7 @@ final class AppleMusicPreanalysis {
         registrations = registrations.filter { seen.contains($0.key) }
         for id in seen where registrations[id] == nil { registrations[id] = UUID() }
         attempted.formIntersection(seen)
+        pendingRetries.formIntersection(seen)
         errors = errors.filter { seen.contains($0.key) }
         for (id, job) in jobs where registrations[id] != job.registration {
             job.task.cancel()
@@ -73,6 +76,17 @@ final class AppleMusicPreanalysis {
         allowed = value && stopWaiters == 0
         if allowed { schedule() }
         else { jobs.values.forEach { $0.task.cancel() } }
+    }
+
+    func retry(songID: String) {
+        guard registrations[songID] != nil else { return }
+        if currentJob(for: songID) != nil {
+            pendingRetries.insert(songID)
+            return
+        }
+        attempted.remove(songID)
+        errors[songID] = nil
+        schedule()
     }
 
     /// Shutdown waits for every worker's output suppression and process cleanup.
@@ -111,11 +125,19 @@ final class AppleMusicPreanalysis {
     private func finish(songID: String, ticket: UUID, result: Result<Void, Error>) {
         guard let job = jobs[songID], job.ticket == ticket else { return }
         jobs[songID] = nil
-        if registrations[songID] == job.registration, !job.task.isCancelled {
-            attempted.insert(songID)
-            switch result {
-            case .success: errors[songID] = nil
-            case .failure(let error): errors[songID] = error.localizedDescription
+        if registrations[songID] == job.registration {
+            if pendingRetries.remove(songID) != nil {
+                attempted.remove(songID)
+                errors[songID] = nil
+            } else if !job.task.isCancelled {
+                attempted.insert(songID)
+                switch result {
+                case .success: errors[songID] = nil
+                case .failure(let error):
+                    errors[songID] = error.localizedDescription
+                    Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AppleMusicPreanalysis")
+                        .error("song=\(songID, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                }
             }
         }
         schedule()

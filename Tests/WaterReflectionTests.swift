@@ -8,6 +8,39 @@ final class WaterReflectionTests: XCTestCase {
     private let height = 192
     private let horizon: Float = 0.60
 
+    func testGlassRevealsBackdropOutsideRibbonWithoutFadingSolidRibbon() throws {
+        let fixture = try Fixture(width: width, height: height)
+        let scene = try fixture.texture { x, y in
+            (0.4...0.6).contains(x) && (0.15...0.45).contains(y)
+                ? SIMD4(0.5, 0.2, 0.8, 1) : .zero
+        }
+        let water = try fixture.texture { _, _ in .zero }
+        let opaque = try fixture.render(scene: scene, water: water, horizon: horizon)
+        let glass = try fixture.render(scene: scene, water: water, horizon: horizon, backgroundOpacity: 0.18)
+        let body = (height / 4 * width + width / 2) * 4
+        let background = (12 * width + 12) * 4
+        XCTAssertEqual(glass[body + 3], 1, accuracy: 0.001)
+        XCTAssertEqual(glass[background + 3], 0.18, accuracy: 0.001)
+        for channel in 0..<3 {
+            XCTAssertEqual(glass[body + channel], opaque[body + channel], accuracy: 0.03,
+                           "The ribbon's own color must survive the background transparency change.")
+        }
+        func encoded(_ linear: Float) -> Float {
+            linear <= 0.0031308 ? linear * 12.92 : 1.055 * pow(linear, 1 / 2.4) - 0.055
+        }
+        for pixel in stride(from: 0, to: glass.count, by: 4) {
+            XCTAssertTrue(glass[pixel..<(pixel + 4)].allSatisfy(\.isFinite))
+            for channel in 0..<3 {
+                XCTAssertLessThanOrEqual(encoded(glass[pixel + channel]), glass[pixel + 3] + 0.002,
+                                         "Stored sRGB color must be premultiplied by its coverage.")
+            }
+        }
+        let backdropChangeAtBody = 1 - glass[body + 3]
+        let backdropChangeAtBackground = 1 - glass[background + 3]
+        XCTAssertEqual(backdropChangeAtBody, 0, accuracy: 0.001)
+        XCTAssertGreaterThan(backdropChangeAtBackground, 0.8)
+    }
+
     func testUniformReflectionFadesSmoothlyWithoutHorizontalBrightnessBands() throws {
         let fixture = try Fixture(width: width, height: height)
         let scene = try fixture.texture { _, _ in SIMD4(0.35, 0.18, 0.45, 1) }
@@ -155,7 +188,7 @@ final class WaterReflectionTests: XCTestCase {
 
         func render(scene: MTLTexture, water: MTLTexture, horizon: Float,
                     time: Float = 3.7, bass: Float = 0, waterLevel: Float = 0.5,
-                    bar: Float = 0, analysis: Float = 0) throws -> [Float] {
+                    bar: Float = 0, analysis: Float = 0, backgroundOpacity: Float = 1) throws -> [Float] {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
             descriptor.storageMode = .shared
             descriptor.usage = [.renderTarget]
@@ -165,7 +198,7 @@ final class WaterReflectionTests: XCTestCase {
             var uniforms: [SIMD4<Float>] = [
                 SIMD4(time, 0, 0, bass), SIMD4(0, 0, 0, bar), .zero, .zero, .zero,
                 SIMD4(0, analysis, 1, 0), SIMD4(Float(width) / Float(height), Float(width), Float(height), horizon),
-                .zero, SIMD4(repeating: 0.5), SIMD4(waterLevel, 0, 0, 0), .zero, .zero
+                .zero, SIMD4(repeating: 0.5), SIMD4(waterLevel, 1 - backgroundOpacity, 0, 0), .zero, .zero
             ]
             let command = try XCTUnwrap(queue.makeCommandBuffer())
             let pass = MTLRenderPassDescriptor()

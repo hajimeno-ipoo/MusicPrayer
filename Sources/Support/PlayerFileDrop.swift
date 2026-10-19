@@ -1,7 +1,20 @@
 import Foundation
 import UniformTypeIdentifiers
+import Observation
 
 enum PlayerFileDrop {
+    struct Request: Equatable {
+        let id = UUID()
+        let urls: [URL]
+        let generation: UInt64
+    }
+
+    @MainActor @Observable
+    final class Session {
+        var isTargeted = false
+        var request: Request?
+    }
+
     enum Destination: Equatable {
         case lyrics(URL)
         case audio([URL])

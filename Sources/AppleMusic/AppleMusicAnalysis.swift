@@ -23,7 +23,7 @@ actor AppleMusicAnalysisCache {
     func retainSongs(_ ids: Set<String>) throws {
         for id in retainedIDs.subtracting(ids) { tickets[id] = nil }
         retainedIDs = ids
-        let keep = Set(ids.map(filename))
+        let keep = Set(ids.flatMap { [filename($0), lyricURL($0).lastPathComponent] })
         guard FileManager.default.fileExists(atPath: directory.path) else { return }
         for file in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             where file.pathExtension == "json" && !keep.contains(file.lastPathComponent) {
@@ -41,6 +41,29 @@ actor AppleMusicAnalysisCache {
               value.version == MusicAnalyzer.cacheVersion, value.fingerprint == "appleMusic:" + id,
               value.duration.isFinite, abs(value.duration - duration) < 1 else { return nil }
         return value
+    }
+    private func lyricURL(_ id: String) -> URL {
+        directory.appendingPathComponent(String(filename(id).dropLast(5)) + ".lyrics.json")
+    }
+
+    func loadLyricTiming(for song: AppleMusicSong) -> AppleMusicLyricTiming? {
+        guard retainedIDs.contains(song.id), let data = try? Data(contentsOf: lyricURL(song.id)),
+              let value = try? JSONDecoder().decode(AppleMusicLyricTiming.self, from: data),
+              value.isCurrent(for: song) else { return nil }
+        return value
+    }
+
+    func invalidateLyricTiming(for song: AppleMusicSong) throws {
+        guard retainedIDs.contains(song.id), FileManager.default.fileExists(atPath: lyricURL(song.id).path) else { return }
+        try FileManager.default.removeItem(at: lyricURL(song.id))
+    }
+
+    @discardableResult
+    func saveLyricTiming(_ value: AppleMusicLyricTiming, ticket: UUID) throws -> Bool {
+        guard retainedIDs.contains(value.songID), tickets[value.songID] == ticket else { return false }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(value).write(to: lyricURL(value.songID), options: .atomic)
+        return true
     }
     @discardableResult
     func save(_ value: MusicAnalysis, id: String, ticket: UUID) throws -> Bool {

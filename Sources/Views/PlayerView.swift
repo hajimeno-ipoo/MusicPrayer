@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct PlayerView: View {
     @Bindable var store: PlayerStore
+    var fileDropSession = PlayerFileDrop.Session()
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @AppStorage(LyricFont.preferenceKey) private var lyricFont = LyricFont.system
     @State private var showQueue = false
@@ -16,7 +17,7 @@ struct PlayerView: View {
     @State private var headerHeight: CGFloat = 58
     @State private var engaged = true
     @State private var hideTask: Task<Void, Never>?
-    @State private var dropTarget = false
+    private var dropTarget: Bool { fileDropSession.isTargeted }
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
     private var overlayVisible: Bool { store.isAppleMusicActive || engaged || !store.isPlaying }
 
@@ -30,7 +31,7 @@ struct PlayerView: View {
                         .accessibilityHidden(true)
                 }
                 ZStack {
-                    MetalVisualizerView(source: store.visualSource, sceneOpacity: reduceTransparency ? 1 : 0.85)
+                    MetalVisualizerView(source: store.visualSource, backgroundOpacity: reduceTransparency ? 1 : 0.18)
                         .ignoresSafeArea()
                     if store.isAppleMusicActive && store.visualizerStyle != .cassette {
                         appleMusicArtwork
@@ -56,6 +57,9 @@ struct PlayerView: View {
                                 .accessibilityHidden(!overlayVisible)
                             if let error = store.playbackError { errorRow(error, retry: nil) }
                             if store.isAppleMusicActive, let error = store.appleMusic.audioCaptureError { errorRow(error, retry: nil) }
+                            if store.isAppleMusicActive, let error = store.appleMusic.lyricTimingError {
+                                errorRow(error, retry: store.appleMusic.retryLyricTiming)
+                            }
                             if store.isAppleMusicActive, let error = store.appleMusic.errorMessage {
                                 HStack(spacing: 10) {
                                     Label(error, systemImage: "exclamationmark.circle")
@@ -119,25 +123,11 @@ struct PlayerView: View {
         }
         .onContinuousHover { _ in revealControls() }
         .onTapGesture { revealControls() }
-        .onDrop(of: [.fileURL], isTargeted: $dropTarget) { providers in
-            let generation = store.playbackGeneration
+        .onChange(of: fileDropSession.request) { _, request in
+            guard let request else { return }
             Task { @MainActor in
-                var urls: [URL] = []
-                for provider in providers {
-                    let url: URL? = await withCheckedContinuation { continuation in
-                        _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                            continuation.resume(returning: url)
-                        }
-                    }
-                    guard let url else {
-                        store.playbackError = "ドロップされたファイルを取得できませんでした。"
-                        return
-                    }
-                    urls.append(url)
-                }
-                await importDroppedFiles(urls, generation: generation)
+                await importDroppedFiles(request.urls, generation: request.generation)
             }
-            return !providers.isEmpty
         }
         .onChange(of: store.isPlaying) { _, _ in revealControls() }
         .onChange(of: store.visualizerStyle) { _, _ in revealControls() }
@@ -247,14 +237,6 @@ struct PlayerView: View {
             Text("音声ファイルを選ぶか、この画面へドロップしてください。")
                 .font(.system(size: 13)).opacity(0.8)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(action: store.openFiles) {
-                Label("曲を追加", systemImage: "plus")
-                    .padding(.horizontal, 20).padding(.vertical, 8)
-            }
-                .buttonStyle(.glass).padding(.top, 4)
-            Button(action: store.openAppleMusic) {
-                Label("Apple Musicから選ぶ", systemImage: "music.note")
-            }.buttonStyle(.glass)
         }
         .foregroundStyle(.primary)
         .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
@@ -395,7 +377,7 @@ struct PlayerView: View {
                     .accessibilityValue(store.isMuted ? "オン" : "オフ")
                     Slider(value: $store.volume, in: 0...1).frame(width: 100).tint(cyan).accessibilityLabel("音量")
                     Menu {
-                        Picker("出力先", selection: Binding(get: { store.outputID }, set: store.chooseOutput)) {
+                        Picker("出力先", selection: Binding(get: { store.selectedOutputID }, set: store.chooseOutput)) {
                             Text("Macの既定の出力先").tag(UInt32(0))
                             ForEach(store.devices) { device in
                                 Text(device.name).tag(device.id)
@@ -407,14 +389,13 @@ struct PlayerView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "hifispeaker")
-                            Text(store.isAppleMusicActive ? "Macの既定の出力先" : store.outputDeviceName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                            Text(store.outputDeviceName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
                         }
                         .frame(width: 180, height: 28, alignment: .leading)
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 180)
-                    .disabled(store.isAppleMusicActive)
-                    .help(store.isAppleMusicActive ? "音の出力先：Macの既定の出力先" : "音の出力先：\(store.outputName)")
-                    .accessibilityLabel(store.isAppleMusicActive ? "音の出力先：Macの既定の出力先" : "音の出力先：\(store.outputName)")
+                    .help("音の出力先：\(store.outputName)")
+                    .accessibilityLabel("音の出力先：\(store.outputName)")
                 }
                 .padding(.horizontal, 18).padding(.vertical, 16).glassEffect(.regular, in: .capsule)
                 .opacity(overlayVisible ? 1 : 0)

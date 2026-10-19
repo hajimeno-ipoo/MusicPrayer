@@ -3,6 +3,11 @@ import Darwin
 import Foundation
 import WebKit
 
+struct AppleMusicWorkerResult: Codable, Sendable {
+    var analysis: MusicAnalysis
+    var lyricTiming: AppleMusicLyricTiming
+}
+
 /// A transient copy for an internal analysis process. Authentication never goes to a file or log.
 struct AppleMusicWorkerSession: Codable, Sendable {
     struct Cookie: Codable, Sendable {
@@ -62,9 +67,10 @@ enum AppleMusicAnalysisWorker {
     static func run(
         song: AppleMusicSong,
         session: AppleMusicWorkerSession,
+        existingAnalysis: MusicAnalysis? = nil,
         onProgress: @escaping @MainActor (AppleMusicPreanalysis.Phase, Double) -> Void,
         onReady: @escaping @MainActor (Int32) -> Void
-    ) async throws -> MusicAnalysis {
+    ) async throws -> AppleMusicWorkerResult {
         guard let executable = Bundle.main.executableURL else { throw AppleMusicWorkerError.unavailable }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MusicPrayerAnalysis-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -80,7 +86,7 @@ enum AppleMusicAnalysisWorker {
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         let lifetime = WorkerProcessLifetime(process: process, input: input.fileHandleForWriting)
-        let request = try JSONEncoder().encode(WorkerRequest(song: song, session: session))
+        let request = try JSONEncoder().encode(WorkerRequest(song: song, session: session, analysis: existingAnalysis))
 
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -92,7 +98,7 @@ enum AppleMusicAnalysisWorker {
                 defer { try? input.fileHandleForWriting.close() }
                 try input.fileHandleForWriting.write(contentsOf: request)
             }
-            var result: MusicAnalysis?
+            var result: AppleMusicWorkerResult?
             var failure: Error?
             var ready = false
             do {
@@ -111,7 +117,7 @@ enum AppleMusicAnalysisWorker {
                         guard let pid = event.processID, pid > 0 else { throw AppleMusicWorkerError.invalidResponse }
                         if !ready { ready = true; onReady(pid) }
                     case .result:
-                        result = event.analysis
+                        result = event.result
                     case .error:
                         failure = AppleMusicWorkerError.analysis(event.message ?? "Apple Musicの事前解析に失敗しました。")
                     }
@@ -127,8 +133,9 @@ enum AppleMusicAnalysisWorker {
             try Task.checkCancellation()
             if let failure { throw failure }
             guard process.terminationStatus == 0, let result,
-                  result.fingerprint == "appleMusic:" + song.id,
-                  result.duration.isFinite, abs(result.duration - song.duration) < 1 else {
+                  result.analysis.fingerprint == "appleMusic:" + song.id,
+                  result.analysis.duration.isFinite, abs(result.analysis.duration - song.duration) < 1,
+                  result.lyricTiming.isCurrent(for: song) else {
                 throw AppleMusicWorkerError.invalidResponse
             }
             return result
@@ -157,6 +164,7 @@ enum AppleMusicAnalysisWorker {
                 // Keep WebKit errors, URLs, cookie values, and storage data out of IPC diagnostics.
                 let message: String
                 if let error = error as? AppleMusicWorkerError { message = error.localizedDescription }
+                else if let error = error as? SilentAnalysisError { message = error.localizedDescription }
                 else { message = "Apple Musicの事前解析に失敗しました。" }
                 try? emit(WorkerEvent(kind: .error, message: message))
             }
@@ -198,10 +206,10 @@ enum AppleMusicAnalysisWorker {
             }
         }
         defer { reporter.cancel() }
-        let analysis = try await store.analyzeInWorker(request.song) { pid in
+        let result = try await store.analyzeInWorker(request.song, existingAnalysis: request.analysis) { pid in
             try? emit(WorkerEvent(kind: .ready, processID: pid))
         }
-        try emit(WorkerEvent(kind: .result, analysis: analysis))
+        try emit(WorkerEvent(kind: .result, result: result))
     }
 
     private static func phase(_ value: String) -> AppleMusicPreanalysis.Phase? {
@@ -224,6 +232,7 @@ enum AppleMusicAnalysisWorker {
 private struct WorkerRequest: Codable {
     var song: AppleMusicSong
     var session: AppleMusicWorkerSession
+    var analysis: MusicAnalysis?
 }
 
 private struct WorkerEvent: Codable {
@@ -232,7 +241,7 @@ private struct WorkerEvent: Codable {
     var processID: Int32? = nil
     var phase: String? = nil
     var position: Double? = nil
-    var analysis: MusicAnalysis? = nil
+    var result: AppleMusicWorkerResult? = nil
     var message: String? = nil
 }
 
