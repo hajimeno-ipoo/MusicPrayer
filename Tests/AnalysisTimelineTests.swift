@@ -195,38 +195,45 @@ final class AnalysisTimelineTests: XCTestCase {
         // The first bar is deliberately between two beats, so snapping it to a beat fails.
         let rhythm = AnalysisTimelineRow(name: "拍・小節", color: .white,
             data: .rhythm(beats: [1, 2, 3], bars: [1.25, 3]))
-        let raster = try raster(rows: [rhythm], duration: 5, time: 0)
-        let rowTop = Int(AnalysisTimelinePlot.axisHeight + 4)
-        func pixels(near column: Int, matching: (UInt8, UInt8, UInt8) -> Bool) -> Int {
-            var count = 0
-            for y in rowTop..<(rowTop + Int(AnalysisTimelinePlot.graphHeight)) {
-                for x in (column - 3)...(column + 3) {
-                    let offset = (y * raster.width + x) * 4
-                    if matching(raster.bytes[offset], raster.bytes[offset + 1], raster.bytes[offset + 2]) { count += 1 }
+        for scheme in [ColorScheme.light, .dark] {
+            let raster = try raster(rows: [rhythm], duration: 5, time: 0, colorScheme: scheme)
+            let rowTop = Int(AnalysisTimelinePlot.axisHeight + 4)
+            func pixels(near column: Int, matching: (UInt8, UInt8, UInt8) -> Bool) -> Int {
+                var count = 0
+                for y in rowTop..<(rowTop + Int(AnalysisTimelinePlot.graphHeight)) {
+                    for x in (column - 3)...(column + 3) {
+                        let offset = (y * raster.width + x) * 4
+                        if matching(raster.bytes[offset], raster.bytes[offset + 1], raster.bytes[offset + 2]) { count += 1 }
+                    }
                 }
+                return count
             }
-            return count
+            let blue: (UInt8, UInt8, UInt8) -> Bool = { r, g, b in Int(b) > Int(r) + 40 && Int(b) >= Int(g) - 10 }
+            // A 0.7-opacity one-point stroke spreads across two pixels at this scale.
+            // 50 catches its coverage while staying above the faint time grid.
+            let contrasting: (UInt8, UInt8, UInt8) -> Bool = { r, g, b in
+                let visible = scheme == .dark ? r > 50 : r < 205
+                return visible && abs(Int(r) - Int(g)) < 15 && abs(Int(r) - Int(b)) < 15
+            }
+            let barPixels = pixels(near: 50, matching: blue)
+            let beatPixels = pixels(near: 80, matching: contrasting)
+            XCTAssertGreaterThan(barPixels, 0, "1.25秒の小節が本来の時刻の青線として残ること")
+            XCTAssertGreaterThan(beatPixels, 0, "2秒の通常拍は小節と違う線として残ること")
+            XCTAssertGreaterThan(barPixels, beatPixels, "小節は通常拍より太い線で識別できること")
+            XCTAssertGreaterThan(pixels(near: 120, matching: blue), 0, "拍と小節が一致しても小節の色を保つこと")
+            XCTAssertEqual(pixels(near: 40, matching: blue), 0, "小節を近くの拍へ移動しないこと")
+            XCTAssertEqual(pixels(near: 160, matching: contrasting), 0, "拍のない4秒の背景グリッドを通常拍として数えないこと")
         }
-        let blue: (UInt8, UInt8, UInt8) -> Bool = { r, g, b in Int(b) > Int(r) + 40 && Int(b) >= Int(g) - 10 }
-        // A 0.7-opacity one-point stroke spreads across two pixels at this scale.
-        // 50 catches its coverage while staying above the faint time grid.
-        let white: (UInt8, UInt8, UInt8) -> Bool = { r, g, b in r > 50 && abs(Int(r) - Int(g)) < 15 && abs(Int(r) - Int(b)) < 15 }
-        let barPixels = pixels(near: 50, matching: blue)
-        let beatPixels = pixels(near: 80, matching: white)
-        XCTAssertGreaterThan(barPixels, 0, "1.25秒の小節が本来の時刻の青線として残ること")
-        XCTAssertGreaterThan(beatPixels, 0, "2秒の通常拍は小節と違う線として残ること")
-        XCTAssertGreaterThan(barPixels, beatPixels, "小節は通常拍より太い線で識別できること")
-        XCTAssertGreaterThan(pixels(near: 120, matching: blue), 0, "拍と小節が一致しても小節の色を保つこと")
-        XCTAssertEqual(pixels(near: 40, matching: blue), 0, "小節を近くの拍へ移動しないこと")
-        XCTAssertEqual(pixels(near: 160, matching: white), 0, "拍のない4秒の背景グリッドを通常拍として数えないこと")
     }
 
     @MainActor
-    private func raster(rows: [AnalysisTimelineRow], duration: Double, time: Double)
+    private func raster(rows: [AnalysisTimelineRow], duration: Double, time: Double,
+                        colorScheme: ColorScheme = .dark)
         throws -> (bytes: [UInt8], width: Int, height: Int) {
         let renderer = ImageRenderer(content: AnalysisTimelinePlot(rows: rows, time: time, duration: duration)
             .frame(width: CGFloat(duration) * 40 + 1, height: AnalysisTimelinePlot.height(rowCount: rows.count))
-            .background(.black))
+            .background(colorScheme == .dark ? Color.black : Color.white)
+            .environment(\.colorScheme, colorScheme))
         renderer.scale = 1
         let image = try XCTUnwrap(renderer.cgImage)
         var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)

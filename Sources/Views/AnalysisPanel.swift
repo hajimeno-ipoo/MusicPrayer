@@ -37,7 +37,7 @@ struct AnalysisPanel: View {
                 case .activity:
                     AnalysisActivityView(analysis: analysis, time: time, duration: duration, isPlaying: isPlaying)
                 case .structure:
-                    Text("白：拍　青：小節の先頭（番号）")
+                    Text("細い線：拍　青：小節の先頭（番号）")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                     timeline(analysis)
                 }

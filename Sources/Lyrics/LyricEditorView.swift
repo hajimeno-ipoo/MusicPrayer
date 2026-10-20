@@ -64,7 +64,6 @@ struct LyricEditorView: View {
         }
         .padding(20)
         .frame(width: 460)
-        .preferredColorScheme(.dark)
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.plainText]) { result in
             switch result {
             case .success(let url): importFile([url])

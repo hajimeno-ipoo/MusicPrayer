@@ -10,7 +10,6 @@ struct MusicPrayerApp: App {
     var body: some Scene {
         Window("Music Prayer", id: "player") {
             PlayerGlassContainer(store: store, appearance: appearance)
-                .preferredColorScheme(appearance.colorScheme)
                 .frame(minWidth: 860, minHeight: 800)
                 .ignoresSafeArea()
                 .containerBackground(.clear, for: .window)

@@ -181,17 +181,13 @@ private struct LyricEstimatedProgressAttribute: TextAttribute {
 private struct LyricTextRenderer: TextRenderer {
     var time: Double
     var estimatedProgress: Double?
-    var isDark: Bool
-    var accent: Color
+    private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             for run in line {
                 for slice in run {
-                    // Preserve the white glyph source for cyan highlighting in both modes.
-                    var base = context
-                    if !isDark { base.addFilter(.colorMultiply(.black)) }
-                    base.draw(slice)
+                    context.draw(slice)
                     let emphasis: Double
                     if let weight = slice[LyricProgressAttribute.self] {
                         emphasis = LyricMotion.emphasis(time: time, timing: weight.timing)
@@ -203,7 +199,7 @@ private struct LyricTextRenderer: TextRenderer {
                     if emphasis > 0 {
                         var highlight = context
                         highlight.opacity *= emphasis
-                        highlight.addFilter(.colorMultiply(accent))
+                        highlight.addFilter(.colorMultiply(cyan))
                         highlight.draw(slice)
                     }
                 }
@@ -267,11 +263,7 @@ struct LyricMotionLineView: View {
     let viewport: CGSize
     let font: LyricFont
     var estimatedProgress: Double? = nil
-    @Environment(\.colorScheme) private var colorScheme
-    private var cyan: Color {
-        colorScheme == .dark ? Color(red: 0.24, green: 0.87, blue: 1)
-                             : Color(red: 0.01, green: 0.43, blue: 0.64)
-    }
+    private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
 
     private func lyricText(breakOffset: Int? = nil) -> Text {
         let total = max(1, line.text.reduce(0.0) { $0 + LyricParser.characterWeight($1) })
@@ -297,8 +289,7 @@ struct LyricMotionLineView: View {
             .lineSpacing(6)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .center)
-            .textRenderer(LyricTextRenderer(time: time, estimatedProgress: estimatedProgress,
-                                            isDark: colorScheme == .dark, accent: cyan))
+            .textRenderer(LyricTextRenderer(time: time, estimatedProgress: estimatedProgress))
             .accessibilityHidden(true)
     }
 
@@ -341,7 +332,7 @@ struct LyricMotionView: View {
                         if lyrics.lines.isEmpty {
                             Text(lyrics.text)
                                 .font(font.font(size: 28))
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
                                 .lineSpacing(12)
                         } else {
@@ -376,7 +367,7 @@ struct LyricMotionView: View {
                 if store.isAppleMusicActive, let message = store.appleMusic.lyricTimingStatus {
                     Text(message)
                         .font(.caption)
-                        .foregroundStyle(Color.primary.opacity(0.8))
+                        .foregroundStyle(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 4)

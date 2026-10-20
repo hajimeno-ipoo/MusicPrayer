@@ -25,17 +25,9 @@ enum PlayerAppearance: String, CaseIterable, Identifiable {
         }
     }
 
-    var colorScheme: ColorScheme? {
+    func nsAppearance(systemColorScheme: ColorScheme) -> NSAppearance? {
         switch self {
-        case .system: nil
-        case .light: .light
-        case .dark: .dark
-        }
-    }
-
-    var nsAppearance: NSAppearance? {
-        switch self {
-        case .system: nil
+        case .system: NSAppearance(named: systemColorScheme == .dark ? .darkAqua : .aqua)
         case .light: NSAppearance(named: .aqua)
         case .dark: NSAppearance(named: .darkAqua)
         }

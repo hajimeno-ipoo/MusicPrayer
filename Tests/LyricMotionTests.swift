@@ -510,6 +510,38 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testSharedLineRendererKeepsMainBranchWhiteAndCyanInBothAppearances() throws {
+        _ = NSApplication.shared
+        let text = "歌詞の色を確認"
+        let timings = text.enumerated().map { index, _ in
+            LyricCharacterTiming(start: 1 + Double(index) * 0.2, end: 1.2 + Double(index) * 0.2)
+        }
+        let lyric = TimedLyricLine(id: "appearance-colours", ordinal: 0, text: text, start: 1, end: 3,
+                                  textWeight: 7, confidence: 1, characterTimings: timings)
+        let time = 1.7
+        let motion = try XCTUnwrap(LyricMotion.parameters(for: lyric, time: time, vocal: nil,
+                                                         beat: 0, beatPhase: 0, barPhase: 0))
+        let viewport = CGSize(width: 600, height: 220)
+        var images: [RenderedPixels] = []
+        for appearance in [ColorScheme.light, .dark] {
+            let image = try pixels(ImageRenderer(content: LyricMotionLineView(line: lyric, colourTimings: timings,
+                motion: motion, time: time, viewport: viewport, font: .system)
+                .environment(\.colorScheme, appearance).background(.black)))
+            var whitePixels = 0, cyanPixels = 0
+            for offset in stride(from: 0, to: image.bytes.count, by: 4) {
+                let red = Int(image.bytes[offset]), green = Int(image.bytes[offset + 1]), blue = Int(image.bytes[offset + 2])
+                if red >= 220 && green >= 220 && blue >= 220 { whitePixels += 1 }
+                if red < 140 && green >= 170 && blue >= 200 && green > red + 80 { cyanPixels += 1 }
+            }
+            XCTAssertGreaterThan(whitePixels, 30, "未到達の文字は、外観に関係なくメインブランチと同じ白で描くこと")
+            XCTAssertGreaterThan(cyanPixels, 30, "到達済みの文字は、外観に関係なくメインブランチと同じ明るいシアンで描くこと")
+            images.append(image)
+        }
+        let maximumDifference = zip(images[0].bytes, images[1].bytes).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        XCTAssertLessThanOrEqual(maximumDifference, 1, "外観の切替で歌詞の文字色や着色範囲を変更しないこと")
+    }
+
+    @MainActor
     func testOffscreenRowIsReadableAtMusicalEntranceBeforeLateSpeechStart() throws {
         let store = offscreenStore(source: "歌い出し")
         defer { store.engine.stop() }

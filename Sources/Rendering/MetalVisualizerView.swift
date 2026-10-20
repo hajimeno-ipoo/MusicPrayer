@@ -38,7 +38,7 @@ final class VisualizerHostView: NSView {
         metalView.enableSetNeedsDisplay = false
         metalView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(metalView)
-        errorLabel.textColor = .labelColor
+        errorLabel.textColor = .white
         errorLabel.font = .systemFont(ofSize: 13)
         errorLabel.alignment = .center
         errorLabel.isHidden = true

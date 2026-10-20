@@ -153,7 +153,7 @@ struct AnalysisTimelinePlot: View {
         context.fill(Path(roundedRect: CGRect(x: x, y: 1, width: max(1, width - 2), height: 12), cornerRadius: 2),
                      with: .color(color.opacity(time >= span.start && time < span.end ? 0.85 : 0.3)))
         if let label {
-            context.draw(Text(label).font(.system(size: 9)).foregroundStyle(.white),
+            context.draw(Text(label).font(.system(size: 9)).foregroundStyle(.primary),
                          at: CGPoint(x: x + 5, y: 7), anchor: .leading)
         }
     }
