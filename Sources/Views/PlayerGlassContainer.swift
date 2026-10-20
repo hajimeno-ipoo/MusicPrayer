@@ -3,7 +3,7 @@ import SwiftUI
 
 struct PlayerGlassContainer: NSViewRepresentable {
     let store: PlayerStore
-    let usesDarkAppearance: Bool
+    let appearance: PlayerAppearance
 
     func makeCoordinator() -> PlayerFileDrop.Session { PlayerFileDrop.Session() }
 
@@ -24,7 +24,7 @@ struct PlayerGlassContainer: NSViewRepresentable {
         nsView.onFileDrop = { urls in
             session.request = PlayerFileDrop.Request(urls: urls, generation: store.playbackGeneration)
         }
-        nsView.appearance = usesDarkAppearance ? NSAppearance(named: .darkAqua) : nil
+        nsView.appearance = appearance.nsAppearance
         if let hosting = nsView.contentView as? NSHostingView<PlayerView> {
             hosting.rootView = PlayerView(store: store, fileDropSession: session)
         }
