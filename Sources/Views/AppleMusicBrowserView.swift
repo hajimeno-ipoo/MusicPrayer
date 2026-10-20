@@ -103,6 +103,13 @@ struct AppleMusicBrowserWebView: NSViewRepresentable {
 
 struct AppleMusicWebView: NSViewRepresentable {
     let store: AppleMusicStore
-    func makeNSView(context: Context) -> WKWebView { store.webViewForDisplay() }
-    func updateNSView(_ view: WKWebView, context: Context) {}
+    func makeNSView(context: Context) -> WKWebView {
+        let view = store.webViewForDisplay()
+        // SwiftUI opacity and hit testing do not remove AppKit drag destinations.
+        view.unregisterDraggedTypes()
+        return view
+    }
+    func updateNSView(_ view: WKWebView, context: Context) {
+        view.unregisterDraggedTypes()
+    }
 }

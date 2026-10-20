@@ -478,6 +478,8 @@ fragment float4 cityCompositeFragment(CityFullscreen in [[stage_in]], constant C
     // Tone mapping needs straight RGB to avoid darkening silhouette edges twice.
     if (u.presentation.x<1.0) color=alpha>0.0 ? color/alpha : float3(0);
     color*=1-dot(in.uv-0.5,in.uv-0.5)*0.20;
+    // Increase exposure before the highlight-compressing tone map.
+    color*=1.6;
     float3 mapped=(color*(2.51*color+0.03))/(color*(2.43*color+0.59)+0.14);
     mapped=clamp(mapped,0.0,1.0);
     if (u.presentation.x>=1.0) return float4(mapped,1);

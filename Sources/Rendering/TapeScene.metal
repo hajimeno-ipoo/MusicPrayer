@@ -345,9 +345,12 @@ fragment float4 tapeCompositeFragment(TapeFullscreen in [[stage_in]], texture2d<
     float vignette=1-dot(in.uv-0.5,in.uv-0.5)*0.24;
     color.rgb*=vignette;
     float alpha=clamp(color.a,0.0,1.0);
-    if(alpha>=1.0) return float4(clamp(color.rgb,0.0,1.0),1);
     if(alpha<=0.0) return float4(0);
     float3 straight=clamp(color.rgb/alpha,0.0,1.0);
+    // Lift dark surfaces while preserving RGB ratios and the existing white point.
+    float peak=max(straight.r,max(straight.g,straight.b));
+    straight*=1.6/(1.0+0.6*peak);
+    if(alpha>=1.0) return float4(straight,1);
     // CAMetalLayer needs premultiplied sRGB bytes. Metal will encode this
     // linear output into the sRGB drawable, so associate in encoded space and
     // decode once before the hardware's final conversion.

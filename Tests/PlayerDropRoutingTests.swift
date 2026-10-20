@@ -55,6 +55,10 @@ final class PlayerDropRoutingTests: XCTestCase {
         }
         try await Task.sleep(for: .milliseconds(150))
         host.layoutSubtreeIfNeeded()
+        if appleMusicActive {
+            XCTAssertTrue(store.appleMusic.webViewForDisplay().registeredDraggedTypes.isEmpty,
+                          "透明な再生接続用WebViewをドロップの受付候補に残さない")
+        }
         let drag = PlayerRoutingDrag(window: window, url: url)
         var view = host.hitTest(NSPoint(x: 430, y: 400))
         var registeredAncestor: NSView?

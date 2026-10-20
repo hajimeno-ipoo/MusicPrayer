@@ -275,6 +275,8 @@ fragment float4 compositeFragment(ScreenOut in [[stage_in]], texture2d<float> sc
     float horizonGlow = exp(-abs(uv.y - horizon) * 48) * exp(-pow((uv.x - 0.5) * 3, 2));
     background += float3(0.002, 0.025, 0.065) * horizonGlow;
     float vignette = 1 - 0.24 * pow(length((uv - float2(0.5, 0.45)) * float2(1.15, 1)), 1.8);
+    // Lift the scene before tone mapping so bright folds retain their detail.
+    color *= 1.6;
     float backgroundOpacity = clamp(1 - f.sceneWater.y, 0.0, 1.0);
     if (backgroundOpacity >= 1) {
         return float4(toneMap((color + background) * vignette), 1);

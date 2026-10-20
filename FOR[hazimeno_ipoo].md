@@ -1,5 +1,21 @@
 # Music Prayerの仕組み
 
+## 3つのビジュアライザーの明るさ（2026-10-20追記）
+
+全体的に暗いという指摘に合わせ、リボン・カセット・スペクトラム都市の最終的な色の出力を明るくしました。リボンの`Shaders.metal`と都市の`SpectrumCity.metal`は、明るい部分の階調を圧縮する既存のtone mappingへ渡す前に、描画色を1.6倍にします。リボンの水面反射と都市の光も同じ補正を受けます。この1.6倍は内部の描画値であり、画面で感じる明るさが一律1.6倍になる意味ではありません。
+
+カセットの`TapeScene.metal`は、最終色のRGB比率を保ちながら暗い面を持ち上げます。単純な乗算で明るい面が白くつぶれないよう、最も明るいRGB成分をpeakとして、色へ`1.6 / (1 + 0.6 * peak)`を掛けます。不透明な本体と半透明の輪郭の両方へ同じ補正を適用します。背景の透明度や本体の範囲を表すalphaは変更せず、既存のsRGB変換と透明色の計算を保ちました。再生・解析・カメラ・形状の処理は変更していません。
+
+関連11件のGPUテストが成功しました。リボンの重なりと水面、3種類の透明背景、本体色、カセットと都市の音への反応を検証しています。同じ入力を使う変更前後のGPU描画画像では、カセットと都市が明るくなったことを目視確認しました。Releaseビルド・署名検証・アプリ起動も成功しています。実アプリの画面取得はScreenCaptureKitの-3811で失敗したため、macOSで合成された最終画面の見え方は未確認です。戻す場合は3つの最終合成処理に加えた明るさ補正を外し、再ビルドします。コミット文の案：fix: 3つのビジュアライザーを明るく調整。
+
+## 透明な再生接続用WebViewによるドロップの横取り（2026-10-20追記）
+
+ユーザーの失敗操作を起動中のアプリで追跡したところ、PlayerGlassEffectViewのdraggingEnteredとperformDragOperation、PlayerView.importDroppedFilesはいずれも0回で、WKWebView.draggingEnteredだけが2回呼ばれました。実際のビュー階層には再生接続用AppleMusicWebView内のWKWebViewがあり、SwiftUI側の祖先はalpha 0でも、WKWebView自身はisHidden false・alpha 1のまま、ファイルなどのドラッグ形式を登録していました。SwiftUIのopacityとallowsHitTestingだけでは、AppKitのドロップ受付候補から外れていませんでした。
+
+AppleMusicWebViewのmakeNSViewとupdateNSViewでunregisterDraggedTypes()を呼び、この透明な再生接続用WebViewの受付登録を解除しました。公式画面を表示する別のAppleMusicBrowserWebView、ぼかし用のPlayerGlassBackdropView、ガラスの配置、前回のCoordinator／Session／importDroppedFilesは変更していません。戻す場合はAppleMusicWebViewの登録解除を外します。
+
+修正後のユーザー操作では、ガラスの受付・ドロップ確定・importDroppedFiles・歌詞編集を開く処理への到達を記録し、WKWebView.draggingEnteredへの到達は0回でした。呼び出し回数はSwiftとObjective-Cの入口や非同期関数の内部でも重複するため、ファイル数とは区別します。既存のドロップ統合テストには、再生接続用WebViewが実際に画面へ配置された後もドロップ形式の登録を残さない確認を追加しました。コミット文の案：fix: 透明な再生接続用WebViewのドロップ横取りを防ぐ。
+
 ## 解析とポップオーバーの明暗を統一（2026-10-20追記）
 
 ライトで解析パネルが暗いまま、ダークで曲一覧が明るいままになる不一致を修正しました。プレイヤー内の白・シアンを保つdark指定が解析パネルへも届いていたため、全体への固定指定を外し、歌詞・曲情報・タイムライン・空状態の説明だけへ限定しました。AnalysisPanelには選択中のcolorSchemeを渡します。解析グラフの目盛り・現在位置・拍の線も固定の白からprimaryへ変え、ライトでは濃く、ダークでは明るく描きます。区間や楽器の色、観測値と時刻は変えていません。拍の凡例は両方の外観で意味が通る「細い線：拍」へ変更しました。
