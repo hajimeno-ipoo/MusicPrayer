@@ -101,7 +101,7 @@ struct AnalysisTimelinePlot: View {
                 var grid = Path()
                 grid.move(to: CGPoint(x: x, y: Self.axisHeight))
                 grid.addLine(to: CGPoint(x: x, y: size.height))
-                context.stroke(grid, with: .color(.white.opacity(second % 5 == 0 ? 0.12 : 0.04)), lineWidth: 0.5)
+                context.stroke(grid, with: .color(Color.primary.opacity(second % 5 == 0 ? 0.12 : 0.04)), lineWidth: 0.5)
                 if second % 5 == 0 {
                     context.draw(Text(clock(Double(second))).font(.system(size: 9).monospacedDigit())
                         .foregroundStyle(.secondary), at: CGPoint(x: x + 3, y: 8), anchor: .topLeading)
@@ -116,7 +116,7 @@ struct AnalysisTimelinePlot: View {
             let x = CGFloat(min(max(0, time), duration)) * scale
             playhead.move(to: CGPoint(x: x, y: 0))
             playhead.addLine(to: CGPoint(x: x, y: size.height))
-            context.stroke(playhead, with: .color(.white.opacity(0.8)), lineWidth: 1)
+            context.stroke(playhead, with: .color(Color.primary.opacity(0.8)), lineWidth: 1)
         }
         .accessibilityHidden(true)
     }
@@ -133,7 +133,7 @@ struct AnalysisTimelinePlot: View {
                 var line = Path()
                 line.move(to: CGPoint(x: CGFloat(time) * scale, y: 6))
                 line.addLine(to: CGPoint(x: CGFloat(time) * scale, y: Self.graphHeight))
-                context.stroke(line, with: .color(.white.opacity(0.7)), lineWidth: 1)
+                context.stroke(line, with: .color(Color.primary.opacity(0.7)), lineWidth: 1)
             }
             for (index, time) in bars.enumerated() {
                 var line = Path()
