@@ -6,6 +6,8 @@ struct PlayerView: View {
     @Bindable var store: PlayerStore
     var fileDropSession = PlayerFileDrop.Session()
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("musicPrayer.appearance") private var appearance: PlayerAppearance = .system
     @AppStorage(LyricFont.preferenceKey) private var lyricFont = LyricFont.system
     @State private var showQueue = false
     @State private var showQueueAfterSearch = false
@@ -18,7 +20,10 @@ struct PlayerView: View {
     @State private var engaged = true
     @State private var hideTask: Task<Void, Never>?
     private var dropTarget: Bool { fileDropSession.isTargeted }
-    private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
+    private var cyan: Color {
+        colorScheme == .dark ? Color(red: 0.24, green: 0.87, blue: 1)
+                             : Color(red: 0.01, green: 0.43, blue: 0.64)
+    }
     private var overlayVisible: Bool { store.isAppleMusicActive || engaged || !store.isPlaying }
 
     var body: some View {
@@ -106,7 +111,6 @@ struct PlayerView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 800)
-        .preferredColorScheme(store.isAppleMusicSearchVisible || store.isAppleMusicBrowserVisible ? nil : .dark)
         .allowsHitTesting(!store.isAppleMusicSearchVisible)
         .accessibilityHidden(store.isAppleMusicSearchVisible)
         // macOS sheets are opaque; keep search in the window so glass can sample the player.
@@ -171,7 +175,7 @@ struct PlayerView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Text("MUSIC PRAYER").font(.system(size: 11, weight: .semibold, design: .rounded)).tracking(3).foregroundStyle(.white.opacity(0.6))
+            Text("MUSIC PRAYER").font(.system(size: 11, weight: .semibold, design: .rounded)).tracking(3).foregroundStyle(Color.primary.opacity(0.6))
                 .padding(.leading, 70)
             Spacer()
             HStack(spacing: 8) {
@@ -224,6 +228,20 @@ struct PlayerView: View {
                 .menuStyle(.borderlessButton)
                 .accessibilityLabel("ビジュアライザー：\(store.visualizerStyle.title)")
                 .help("ビジュアライザーを選びます")
+                Menu {
+                    Picker("外観", selection: $appearance) {
+                        ForEach(PlayerAppearance.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }.pickerStyle(.inline)
+                } label: {
+                    Image(systemName: appearance.symbolName)
+                        .font(.system(size: 13, weight: .medium)).frame(width: 30, height: 28)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .accessibilityLabel("外観：\(appearance.title)")
+                .help("ライト・ダーク・システム設定を切り替え")
                 iconButton("フルスクリーン", "arrow.up.left.and.arrow.down.right", action: { NSApp.keyWindow?.toggleFullScreen(nil) })
             }
             .padding(6).glassEffect(.regular, in: .capsule)
@@ -260,7 +278,7 @@ struct PlayerView: View {
                     Text(appleMusicTitle)
                         .font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
                     if !appleMusicArtist.isEmpty {
-                        Text(appleMusicArtist).font(.system(size: 15)).foregroundStyle(.white.opacity(0.8))
+                        Text(appleMusicArtist).font(.system(size: 15)).foregroundStyle(Color.primary.opacity(0.8))
                     }
                     analysisInformation
                 }
@@ -272,7 +290,7 @@ struct PlayerView: View {
                 }
                 VStack(alignment: .leading, spacing: 7) {
                     Text(track.title).font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
-                    if !track.artist.isEmpty { Text(track.artist).font(.system(size: 13)).foregroundStyle(.white.opacity(0.65)) }
+                    if !track.artist.isEmpty { Text(track.artist).font(.system(size: 13)).foregroundStyle(Color.primary.opacity(0.65)) }
                     analysisInformation
                 }
                 Spacer(minLength: 20)
@@ -291,7 +309,7 @@ struct PlayerView: View {
                     .tint(cyan).frame(width: 240)
             } else if store.analyzing {
                 ProgressView().controlSize(.mini)
-                Text(store.isAppleMusicActive ? "再生しながら解析中" : "曲を解析中 · 再生できます").font(.system(size: 14)).foregroundStyle(.white.opacity(0.9))
+                Text(store.isAppleMusicActive ? "再生しながら解析中" : "曲を解析中 · 再生できます").font(.system(size: 14)).foregroundStyle(Color.primary.opacity(0.9))
             } else {
                 if let section = store.moment.section ?? (store.position == 0 && store.analysis?.sections.isEmpty == false ? 1 : nil) { Text("SECTION \(section)") }
                 if let bpm = store.moment.bpm { Text("\(Int(bpm.rounded())) BPM") }
@@ -325,8 +343,8 @@ struct PlayerView: View {
             image.resizable().scaledToFill()
         } placeholder: {
             ZStack {
-                RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.07))
-                Image(systemName: "music.note").font(.system(size: 72, weight: .light)).foregroundStyle(.white.opacity(0.5))
+                RoundedRectangle(cornerRadius: 18).fill(Color.primary.opacity(0.07))
+                Image(systemName: "music.note").font(.system(size: 72, weight: .light)).foregroundStyle(Color.primary.opacity(0.5))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -346,10 +364,10 @@ struct PlayerView: View {
     private func activity(_ label: String, value: Float?, color: Color) -> some View {
         VStack(spacing: 5) {
             ZStack(alignment: .bottom) {
-                Capsule().fill(.white.opacity(0.08))
+                Capsule().fill(Color.primary.opacity(0.08))
                 Capsule().fill(color).frame(height: CGFloat(value ?? 0) * 25)
             }.frame(width: 3, height: 25)
-            Text(label).font(.system(size: 8)).foregroundStyle(.white.opacity(0.5))
+            Text(label).font(.system(size: 8)).foregroundStyle(Color.primary.opacity(0.5))
         }
         .accessibilityLabel("\(label)：\(value.map { "\(Int($0 * 100))%" } ?? "未取得")")
     }
@@ -378,7 +396,7 @@ struct PlayerView: View {
                     Button(action: store.toggleMute) {
                         Image(systemName: store.isMuted || store.volume == 0 ? "speaker.slash" : "speaker.wave.2")
                             .font(.system(size: 12)).frame(width: 24, height: 28)
-                            .foregroundStyle(store.isMuted ? cyan : .white)
+                            .foregroundStyle(store.isMuted ? cyan : Color.primary)
                     }
                     .buttonStyle(.plain)
                     .help(store.isMuted ? "ミュートを解除" : "ミュート")
@@ -413,7 +431,7 @@ struct PlayerView: View {
         }
     }
     private func iconButton(_ label: String, _ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30).foregroundStyle(active ? cyan : .white.opacity(0.85)) }
+        Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30).foregroundStyle(active ? cyan : Color.primary.opacity(0.85)) }
             .buttonStyle(.plain).help(label).accessibilityLabel(label)
     }
     private func errorRow(_ error: String, retry: (() -> Void)?) -> some View {
