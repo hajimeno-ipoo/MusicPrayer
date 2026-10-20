@@ -1,9 +1,11 @@
 import WebKit
 
-/// Keep the official page palette and reuse its player material for the three app actions.
+/// Keep the official palette, soften its base background and reuse its player material.
 enum AppleMusicAppearance {
     // Keep this restricted to the displayed official browser, never login popups or workers.
     @MainActor static func configure(_ webView: WKWebView) {
+        // macOS WKWebView has no public drawsBackground property; this disables only its backing fill.
+        webView.setValue(false, forKey: "drawsBackground")
         webView.configuration.userContentController.addUserScript(WKUserScript(
             source: controlsScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
     }
@@ -13,6 +15,36 @@ enum AppleMusicAppearance {
         if (location.hostname !== 'music.apple.com') return;
         const style = document.createElement('style');
         style.textContent = `
+            html, body { background-color: transparent !important; }
+            .app-container {
+                background-color: color-mix(in srgb, var(--joe-color, var(--pageBG)) 80%, transparent);
+            }
+            .app-container .scrollable-page,
+            .app-container .container-detail-header-wrapper::after,
+            .app-container .library-track--header,
+            .app-container .artist-detail-container {
+                background-color: transparent !important;
+            }
+            .app-container .search-input__text-field,
+            .app-container .search-scope-bar__pill-container {
+                background-color: var(--glassMaterialBackground) !important;
+                -webkit-backdrop-filter: var(--glassMaterialBackdropFilter, saturate(220%) blur(16px));
+                backdrop-filter: var(--glassMaterialBackdropFilter, saturate(220%) blur(16px));
+            }
+            .app-container .search-input-wrapper,
+            .app-container .search-scope-bar__pill-container {
+                box-shadow: 0 10px 40px var(--glassMaterialShadowColor) !important;
+            }
+            .app-container.is-light-theme .search-input-wrapper,
+            .app-container.is-light-theme .search-scope-bar__pill-container {
+                --glassMaterialBackground: var(--glassMaterialBackground-onLight);
+                --glassMaterialShadowColor: var(--glassMaterialShadowColor-onLight);
+            }
+            .app-container.is-dark-theme .search-input-wrapper,
+            .app-container.is-dark-theme .search-scope-bar__pill-container {
+                --glassMaterialBackground: var(--glassMaterialBackground-onDark);
+                --glassMaterialShadowColor: var(--glassMaterialShadowColor-onDark);
+            }
             amp-contextual-menu-button:has([data-testid="sort-menu-trigger"]) {
                 --ctxmenu-trigger-background-color: transparent;
                 --ctxmenu-trigger-backdrop-blur: 0px;

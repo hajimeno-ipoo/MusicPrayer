@@ -46,18 +46,29 @@ final class AppleMusicBrowserControlsTests: XCTestCase {
         // The material belongs to the official player class, including its scoped CSS class.
         view.loadHTMLString("""
         <html><head><style>
-        .app-container { --systemPrimary:rgb(0,0,0); --material:rgba(245,245,247,.55) }
-        .app-container.is-dark-theme { --systemPrimary:rgb(255,255,255); --material:rgba(38,38,40,.6) }
+        .app-container { --systemPrimary:rgb(0,0,0); --pageBG:#fff;
+            --glassMaterialBackground:rgba(245,245,247,.55); --glassMaterialShadowColor:rgba(0,0,0,.1);
+            --glassMaterialBackground-onLight:rgba(245,245,247,.55); --glassMaterialShadowColor-onLight:rgba(0,0,0,.1);
+            --glassMaterialBackground-onDark:rgba(38,38,40,.6); --glassMaterialShadowColor-onDark:rgba(0,0,0,.2) }
+        .app-container.is-dark-theme { --systemPrimary:rgb(255,255,255) }
         .player-bar__floating-player { position:fixed; bottom:20px; left:260px; right:0; height:54px; padding-inline:20px }
         .chrome-player.official-scope { position:relative; height:56px; max-width:668px; border-radius:1000px; color:var(--systemPrimary) }
-        .chrome-player.official-scope::before { content:''; position:absolute; inset:0; background:var(--material); backdrop-filter:saturate(2.2) blur(16px); border-radius:inherit }
-        </style></head><body><div class="app-container"><main style="height:2000px">Page</main>
+        .chrome-player.official-scope::before { content:''; position:absolute; inset:0; background:var(--glassMaterialBackground); backdrop-filter:var(--glassMaterialBackdropFilter,saturate(220%) blur(16px)); box-shadow:0 10px 40px var(--glassMaterialShadowColor); border-radius:inherit }
+        .is-light-theme .chrome-player::before { --glassMaterialBackground:var(--glassMaterialBackground-onLight); --glassMaterialShadowColor:var(--glassMaterialShadowColor-onLight) }
+        .is-dark-theme .chrome-player::before { --glassMaterialBackground:var(--glassMaterialBackground-onDark); --glassMaterialShadowColor:var(--glassMaterialShadowColor-onDark) }
+        .search-input__text-field.official-scope, .search-scope-bar__pill-container.official-scope { background-color:var(--pageBG); border-radius:1000px }
+        .search-input__text-field { border:1px solid gray; outline:2px solid red }
+        .search-input-wrapper, .search-scope-bar__pill-container { box-shadow:0 10px 40px #0000001a }
+        .search-scope-bar__pill-container::before { content:''; background:rgba(0,0,0,.1); transform:translateX(4px) }
+        </style></head><body><div class="app-container"><main style="height:2000px">Page
+        <div class="search-input-wrapper"><input class="search-input__text-field official-scope" type="search" aria-label="検索"></div>
+        <div class="search-scope-bar__pill-container official-scope"><input type="radio" name="scope" checked>Apple Music<input type="radio" name="scope">ライブラリ</div></main>
         <div class="player-bar__floating-player"><div class="chrome-player official-scope">Official player</div></div>
         </div></body></html>
         """, baseURL: URL(string: "https://music.apple.com/jp/"))
         try await waitFor(view, "!!document.querySelector('.music-prayer-controls')")
         for dark in [false, true] {
-            _ = try await view.evaluateJavaScript("document.querySelector('.app-container').classList.toggle('is-dark-theme', \(dark)); true")
+            _ = try await view.evaluateJavaScript("document.querySelector('.app-container').className='app-container \(dark ? "is-dark-theme" : "is-light-theme")'; true")
             let equal = try await view.evaluateJavaScript("""
             (() => {
                 const official = document.querySelector('.chrome-player:not(.music-prayer-controls)');
@@ -71,6 +82,22 @@ final class AppleMusicBrowserControlsTests: XCTestCase {
             })()
             """) as? Bool
             XCTAssertEqual(equal, true, "公式バーと同じテーマ・ガラス・高さを使用する")
+            let searchMaterial = try await view.evaluateJavaScript("""
+            (() => {
+                const player = getComputedStyle(document.querySelector('.chrome-player'), '::before');
+                const field = document.querySelector('.search-input__text-field');
+                const scope = document.querySelector('.search-scope-bar__pill-container');
+                const matches = [field, scope].every(element => {
+                    const style = getComputedStyle(element);
+                    return style.backgroundColor === player.backgroundColor && style.backdropFilter === player.backdropFilter;
+                });
+                return matches && [field.parentElement, scope].every(element => getComputedStyle(element).boxShadow === player.boxShadow)
+                    && getComputedStyle(field).outlineColor === 'rgb(255, 0, 0)'
+                    && getComputedStyle(scope, '::before').transform === 'matrix(1, 0, 0, 1, 4, 0)'
+                    && scope.querySelector('input').checked;
+            })()
+            """) as? Bool
+            XCTAssertEqual(searchMaterial, true, "検索の材質は公式バーに合わせ、入力フォーカスと切替の選択表示を保つ")
         }
         _ = try await view.evaluateJavaScript("window.scrollTo(0,500); window.musicPrayerControls.update({canGoBack:true,canAdd:true,isAdding:false,message:''}); true")
         let fixed = try await view.evaluateJavaScript("""

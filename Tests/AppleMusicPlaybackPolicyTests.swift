@@ -20,11 +20,16 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
         .scrollable-page { background-color:var(--pageBG) }
         .navigation { background:#fafafa }
         .side-panel { background:rgb(90,80,70) }
+        .library-track--header, .artist-detail-container { background:var(--pageBG) }
+        .artist-selection { background:rgb(221,31,52); color:white }
         @media(prefers-color-scheme:dark) { html { --pageBG:#1f1f1f } }
         .artwork{background-color:rgb(200,100,50)}
         </style></head>
         <body><div class="app-container"><main class="scrollable-page"><div class="artwork">ジャケット</div><button>再生</button></main>
-        <nav class="navigation">ライブラリ</nav><aside class="side-panel">右パネル</aside></div></body></html>
+        <nav class="navigation">ライブラリ</nav><aside class="side-panel">右パネル</aside>
+        <div class="library-track--header"><span role="columnheader">名前</span></div>
+        <div class="artist-detail-container"><h2>Alisa</h2><img alt="ジャケット"></div>
+        <div class="artist-selection">Alisa</div></div></body></html>
         """, baseURL: URL(string: "https://music.apple.com/"))
         for (appearance, expected) in [(NSAppearance.Name.aqua, 255), (.darkAqua, 31)] {
             window.appearance = NSAppearance(named: appearance)
@@ -32,12 +37,13 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
             var background: [Int]?
             for _ in 0..<100 {
                 background = try? await backgroundRGBA(view)
-                if background?.first == expected, background?.last == 255 { break }
+                if background?.first == expected, background?.last == 204 { break }
                 try await Task.sleep(for: .milliseconds(20))
             }
             for component in (background ?? []).prefix(3) { XCTAssertEqual(component, expected, accuracy: 1) }
             XCTAssertEqual(background?.count, 4)
-            XCTAssertEqual(background?.last, 255)
+            XCTAssertEqual(background?.last, 204)
+            XCTAssertEqual(view.value(forKey: "drawsBackground") as? Bool, false)
             let filter = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('.scrollable-page')).backdropFilter") as? String
             XCTAssertEqual(filter, "none")
             let navigation = try await backgroundRGBA(view, selector: ".navigation")
@@ -45,6 +51,12 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
             XCTAssertEqual(navigation, [250, 250, 250, 255], "左ナビゲーションも公式の背景を保つ")
             let sidePanel = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('.side-panel')).backgroundColor") as? String
             XCTAssertEqual(sidePanel, "rgb(90, 80, 70)", "別要素である右パネルの配色は変更しない")
+            for selector in [".library-track--header", ".artist-detail-container"] {
+                let fill = try await backgroundRGBA(view, selector: selector)
+                XCTAssertEqual(fill.last, 0, "ライブラリの見出しと詳細も共通の半透明背景を使う")
+            }
+            let selection = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('.artist-selection')).backgroundColor") as? String
+            XCTAssertEqual(selection, "rgb(221, 31, 52)", "選択中アーティストの赤い強調表示は維持する")
             let artwork = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('.artwork')).backgroundColor") as? String
             XCTAssertEqual(artwork, "rgb(200, 100, 50)")
             let button = try await view.evaluateJavaScript("document.querySelector('button').textContent") as? String
@@ -72,7 +84,7 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
         </style></head><body>
         <div class="app-container has-theme-override is-dark-theme"
           style="--joe-color:rgb(32,40,48);--systemPrimary-onDark:rgb(255,255,255);--systemPrimary-onLight:rgb(0,0,0)">
-          <main class="scrollable-page"><section class="section"><span id="song">曲名</span>
+            <main class="scrollable-page"><div class="container-detail-header-wrapper"><span>Album</span></div><section class="section"><span id="song">曲名</span>
           <button class="unavailable" disabled>配信対象外</button></section><div class="artwork">ジャケット</div></main>
         </div></body></html>
         """, baseURL: URL(string: "https://music.apple.com/"))
@@ -90,9 +102,16 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
                 """)
                 let actualBackground = try await backgroundRGBA(view)
                 let text = try await view.evaluateJavaScript("getComputedStyle(document.querySelector('#song')).color") as? String
-                let expected = darkAlbum ? [32, 40, 48, 255] : [240, 232, 220, 255]
+                let expected = darkAlbum ? [32, 40, 48, 204] : [240, 232, 220, 204]
                 XCTAssertEqual(actualBackground.count, 4)
-                XCTAssertEqual(actualBackground, expected)
+                for (actual, value) in zip(actualBackground, expected) {
+                    XCTAssertEqual(actual, value, accuracy: 1)
+                }
+                let duplicateFill = try await view.evaluateJavaScript("""
+                ['.scrollable-page', '.container-detail-header-wrapper'].map((selector, index) =>
+                    getComputedStyle(document.querySelector(selector), index ? '::after' : null).backgroundColor)
+                """) as? [String]
+                XCTAssertEqual(duplicateFill, ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"], "背景を重ねて不透明に戻さない")
                 XCTAssertEqual(text, darkAlbum ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)")
                 let disabled = try await view.evaluateJavaScript("document.querySelector('.unavailable').disabled && getComputedStyle(document.querySelector('.unavailable')).opacity === '0.4'") as? Bool
                 XCTAssertEqual(disabled, true, "公式の無効状態や透明度を一律に変更しない")
@@ -101,7 +120,7 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
     }
 
     @MainActor
-    private func backgroundRGBA(_ view: WKWebView, selector: String = ".scrollable-page") async throws -> [Int] {
+    private func backgroundRGBA(_ view: WKWebView, selector: String = ".app-container") async throws -> [Int] {
         let value = try await view.evaluateJavaScript("""
         (()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
         const context=canvas.getContext('2d');
