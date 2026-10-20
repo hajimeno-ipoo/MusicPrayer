@@ -98,6 +98,7 @@ struct PlayerView: View {
                     AppleMusicBrowserView(store: store.appleMusicBrowser, onAdd: { song in
                         store.addAppleMusicSong(song, selectIfEmpty: false)
                     }, onReturnToPlayer: store.showAppleMusicPlayer)
+                        .ignoresSafeArea(.container, edges: .top)
                         .opacity(store.isAppleMusicBrowserVisible ? 1 : 0)
                         .allowsHitTesting(store.isAppleMusicBrowserVisible)
                         .accessibilityHidden(!store.isAppleMusicBrowserVisible)
@@ -106,17 +107,25 @@ struct PlayerView: View {
         }
         .frame(minWidth: 860, minHeight: 800)
         .preferredColorScheme(store.isAppleMusicSearchVisible || store.isAppleMusicBrowserVisible ? nil : .dark)
-        .sheet(isPresented: $store.isAppleMusicSearchVisible, onDismiss: {
-            if showQueueAfterSearch {
+        .allowsHitTesting(!store.isAppleMusicSearchVisible)
+        .accessibilityHidden(store.isAppleMusicSearchVisible)
+        // macOS sheets are opaque; keep search in the window so glass can sample the player.
+        .overlay {
+            if store.isAppleMusicSearchVisible {
+                AppleMusicSearchView(store: store.appleMusicBrowser, onAdd: { song in
+                    showQueueAfterSearch = true
+                    store.addAppleMusicSong(song)
+                }, onSignIn: store.openAppleMusicSignIn,
+                   onClose: { store.isAppleMusicSearchVisible = false })
+                    .frame(width: 720, height: 640)
+                    .clipShape(.rect(cornerRadius: 20))
+            }
+        }
+        .onChange(of: store.isAppleMusicSearchVisible) { _, visible in
+            if !visible && showQueueAfterSearch {
                 showQueueAfterSearch = false
                 showQueue = true
             }
-        }) {
-            AppleMusicSearchView(store: store.appleMusicBrowser, onAdd: { song in
-                showQueueAfterSearch = true
-                store.addAppleMusicSong(song)
-            }, onSignIn: store.openAppleMusicSignIn,
-               onClose: { store.isAppleMusicSearchVisible = false })
         }
         .onChange(of: store.isAppleMusicActive) { _, active in
             if active { showLyrics = false }

@@ -373,6 +373,7 @@ final class AppleMusicStore: NSObject {
     }
 
     @ObservationIgnored private var webView: WKWebView?
+    @ObservationIgnored private var backNavigationObservation: NSKeyValueObservation?
     @ObservationIgnored private var popupWindows: [ObjectIdentifier: NSWindow] = [:]
     @ObservationIgnored private var mediaTask: Task<Void, Never>?
     @ObservationIgnored private var mediaGeneration: UInt64 = 0
@@ -574,9 +575,18 @@ final class AppleMusicStore: NSObject {
         // Playback is controlled by the native queue and buttons, including track-end advances.
         configuration.mediaTypesRequiringUserActionForPlayback = []
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        if isOfficialBrowser { AppleMusicAppearance.configure(webView) }
         webView.navigationDelegate = self
         webView.uiDelegate = self
         self.webView = webView
+        if isOfficialBrowser {
+            backNavigationObservation = webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] _, _ in
+                Task { @MainActor [weak self] in
+                    guard let self, let view = self.webView else { return }
+                    self.canGoBack = view.canGoBack
+                }
+            }
+        }
         isLoading = true
         webView.load(URLRequest(url: URL(string: "https://music.apple.com/jp/")!))
         return webView
@@ -604,6 +614,7 @@ final class AppleMusicStore: NSObject {
 
     func stop() {
         stopping = true
+        backNavigationObservation = nil
         preanalysis.setAllowed(false)
         audioCapture.setRecording(nil)
         musicAnalysis.interrupt()

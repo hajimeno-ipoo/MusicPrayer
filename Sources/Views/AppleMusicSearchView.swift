@@ -59,7 +59,6 @@ struct AppleMusicSearchView: View {
                 }
             }
             .padding(24)
-            .background(AppleMusicAppearance.panel)
             Divider()
             results
             Divider()
@@ -72,11 +71,9 @@ struct AppleMusicSearchView: View {
                     .help("公式画面で曲を選び、MusicPrayerの一覧へ直接追加できます")
             }
             .padding(.horizontal, 24).padding(.vertical, 16)
-            .background(AppleMusicAppearance.panel)
         }
         .frame(minWidth: 620, idealWidth: 720, minHeight: 560, idealHeight: 640)
-        .background(AppleMusicAppearance.background)
-        .presentationBackground(AppleMusicAppearance.background)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
         .onAppear { searchFocused = true }
         .onDisappear { store.cancelSearch() }
     }
@@ -96,6 +93,7 @@ struct AppleMusicSearchView: View {
                     songRow(song)
                 }
                 .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
                 .accessibilityLabel("\(song.title)、\(song.artist)を一覧に追加")
                 .help("一覧に追加")
             }

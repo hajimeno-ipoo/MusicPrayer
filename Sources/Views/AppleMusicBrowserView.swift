@@ -8,85 +8,12 @@ struct AppleMusicBrowserView: View {
     @State private var isAdding = false
     @State private var addMessage: String?
     @State private var addError: String?
-
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Button(action: onReturnToPlayer) {
-                    Label("プレイヤーに戻る", systemImage: "chevron.left")
-                }
-
-                Divider().frame(height: 20)
-
-                Button(action: store.goBack) {
-                    Image(systemName: "arrow.left")
-                }
-                .disabled(!store.canGoBack)
-                .accessibilityLabel("前のページに戻る")
-                .help("前のページに戻る")
-
-                Button(action: store.reload) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .accessibilityLabel("Apple Musicを再読み込み")
-                .help("再読み込み")
-
-                Label("Apple Music", systemImage: "music.note")
-                    .font(.headline)
-
-                Spacer()
-
-                Button(action: addCurrentSong) {
-                    Label(isAdding ? "曲を確認中…" : "再生中の曲を一覧に追加", systemImage: "plus.circle")
-                }
-                .disabled(isAdding || store.isLoading || !store.playback.available)
-                .help("Apple Musicで再生中または一時停止中の曲を、MusicPrayerの一覧に追加します")
-
-                if store.isLoading {
-                    ProgressView().controlSize(.small)
-                        .accessibilityLabel("Apple Musicを読み込み中")
-                }
-            }
-            .padding(.leading, 90)
-            .padding(.trailing, 20)
-            .padding(.vertical, 12)
-
-            Text("Apple Musicで曲を再生し、上の「再生中の曲を一覧に追加」を押してください。一時停止中も追加できます。")
-                .font(.callout).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24).padding(.bottom, 12)
-
-            if let addMessage {
-                Label(addMessage, systemImage: "checkmark.circle")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24).padding(.bottom, 12)
-            }
-
-            if let addError {
-                Label(addError, systemImage: "exclamationmark.triangle")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24).padding(.bottom, 12)
-            }
-
-            if let error = store.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
-            }
-
-            Divider()
-            AppleMusicWebView(store: store)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(AppleMusicAppearance.background)
+        AppleMusicBrowserWebView(store: store, canGoBack: store.canGoBack,
+            canAdd: !store.isLoading && store.playback.available, isAdding: isAdding,
+            message: addError ?? addMessage ?? "",
+            onReturnToPlayer: onReturnToPlayer, onAdd: addCurrentSong)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func addCurrentSong() {
@@ -109,12 +36,73 @@ struct AppleMusicBrowserView: View {
     }
 }
 
-struct AppleMusicWebView: NSViewRepresentable {
+struct AppleMusicBrowserWebView: NSViewRepresentable {
     let store: AppleMusicStore
+    let canGoBack: Bool
+    let canAdd: Bool
+    let isAdding: Bool
+    let message: String
+    let onReturnToPlayer: () -> Void
+    let onAdd: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> WKWebView {
-        store.webViewForDisplay()
+        let view = store.webViewForDisplay()
+        view.configuration.userContentController.add(
+            WeakControlsHandler(context.coordinator), name: "musicPrayerControls")
+        return view
     }
 
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+    func updateNSView(_ view: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.update(view)
+    }
+
+    static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
+        view.configuration.userContentController.removeScriptMessageHandler(forName: "musicPrayerControls")
+    }
+
+    @MainActor final class Coordinator: NSObject, WKScriptMessageHandler {
+        var parent: AppleMusicBrowserWebView
+        init(_ parent: AppleMusicBrowserWebView) { self.parent = parent }
+
+        func update(_ view: WKWebView) {
+            guard view.url?.host == "music.apple.com" else { return }
+            let state: [String: Any] = ["canGoBack": parent.canGoBack,
+                "canAdd": parent.canAdd,
+                "isAdding": parent.isAdding, "message": parent.message]
+            guard let data = try? JSONSerialization.data(withJSONObject: state),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            view.evaluateJavaScript("window.musicPrayerControls?.update(\(json))", completionHandler: nil)
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.frameInfo.isMainFrame,
+                  message.frameInfo.request.url?.host == "music.apple.com",
+                  let action = message.body as? String else { return }
+            switch action {
+            case "player": parent.onReturnToPlayer()
+            case "back": parent.store.goBack()
+            case "add": parent.onAdd()
+            case "ready": if let view = message.webView { update(view) }
+            default: break
+            }
+        }
+    }
+
+    // WKUserContentController retains its handler; the proxy keeps the SwiftUI coordinator weak.
+    @MainActor final class WeakControlsHandler: NSObject, WKScriptMessageHandler {
+        weak var target: Coordinator?
+        init(_ target: Coordinator) { self.target = target }
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            target?.userContentController(controller, didReceive: message)
+        }
+    }
+}
+
+struct AppleMusicWebView: NSViewRepresentable {
+    let store: AppleMusicStore
+    func makeNSView(context: Context) -> WKWebView { store.webViewForDisplay() }
+    func updateNSView(_ view: WKWebView, context: Context) {}
 }
