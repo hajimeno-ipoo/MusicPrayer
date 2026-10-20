@@ -15,45 +15,56 @@ final class CitySceneTests: XCTestCase {
         let width = 960, height = 540
         let opaque = try render(renderer, device: device, queue: queue, frame: frame,
                                 width: width, height: height, backgroundOpacity: 1).pixels
-        let glass = try render(renderer, device: device, queue: queue, frame: frame,
-                               width: width, height: height, backgroundOpacity: 0.18).pixels
-        XCTAssertEqual(opaque.count, width * height * 4)
-        XCTAssertEqual(glass.count, opaque.count)
-        guard opaque.count == width * height * 4, glass.count == opaque.count else { return }
-        var translucentBackground = 0, opaqueGeometry = 0, visibleGeometry = 0
-        var maximumGeometryDifference = 0, invalidPremultipliedPixels = 0, nonOpaqueReferencePixels = 0
-        for index in stride(from: 0, to: glass.count, by: 4) {
-            let alpha = Int(glass[index + 3])
-            if opaque[index + 3] != 255 { nonOpaqueReferencePixels += 1 }
-            if alpha < 80 { translucentBackground += 1 }
-            if (0..<3).contains(where: { Int(glass[index + $0]) > alpha + 1 }) {
-                invalidPremultipliedPixels += 1
-            }
-            if alpha == 255 {
-                opaqueGeometry += 1
-                // Compare visible surfaces, where uniformly fading RGB would be
-                // measurable. Dark background pixels cannot satisfy this check.
-                let referencePeak = max(opaque[index], max(opaque[index + 1], opaque[index + 2]))
-                if referencePeak >= 64 {
-                    visibleGeometry += 1
-                    for channel in 0..<3 {
-                        maximumGeometryDifference = max(maximumGeometryDifference,
-                            abs(Int(glass[index + channel]) - Int(opaque[index + channel])))
+        for opacity in [Float(0.18), 0] {
+            let glass = try render(renderer, device: device, queue: queue, frame: frame,
+                                   width: width, height: height, backgroundOpacity: opacity).pixels
+            XCTAssertEqual(opaque.count, width * height * 4)
+            XCTAssertEqual(glass.count, opaque.count)
+            guard opaque.count == width * height * 4, glass.count == opaque.count else { return }
+            var translucentBackground = 0, clearBackground = 0, opaqueGeometry = 0, visibleGeometry = 0
+            var maximumGeometryDifference = 0, invalidPremultipliedPixels = 0, nonOpaqueReferencePixels = 0
+            for index in stride(from: 0, to: glass.count, by: 4) {
+                let alpha = Int(glass[index + 3])
+                if opaque[index + 3] != 255 { nonOpaqueReferencePixels += 1 }
+                if alpha < 80 { translucentBackground += 1 }
+                if alpha == 0 {
+                    clearBackground += 1
+                    XCTAssertTrue(glass[index..<(index + 3)].allSatisfy { $0 == 0 },
+                                  "Fully transparent surround pixels must not retain the dark studio color.")
+                }
+                if (0..<3).contains(where: { Int(glass[index + $0]) > alpha + 1 }) {
+                    invalidPremultipliedPixels += 1
+                }
+                if alpha == 255 {
+                    opaqueGeometry += 1
+                    // Compare visible surfaces, where uniformly fading RGB would be
+                    // measurable. Dark background pixels cannot satisfy this check.
+                    let referencePeak = max(opaque[index], max(opaque[index + 1], opaque[index + 2]))
+                    if referencePeak >= 64 {
+                        visibleGeometry += 1
+                        for channel in 0..<3 {
+                            maximumGeometryDifference = max(maximumGeometryDifference,
+                                abs(Int(glass[index + channel]) - Int(opaque[index + channel])))
+                        }
                     }
                 }
             }
+            XCTAssertEqual(nonOpaqueReferencePixels, 0, "Reduce Transparency must retain an opaque drawable.")
+            XCTAssertGreaterThan(translucentBackground, width * height / 4,
+                                 "The studio surround must reveal glass across a substantial area.")
+            if opacity == 0 {
+                XCTAssertGreaterThan(clearBackground, width * height / 4,
+                                     "Clear glass must remove the studio surround rather than merely dim it.")
+            }
+            XCTAssertGreaterThan(opaqueGeometry, width * height / 100,
+                                 "Solid city geometry must remain opaque in the same frame as the transparent surround.")
+            XCTAssertGreaterThan(visibleGeometry, 500,
+                                 "The color comparison must cover visible city surfaces, not just black pixels.")
+            XCTAssertLessThanOrEqual(maximumGeometryDifference, 3,
+                                     "Background transparency must not fade the RGB of solid city surfaces.")
+            XCTAssertEqual(invalidPremultipliedPixels, 0,
+                           "Stored sRGB channels must be premultiplied for Core Animation compositing.")
         }
-        XCTAssertEqual(nonOpaqueReferencePixels, 0, "Reduce Transparency must retain an opaque drawable.")
-        XCTAssertGreaterThan(translucentBackground, width * height / 4,
-                             "The studio surround must reveal glass across a substantial area.")
-        XCTAssertGreaterThan(opaqueGeometry, width * height / 100,
-                             "Solid city geometry must remain opaque in the same frame as the transparent surround.")
-        XCTAssertGreaterThan(visibleGeometry, 500,
-                             "The color comparison must cover visible city surfaces, not just black pixels.")
-        XCTAssertLessThanOrEqual(maximumGeometryDifference, 3,
-                                 "Background transparency must not fade the RGB of solid city surfaces.")
-        XCTAssertEqual(invalidPremultipliedPixels, 0,
-                       "Stored sRGB channels must be premultiplied for Core Animation compositing.")
     }
 
     @MainActor

@@ -187,7 +187,7 @@ struct AnalysisActivityView: View {
             let x = CGFloat(min(max(0, time), duration)) * AnalysisTimeAxis.pointsPerSecond - horizontalOffset
             playhead.move(to: CGPoint(x: x, y: 0))
             playhead.addLine(to: CGPoint(x: x, y: size.height))
-            context.stroke(playhead, with: .color(.white.opacity(0.8)), lineWidth: 1)
+            context.stroke(playhead, with: .color(Color.primary.opacity(0.8)), lineWidth: 1)
         }.clipped().accessibilityHidden(true)
     }
 
@@ -227,7 +227,7 @@ struct AnalysisActivityPlot: View {
                     var grid = Path()
                     grid.move(to: CGPoint(x: x, y: y))
                     grid.addLine(to: CGPoint(x: x, y: y + graphHeight))
-                    context.stroke(grid, with: .color(.white.opacity(second % 5 == 0 ? 0.18 : 0.06)), lineWidth: 0.5)
+                    context.stroke(grid, with: .color(Color.primary.opacity(second % 5 == 0 ? 0.18 : 0.06)), lineWidth: 0.5)
                 }
             }
             for (index, row) in rows.enumerated() {
@@ -240,7 +240,7 @@ struct AnalysisActivityPlot: View {
                     var grid = Path()
                     grid.move(to: CGPoint(x: 0, y: y))
                     grid.addLine(to: CGPoint(x: size.width, y: y))
-                    chart.stroke(grid, with: .color(.white.opacity(0.18)), lineWidth: 0.5)
+                    chart.stroke(grid, with: .color(Color.primary.opacity(0.18)), lineWidth: 0.5)
                 }
                 chart.stroke(row.path(height: graphHeight, window: scaleWindow), with: .color(row.color), lineWidth: 1.5)
             }
@@ -248,7 +248,7 @@ struct AnalysisActivityPlot: View {
             let x = CGFloat(min(max(0, time), duration)) * points
             playhead.move(to: CGPoint(x: x, y: 0))
             playhead.addLine(to: CGPoint(x: x, y: size.height))
-            context.stroke(playhead, with: .color(.white.opacity(0.8)), lineWidth: 1)
+            context.stroke(playhead, with: .color(Color.primary.opacity(0.8)), lineWidth: 1)
         }.accessibilityHidden(true)
     }
 }

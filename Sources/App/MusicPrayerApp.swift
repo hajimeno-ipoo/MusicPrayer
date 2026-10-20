@@ -3,13 +3,13 @@ import AppKit
 
 struct MusicPrayerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @AppStorage("musicPrayer.appearance") private var appearance: PlayerAppearance = .system
     @State private var store = PlayerStore()
     @State private var didStartRestore = false
     @State private var showFontLicenses = false
     var body: some Scene {
         Window("Music Prayer", id: "player") {
-            PlayerGlassContainer(store: store,
-                                 usesDarkAppearance: !store.isAppleMusicSearchVisible && !store.isAppleMusicBrowserVisible)
+            PlayerGlassContainer(store: store, appearance: appearance)
                 .frame(minWidth: 860, minHeight: 800)
                 .ignoresSafeArea()
                 .containerBackground(.clear, for: .window)
@@ -25,6 +25,13 @@ struct MusicPrayerApp: App {
         .defaultSize(width: 1160, height: 790)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            CommandMenu("表示") {
+                Picker("外観", selection: $appearance) {
+                    ForEach(PlayerAppearance.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+            }
             CommandGroup(after: .appInfo) {
                 Button("フォントのライセンス…") {
                     showFontLicenses = true

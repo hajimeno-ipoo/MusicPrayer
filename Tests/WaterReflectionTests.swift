@@ -16,29 +16,35 @@ final class WaterReflectionTests: XCTestCase {
         }
         let water = try fixture.texture { _, _ in .zero }
         let opaque = try fixture.render(scene: scene, water: water, horizon: horizon)
-        let glass = try fixture.render(scene: scene, water: water, horizon: horizon, backgroundOpacity: 0.18)
-        let body = (height / 4 * width + width / 2) * 4
-        let background = (12 * width + 12) * 4
-        XCTAssertEqual(glass[body + 3], 1, accuracy: 0.001)
-        XCTAssertEqual(glass[background + 3], 0.18, accuracy: 0.001)
-        for channel in 0..<3 {
-            XCTAssertEqual(glass[body + channel], opaque[body + channel], accuracy: 0.03,
-                           "The ribbon's own color must survive the background transparency change.")
-        }
-        func encoded(_ linear: Float) -> Float {
-            linear <= 0.0031308 ? linear * 12.92 : 1.055 * pow(linear, 1 / 2.4) - 0.055
-        }
-        for pixel in stride(from: 0, to: glass.count, by: 4) {
-            XCTAssertTrue(glass[pixel..<(pixel + 4)].allSatisfy(\.isFinite))
-            for channel in 0..<3 {
-                XCTAssertLessThanOrEqual(encoded(glass[pixel + channel]), glass[pixel + 3] + 0.002,
-                                         "Stored sRGB color must be premultiplied by its coverage.")
+        for opacity in [Float(0.18), 0] {
+            let glass = try fixture.render(scene: scene, water: water, horizon: horizon, backgroundOpacity: opacity)
+            let body = (height / 4 * width + width / 2) * 4
+            let background = (12 * width + 12) * 4
+            XCTAssertEqual(glass[body + 3], 1, accuracy: 0.001)
+            XCTAssertEqual(glass[background + 3], opacity, accuracy: 0.001)
+            if opacity == 0 {
+                XCTAssertTrue(glass[background..<(background + 4)].allSatisfy { $0 == 0 },
+                              "Clear glass must not retain any Metal background color or opacity.")
             }
+            for channel in 0..<3 {
+                XCTAssertEqual(glass[body + channel], opaque[body + channel], accuracy: 0.03,
+                               "The ribbon's own color must survive the background transparency change.")
+            }
+            func encoded(_ linear: Float) -> Float {
+                linear <= 0.0031308 ? linear * 12.92 : 1.055 * pow(linear, 1 / 2.4) - 0.055
+            }
+            for pixel in stride(from: 0, to: glass.count, by: 4) {
+                XCTAssertTrue(glass[pixel..<(pixel + 4)].allSatisfy(\.isFinite))
+                for channel in 0..<3 {
+                    XCTAssertLessThanOrEqual(encoded(glass[pixel + channel]), glass[pixel + 3] + 0.002,
+                                             "Stored sRGB color must be premultiplied by its coverage.")
+                }
+            }
+            let backdropChangeAtBody = 1 - glass[body + 3]
+            let backdropChangeAtBackground = 1 - glass[background + 3]
+            XCTAssertEqual(backdropChangeAtBody, 0, accuracy: 0.001)
+            XCTAssertGreaterThan(backdropChangeAtBackground, 0.8)
         }
-        let backdropChangeAtBody = 1 - glass[body + 3]
-        let backdropChangeAtBackground = 1 - glass[background + 3]
-        XCTAssertEqual(backdropChangeAtBody, 0, accuracy: 0.001)
-        XCTAssertGreaterThan(backdropChangeAtBackground, 0.8)
     }
 
     func testUniformReflectionFadesSmoothlyWithoutHorizontalBrightnessBands() throws {

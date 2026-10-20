@@ -43,7 +43,7 @@ final class PlayerDropRoutingTests: XCTestCase {
             browser.stopLoading()
         }
         let selected = store.currentQueueTrack?.id
-        let host = NSHostingView(rootView: PlayerGlassContainer(store: store, usesDarkAppearance: true))
+        let host = NSHostingView(rootView: PlayerGlassContainer(store: store, appearance: .dark))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 800), styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = host
         window.orderBack(nil)

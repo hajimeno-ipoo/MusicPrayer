@@ -6,6 +6,8 @@ struct PlayerView: View {
     @Bindable var store: PlayerStore
     var fileDropSession = PlayerFileDrop.Session()
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var glassColorScheme
+    @AppStorage("musicPrayer.appearance") private var appearance: PlayerAppearance = .system
     @AppStorage(LyricFont.preferenceKey) private var lyricFont = LyricFont.system
     @State private var showQueue = false
     @State private var showQueueAfterSearch = false
@@ -20,6 +22,7 @@ struct PlayerView: View {
     private var dropTarget: Bool { fileDropSession.isTargeted }
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
     private var overlayVisible: Bool { store.isAppleMusicActive || engaged || !store.isPlaying }
+    private var controlGlass: Glass { .regular.interactive() }
 
     var body: some View {
         GeometryReader { geometry in
@@ -31,7 +34,7 @@ struct PlayerView: View {
                         .accessibilityHidden(true)
                 }
                 ZStack {
-                    MetalVisualizerView(source: store.visualSource, backgroundOpacity: reduceTransparency ? 1 : 0.18)
+                    MetalVisualizerView(source: store.visualSource, backgroundOpacity: reduceTransparency ? 1 : 0)
                         .ignoresSafeArea()
                     if store.isAppleMusicActive && store.visualizerStyle != .cassette {
                         appleMusicArtwork
@@ -40,10 +43,12 @@ struct PlayerView: View {
                             .position(x: geometry.size.width / 2, y: geometry.size.height * 0.55)
                     }
                     PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont)
+                        .environment(\.colorScheme, .dark)
                     VStack(spacing: 0) {
                         header
                         if store.tracks.isEmpty && !store.isAppleMusicActive {
                             welcome
+                                .environment(\.colorScheme, .dark)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.leading, 50).padding(.trailing, 24)
                                 .padding(.top, 28)
@@ -51,6 +56,7 @@ struct PlayerView: View {
                         Spacer(minLength: 20)
                         VStack(spacing: 18) {
                             trackInformation
+                                .environment(\.colorScheme, .dark)
                                 .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
                                 .opacity(overlayVisible ? 1 : 0)
                                 .allowsHitTesting(overlayVisible)
@@ -72,9 +78,11 @@ struct PlayerView: View {
                             if showAnalysis {
                                 AnalysisPanel(analysis: store.analysis, time: store.previewTime ?? store.position,
                                               duration: store.duration, isPlaying: store.isPlaying)
+                                    .environment(\.colorScheme, glassColorScheme)
                                     .frame(height: min(400, max(280, geometry.size.height - 460)))
                             }
                             MusicalTimeline(store: store)
+                                .environment(\.colorScheme, .dark)
                                 .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
                                 .opacity(overlayVisible ? 1 : 0)
                                 .allowsHitTesting(overlayVisible)
@@ -86,7 +94,11 @@ struct PlayerView: View {
                     }
                     if dropTarget {
                         RoundedRectangle(cornerRadius: 24).stroke(cyan, style: StrokeStyle(lineWidth: 2, dash: [8, 8])).padding(14)
-                            .overlay { Label("曲・歌詞ファイルをここへドロップ", systemImage: "doc.badge.plus").font(.title2).padding(24).glassEffect() }
+                            .overlay {
+                                Label("曲・歌詞ファイルをここへドロップ", systemImage: "doc.badge.plus")
+                                    .font(.title2).padding(24).glassEffect()
+                                    .environment(\.colorScheme, glassColorScheme)
+                            }
                             .allowsHitTesting(false)
                     }
                 }
@@ -106,7 +118,6 @@ struct PlayerView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 800)
-        .preferredColorScheme(store.isAppleMusicSearchVisible || store.isAppleMusicBrowserVisible ? nil : .dark)
         .allowsHitTesting(!store.isAppleMusicSearchVisible)
         .accessibilityHidden(store.isAppleMusicSearchVisible)
         // macOS sheets are opaque; keep search in the window so glass can sample the player.
@@ -184,7 +195,10 @@ struct PlayerView: View {
                 .accessibilityLabel("Apple Musicを開く")
                 iconButton("曲を追加", "plus", action: store.openFiles)
                 iconButton("曲の一覧", "list.bullet", action: { showQueue.toggle() })
-                    .popover(isPresented: $showQueue, arrowEdge: .bottom) { QueueView(store: store) }
+                    .popover(isPresented: $showQueue, arrowEdge: .bottom) {
+                        QueueView(store: store)
+                            .preferredColorScheme(glassColorScheme)
+                    }
                 iconButton("詳しい解析", "waveform.path", active: showAnalysis, action: { withAnimation(.easeInOut(duration: 0.3)) { showAnalysis.toggle() } })
                 iconButton("歌詞", "text.quote", active: showLyrics, action: {
                     if showLyrics { showLyrics = false }
@@ -197,6 +211,7 @@ struct PlayerView: View {
                             let generation = store.playbackGeneration
                             Task { @MainActor in await importDroppedFiles(urls, generation: generation) }
                         })
+                        .preferredColorScheme(glassColorScheme)
                     }
                 Menu {
                     Picker("歌詞フォント", selection: $lyricFont) {
@@ -206,9 +221,12 @@ struct PlayerView: View {
                     }.pickerStyle(.inline)
                 } label: {
                     Image(systemName: "textformat")
+                        .foregroundStyle(.primary)
                         .font(.system(size: 13, weight: .medium)).frame(width: 30, height: 28)
                 }
+                .environment(\.colorScheme, glassColorScheme)
                 .menuStyle(.borderlessButton)
+                .tint(.primary)
                 .accessibilityLabel("歌詞フォント：\(lyricFont.title)")
                 .help("歌詞フォントを選びます")
                 Menu {
@@ -219,14 +237,37 @@ struct PlayerView: View {
                     }.pickerStyle(.inline)
                 } label: {
                     Label(store.visualizerStyle.title, systemImage: "sparkles")
+                        .foregroundStyle(.primary)
                         .font(.system(size: 11, weight: .medium)).padding(.horizontal, 8).frame(height: 28)
                 }
+                .environment(\.colorScheme, glassColorScheme)
                 .menuStyle(.borderlessButton)
+                .tint(.primary)
                 .accessibilityLabel("ビジュアライザー：\(store.visualizerStyle.title)")
                 .help("ビジュアライザーを選びます")
+                Menu {
+                    Picker("外観", selection: $appearance) {
+                        ForEach(PlayerAppearance.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }.pickerStyle(.inline)
+                } label: {
+                    Image(systemName: appearance.symbolName)
+                        .foregroundStyle(.primary)
+                        .font(.system(size: 13, weight: .medium)).frame(width: 30, height: 28)
+                }
+                .environment(\.colorScheme, glassColorScheme)
+                .menuStyle(.borderlessButton)
+                .tint(.primary)
+                .menuIndicator(.hidden)
+                .accessibilityLabel("外観：\(appearance.title)")
+                .help("ライト・ダーク・システム設定を切り替え")
                 iconButton("フルスクリーン", "arrow.up.left.and.arrow.down.right", action: { NSApp.keyWindow?.toggleFullScreen(nil) })
             }
-            .padding(6).glassEffect(.regular, in: .capsule)
+            .padding(6)
+            .glassEffect(controlGlass, in: .capsule)
+            .foregroundStyle(.primary)
+            .environment(\.colorScheme, glassColorScheme)
         }
         .padding(.trailing, 24).padding(.top, 18)
         .opacity(overlayVisible ? 1 : 0)
@@ -372,19 +413,22 @@ struct PlayerView: View {
                     iconButton("リピート", store.repeatSetting == .one ? "repeat.1" : "repeat", active: store.repeatSetting != .off,
                                action: { store.repeatSetting = RepeatSetting(rawValue: (store.repeatSetting.rawValue + 1) % 3)! })
                 }
-                .padding(.horizontal, 14).padding(.vertical, 5).glassEffect(.regular.interactive(), in: .capsule)
+                .padding(.horizontal, 14).padding(.vertical, 5)
+                .glassEffect(controlGlass, in: .capsule)
 
                 HStack(spacing: 10) {
                     Button(action: store.toggleMute) {
                         Image(systemName: store.isMuted || store.volume == 0 ? "speaker.slash" : "speaker.wave.2")
                             .font(.system(size: 12)).frame(width: 24, height: 28)
-                            .foregroundStyle(store.isMuted ? cyan : .white)
+                            .foregroundStyle(store.isMuted ? cyan : .primary)
                     }
                     .buttonStyle(.plain)
                     .help(store.isMuted ? "ミュートを解除" : "ミュート")
                     .accessibilityLabel(store.isMuted ? "ミュートを解除" : "ミュート")
                     .accessibilityValue(store.isMuted ? "オン" : "オフ")
-                    Slider(value: $store.volume, in: 0...1).frame(width: 100).tint(cyan).accessibilityLabel("音量")
+                    Slider(value: $store.volume, in: 0...1).frame(width: 100).tint(cyan)
+                        .environment(\.colorScheme, .dark)
+                        .accessibilityLabel("音量")
                     Menu {
                         Picker("出力先", selection: Binding(get: { store.selectedOutputID }, set: store.chooseOutput)) {
                             Text("Macの既定の出力先").tag(UInt32(0))
@@ -401,19 +445,25 @@ struct PlayerView: View {
                             Text(store.outputDeviceName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
                         }
                         .frame(width: 180, height: 28, alignment: .leading)
+                        .foregroundStyle(.primary)
                     }
+                    .environment(\.colorScheme, glassColorScheme)
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 180)
+                    .tint(.primary)
                     .help("音の出力先：\(store.outputName)")
                     .accessibilityLabel("音の出力先：\(store.outputName)")
                 }
-                .padding(.horizontal, 18).padding(.vertical, 16).glassEffect(.regular, in: .capsule)
+                .padding(.horizontal, 18).padding(.vertical, 16)
+                .glassEffect(controlGlass, in: .capsule)
                 .opacity(overlayVisible ? 1 : 0)
                 .allowsHitTesting(overlayVisible)
             }
         }
+        .foregroundStyle(.primary)
+        .environment(\.colorScheme, glassColorScheme)
     }
     private func iconButton(_ label: String, _ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30).foregroundStyle(active ? cyan : .white.opacity(0.85)) }
+        Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30).foregroundStyle(active ? cyan : Color.primary.opacity(0.85)) }
             .buttonStyle(.plain).help(label).accessibilityLabel(label)
     }
     private func errorRow(_ error: String, retry: (() -> Void)?) -> some View {

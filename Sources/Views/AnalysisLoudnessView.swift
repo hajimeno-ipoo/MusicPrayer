@@ -182,7 +182,7 @@ struct AnalysisLoudnessPlot: View {
           grid.move(to: CGPoint(x: x, y: y))
           grid.addLine(to: CGPoint(x: x, y: y + graphHeight))
           context.stroke(
-            grid, with: .color(.white.opacity(second % 5 == 0 ? 0.18 : 0.06)), lineWidth: 0.5)
+            grid, with: .color(Color.primary.opacity(second % 5 == 0 ? 0.18 : 0.06)), lineWidth: 0.5)
         }
       }
       for (index, values) in [analysis.momentary, analysis.shortTerm].enumerated() {
@@ -201,7 +201,7 @@ struct AnalysisLoudnessPlot: View {
           let tickY = scale.y(tick, height: graphHeight)
           grid.move(to: CGPoint(x: 0, y: tickY))
           grid.addLine(to: CGPoint(x: size.width, y: tickY))
-          chart.stroke(grid, with: .color(.white.opacity(0.18)), lineWidth: 0.5)
+          chart.stroke(grid, with: .color(Color.primary.opacity(0.18)), lineWidth: 0.5)
         }
         chart.stroke(
           AnalysisTimelineRow.valuePath(
@@ -222,7 +222,7 @@ struct AnalysisLoudnessPlot: View {
       let x = CGFloat(min(max(0, time), duration)) * points
       playhead.move(to: CGPoint(x: x, y: 0))
       playhead.addLine(to: CGPoint(x: x, y: size.height))
-      context.stroke(playhead, with: .color(.white.opacity(0.8)), lineWidth: 1)
+      context.stroke(playhead, with: .color(Color.primary.opacity(0.8)), lineWidth: 1)
     }.accessibilityHidden(true)
   }
 }

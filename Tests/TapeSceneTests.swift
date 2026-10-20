@@ -41,35 +41,41 @@ final class TapeSceneTests: XCTestCase {
         let renderer = try TapeSceneRenderer(device: device)
         let frame = musicalFrame()
         let opaque = try render(renderer, device: device, queue: queue, frame: frame, backgroundOpacity: 1)
-        let glass = try render(renderer, device: device, queue: queue, frame: frame, backgroundOpacity: 0.18)
+        for opacity in [Float(0.18), 0] {
+            let glass = try render(renderer, device: device, queue: queue, frame: frame, backgroundOpacity: opacity)
 
-        // These fixed background samples are outside the cassette, spectrum,
-        // time labels and progress marks in the 640x480 control view.
-        for y in stride(from: 20, through: 60, by: 10) {
-            for x in stride(from: 20, through: 60, by: 10) {
-                let index = (y * width + x) * 4
-                XCTAssertEqual(opaque[index + 3], 255)
-                XCTAssertLessThanOrEqual(abs(Int(glass[index + 3]) - 46), 1,
-                                         "Only the tabletop/background should reveal the glass beneath it.")
-                for channel in 0..<3 {
-                    XCTAssertLessThanOrEqual(glass[index + channel], glass[index + 3],
-                                             "The drawable must contain premultiplied color.")
+            // These fixed background samples are outside the cassette, spectrum,
+            // time labels and progress marks in the 640x480 control view.
+            for y in stride(from: 20, through: 60, by: 10) {
+                for x in stride(from: 20, through: 60, by: 10) {
+                    let index = (y * width + x) * 4
+                    XCTAssertEqual(opaque[index + 3], 255)
+                    if opacity == 0 {
+                        XCTAssertTrue(glass[index..<(index + 4)].allSatisfy { $0 == 0 },
+                                      "Clear glass must not retain any tabletop color outside the cassette.")
+                    }
+                    XCTAssertLessThanOrEqual(abs(Int(glass[index + 3]) - Int((opacity * 255).rounded())), 1,
+                                             "Only the tabletop/background should reveal the glass beneath it.")
+                    for channel in 0..<3 {
+                        XCTAssertLessThanOrEqual(glass[index + channel], glass[index + 3],
+                                                 "The drawable must contain premultiplied color.")
+                    }
                 }
             }
-        }
 
-        // The center of the existing inspection-window crop has opaque cassette
-        // backing beneath its clear cover. It excludes the open reel apertures.
-        // A uniform view alpha would also fade these pixels and fail this check.
-        for y in 223..<230 {
-            for x in 320..<329 {
-                let index = (y * width + x) * 4
-                XCTAssertEqual(opaque[index + 3], 255)
-                XCTAssertEqual(glass[index + 3], 255,
-                               "The cassette must stay opaque while its surroundings become transparent.")
-                for channel in 0..<3 {
-                    XCTAssertLessThanOrEqual(abs(Int(glass[index + channel]) - Int(opaque[index + channel])), 1,
-                                             "Background transparency must preserve the cassette's visible color.")
+            // The center of the existing inspection-window crop has opaque cassette
+            // backing beneath its clear cover. It excludes the open reel apertures.
+            // A uniform view alpha would also fade these pixels and fail this check.
+            for y in 223..<230 {
+                for x in 320..<329 {
+                    let index = (y * width + x) * 4
+                    XCTAssertEqual(opaque[index + 3], 255)
+                    XCTAssertEqual(glass[index + 3], 255,
+                                   "The cassette must stay opaque while its surroundings become transparent.")
+                    for channel in 0..<3 {
+                        XCTAssertLessThanOrEqual(abs(Int(glass[index + channel]) - Int(opaque[index + channel])), 1,
+                                                 "Background transparency must preserve the cassette's visible color.")
+                    }
                 }
             }
         }

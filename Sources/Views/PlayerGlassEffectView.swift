@@ -19,6 +19,17 @@ final class PlayerGlassEffectView: NSGlassEffectView {
         super.viewDidMoveToWindow()
         window?.isOpaque = false
         window?.backgroundColor = .clear
+        updateGlassTint()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateGlassTint()
+    }
+
+    private func updateGlassTint() {
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        tintColor = isDark ? NSColor.black.withAlphaComponent(0.35) : nil
     }
 
     private func fileURLs(_ sender: NSDraggingInfo) -> [URL]? {
