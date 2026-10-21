@@ -20,10 +20,63 @@ final class AppleMusicPreanalysisTests: XCTestCase {
         while true { try await Task.sleep(for: .seconds(30)) }
     }
 
+    func testEachCompletionKeepsItsOutcomeAndShowsSimpleStatusWithoutAutomaticRetry() async throws {
+        let outcomes: [AppleMusicPreanalysis.Completion] = [
+            .complete, .noLyrics, .partialLyrics(recognized: 3, total: 8),
+            .failedLyrics, .missingLyrics, .unmatchedLyrics
+        ]
+        for completion in outcomes {
+            let queue = AppleMusicPreanalysis(), track = song("result")
+            var attempts = 0
+            queue.operation = { _ in attempts += 1; return completion }
+            queue.setSongs([track]); queue.setAllowed(true)
+            try await waitUntil("完了状態が届きませんでした") { attempts == 1 && !queue.isWorking }
+            XCTAssertEqual(queue.status(for: track), completion == .noLyrics ? "解析済み・歌詞なし" : "解析済み")
+            XCTAssertEqual(queue.completions[track.id], completion)
+            XCTAssertTrue(queue.errors.isEmpty, "歌詞の状態を音楽解析の失敗にしない")
+            for _ in 0..<5 {
+                queue.setAllowed(true)
+                queue.setSongs([track])
+                await Task.yield()
+            }
+            XCTAssertEqual(attempts, 1, "歌詞の未取得・未完了だけを理由に自動再試行しない")
+            await queue.yieldToPlayback()
+        }
+    }
+
+    func testRetryClearsPartialCompletionAndReplacesItWithCompleteOutcome() async throws {
+        let queue = AppleMusicPreanalysis(), gate = Gate(), track = song("partial")
+        var attempts = 0
+        queue.operation = { _ in
+            attempts += 1
+            if attempts == 1 { return .partialLyrics(recognized: 2, total: 5) }
+            await gate.wait()
+            return .complete
+        }
+        defer { gate.open(); queue.setAllowed(false) }
+        queue.setSongs([track]); queue.setAllowed(true)
+        try await waitUntil("部分同期の結果が届きませんでした") { attempts == 1 && !queue.isWorking }
+        XCTAssertEqual(queue.status(for: track), "解析済み")
+        XCTAssertEqual(queue.completions[track.id], .partialLyrics(recognized: 2, total: 5))
+        queue.setAllowed(false)
+        queue.retry(songID: track.id)
+        XCTAssertNil(queue.completions[track.id])
+        XCTAssertEqual(queue.status(for: track), "解析待ち")
+        queue.setAllowed(true)
+        try await waitUntil("再試行が始まりませんでした") { attempts == 2 }
+        XCTAssertNil(queue.completions[track.id])
+        gate.open()
+        try await waitUntil("完全な同期結果へ更新されませんでした") { !queue.isWorking }
+        XCTAssertEqual(queue.completions[track.id], .complete)
+        XCTAssertEqual(queue.status(for: track), "解析済み")
+        queue.setSongs([])
+        XCTAssertNil(queue.completions[track.id], "削除した曲の完了結果を保持しない")
+    }
+
     func testDoesNotStartUntilAllowedAndDeduplicatesRegistrations() async throws {
         let queue = AppleMusicPreanalysis()
         var started: [String] = []
-        queue.operation = { started.append($0.id) }
+        queue.operation = { started.append($0.id); return .complete }
         queue.setSongs([song("first"), song("first")])
         for _ in 0..<5 { await Task.yield() }
         XCTAssertTrue(started.isEmpty)
@@ -43,6 +96,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
             defer { active -= 1 }
             if attempts == 1 { await first.wait() }
             else { await second.wait() }
+            return attempts == 1 ? .partialLyrics(recognized: 1, total: 4) : .complete
         }
         defer { first.open(); second.open(); queue.setAllowed(false) }
         queue.setSongs([song("same")]); queue.setAllowed(true)
@@ -52,12 +106,14 @@ final class AppleMusicPreanalysisTests: XCTestCase {
         XCTAssertEqual(attempts, 1, "進行中の解析と再試行を同時に実行しない")
         first.open()
         try await waitUntil("後片付け後の再試行が始まりませんでした") { attempts == 2 }
+        XCTAssertNil(queue.completions["same"], "再試行要求前のjobの完了結果を採用しない")
         second.open()
         try await waitUntil("再試行が完了しませんでした") { !queue.isWorking }
         for _ in 0..<5 { queue.setAllowed(true); await Task.yield() }
         XCTAssertEqual(attempts, 2, "同じjob中の再試行要求を1回へまとめる")
         XCTAssertEqual(maximumActive, 1)
         XCTAssertTrue(queue.errors.isEmpty)
+        XCTAssertEqual(queue.completions["same"], .complete)
     }
 
     func testExplicitRetryClearsFailureAndRunsAgain() async throws {
@@ -66,6 +122,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
         queue.operation = { _ in
             attempts += 1
             if attempts == 1 { throw TestFailure.timeout }
+            return .complete
         }
         queue.setSongs([song("same")]); queue.setAllowed(true)
         try await waitUntil("失敗結果が届きませんでした") { !queue.isWorking && queue.errors["same"] != nil }
@@ -86,6 +143,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
             starts.append(song.id)
             queue.update(songID: song.id, phase: .capturing, position: song.id == "second" ? 45 : 30)
             await gates[song.id]?.wait()
+            return .complete
         }
         defer { gates.values.forEach { $0.open() }; queue.setAllowed(false) }
         queue.setSongs([song("first"), song("second"), song("third")]); queue.setAllowed(true)
@@ -114,6 +172,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
             queue.update(songID: song.id, phase: .capturing, position: 20)
             await gate.wait()
             if Task.isCancelled { cancelled.append(song.id) }
+            return .complete
         }
         defer { gate.open(); queue.setAllowed(false) }
         queue.setSongs([song("first")]); queue.setAllowed(true)
@@ -142,6 +201,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
                 await keptGate.wait()
                 keptCancelled = Task.isCancelled
             }
+            return .complete
         }
         defer { keptGate.open(); cleanupGate.open(); queue.setAllowed(false) }
         queue.setSongs([song("removed"), song("kept")]); queue.setAllowed(true)
@@ -176,10 +236,12 @@ final class AppleMusicPreanalysisTests: XCTestCase {
                     await cleanupGate.wait()
                     queue.update(songID: song.id, phase: .analyzing, position: 60)
                 }
+                return .noLyrics
             } else {
                 queue.update(songID: song.id, phase: .capturing, position: 15)
                 await newGate.wait()
             }
+            return .complete
         }
         defer { cleanupGate.open(); newGate.open(); lateGate.open(); queue.setAllowed(false) }
         queue.setSongs([song("same")]); queue.setAllowed(true)
@@ -190,6 +252,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
         XCTAssertEqual(queue.status(for: song("same")), "解析待ち")
         cleanupGate.open()
         try await waitUntil("再追加した曲が新しいjobで始まりませんでした") { attempts == 2 }
+        XCTAssertNil(queue.completions["same"], "削除前のjobの結果を新しい登録へ引き継がない")
         XCTAssertEqual(queue.status(for: song("same")), "解析中")
         XCTAssertEqual(queue.progress(for: song("same")), 0.25)
         lateGate.open()
@@ -209,6 +272,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
             await phaseGate.wait()
             if song.id == "first" { queue.update(songID: song.id, phase: .analyzing, position: 60) }
             await gate.wait()
+            return .complete
         }
         defer { gate.open(); phaseGate.open(); queue.setAllowed(false) }
         queue.setSongs([song("first"), song("second")]); queue.setAllowed(true)
@@ -236,6 +300,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
                 await cleanupGates[song.id]?.wait()
                 throw error
             }
+            return .complete
         }
         defer { cleanupGates.values.forEach { $0.open() }; queue.setAllowed(false) }
         queue.setSongs([song("first"), song("second"), song("third")]); queue.setAllowed(true)
@@ -262,6 +327,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
         queue.operation = { song in
             attempts.append(song.id)
             if song.id == "failed" { throw TestFailure.analysis }
+            return .complete
         }
         queue.setSongs([song("failed"), song("completed")]); queue.setAllowed(true)
         try await waitUntil("解析結果が確定しませんでした") { attempts.count == 2 && !queue.isWorking }

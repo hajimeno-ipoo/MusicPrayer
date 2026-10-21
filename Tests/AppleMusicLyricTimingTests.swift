@@ -32,6 +32,25 @@ final class AppleMusicLyricTimingTests: XCTestCase {
                                     sourceText: text, timeline: timeline)
     }
 
+    func testCompletionDistinguishesUnknownEmptyLyricsUnpublishedLyricsAndNativeTiming() throws {
+        var timing = AppleMusicLyricTiming(songID: song.id, duration: song.duration,
+            sourceText: "", timeline: nil, errorMessage: nil)
+        XCTAssertEqual(timing.completion, .missingLyrics)
+        timing.hasLyrics = false
+        XCTAssertEqual(timing.completion, .noLyrics)
+        let native = try AppleMusicLyricsParser.parse(ttml: """
+        <tt><body><p begin="1s" end="4s"><span begin="1s" end="2s">A</span><span begin="3s" end="4s">B</span></p></body></tt>
+        """, songID: song.id)
+        XCTAssertTrue(native.lines.allSatisfy(\.hasValidCharacterTimings))
+        timing.sourceText = native.text
+        timing.hasLyrics = true
+        XCTAssertEqual(timing.completion, .missingLyrics)
+        timing.usesOfficialWordTimings = true
+        XCTAssertEqual(timing.completion, .complete)
+        timing.errorMessage = "歌詞を取得できませんでした。"
+        XCTAssertEqual(timing.completion, .failedLyrics)
+    }
+
     func testRecognitionKeepsUnevenWordIntervalsAndOriginalMusicAnalysis() throws {
         let music = analysis()
         let applied = try XCTUnwrap(result().applying(to: try lyrics(), song: song, analysis: music))
@@ -112,6 +131,7 @@ final class AppleMusicLyricTimingTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AppleMusicLyricTiming.self, from: encoded)
         let applied = try XCTUnwrap(decoded.applying(to: try lyrics(), song: song, analysis: analysis()))
         XCTAssertEqual(applied.lines, try result().timeline?.lines)
+        XCTAssertEqual(decoded.completion, .complete)
     }
 
     func testInvalidatingStaleLyricTimingKeepsSavedMusicAnalysis() async throws {
@@ -151,17 +171,95 @@ final class AppleMusicLyricTimingTests: XCTestCase {
         let generated = try await AppleMusicLyricTiming.generate(lyrics: lyrics(), song: song,
             analysis: analysis(), audioBuffer: buffer, startTime: 1.25, transcriber: transcriber)
         let calls = await transcriber.calls
-        XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(calls.first?.startTime, 1.25)
-        XCTAssertEqual(calls.first?.frames, buffer.frameLength)
-        XCTAssertEqual(calls.first?.sampleRate, buffer.format.sampleRate)
-        XCTAssertEqual(calls.first?.firstSample, buffer.floatChannelData![0][0])
-        XCTAssertEqual(calls.first?.sourceText, try lyrics().text)
-        XCTAssertEqual(calls.first?.fingerprint, LyricHash.text("appleMusic:" + song.id))
+        XCTAssertFalse(calls.isEmpty)
+        for call in calls {
+            XCTAssertEqual(call.startTime, 1.25)
+            XCTAssertEqual(call.frames, buffer.frameLength)
+            XCTAssertEqual(call.sampleRate, buffer.format.sampleRate)
+            XCTAssertEqual(call.firstSample, buffer.floatChannelData![0][0])
+            XCTAssertEqual(call.sourceText, try lyrics().text)
+            XCTAssertEqual(call.fingerprint, LyricHash.text("appleMusic:" + song.id))
+        }
         let applied = try XCTUnwrap(generated.applying(to: lyrics(), song: song, analysis: analysis()))
         XCTAssertEqual(applied.lines.map(\.start), [1, 9])
         XCTAssertEqual(applied.lines.map(\.end), [8, 14])
         XCTAssertEqual(applied.lines.map(\.characterTimings), timing.timeline?.lines.map(\.characterTimings))
+        XCTAssertNil(generated.errorMessage)
+        XCTAssertEqual(generated.completion, .complete)
+    }
+
+    func testMixedLyricsRecognizeBothLanguagesAndKeepEachLanguagesRealWordTimes() async throws {
+        let fixture = try mixedRecognition()
+        let transcriber = PCMTranscriberStub(languageTokens: ["ja": fixture.japanese, "en": fixture.english])
+        let generated = try await AppleMusicLyricTiming.generate(lyrics: fixture.source, song: song,
+            analysis: analysis(), audioBuffer: pcm(), startTime: 0, transcriber: transcriber)
+        let calls = await transcriber.calls
+        XCTAssertTrue(calls.contains { $0.language == "en" })
+        XCTAssertTrue(calls.contains { $0.language == "ja" })
+        let applied = try XCTUnwrap(generated.applying(to: fixture.source, song: song, analysis: analysis()))
+        XCTAssertEqual(applied.text, fixture.source.text)
+        XCTAssertEqual(applied.languages, ["en"])
+        XCTAssertEqual(applied.lines.map(\.start), [1, 9])
+        XCTAssertEqual(applied.lines.map(\.end), [8, 20])
+        XCTAssertEqual(applied.lines[0].characterTimings, fixture.japanese.map {
+            LyricCharacterTiming(start: $0.start, end: $0.end)
+        })
+        XCTAssertTrue(applied.lines[1].hasValidCharacterTimings)
+        XCTAssertEqual(applied.lines[1].characterTimings[0], LyricCharacterTiming(start: 10, end: 10.8))
+        XCTAssertEqual(applied.lines[1].characterTimings[7], LyricCharacterTiming(start: 11.5, end: 12.9))
+        XCTAssertEqual(applied.lines[1].characterTimings.last, LyricCharacterTiming(start: 16, end: 16.3))
+        XCTAssertNil(generated.errorMessage)
+    }
+
+    func testOneLanguageFailureKeepsAnotherLanguagesRecognizedRowAndOfficialText() async throws {
+        let fixture = try mixedRecognition()
+        let transcriber = PCMTranscriberStub(languageTokens: ["ja": fixture.japanese],
+                                             languageFailures: ["en": .recognition])
+        let generated = try await AppleMusicLyricTiming.generate(lyrics: fixture.source, song: song,
+            analysis: analysis(), audioBuffer: pcm(), startTime: 0, transcriber: transcriber)
+        let calls = await transcriber.calls
+        XCTAssertTrue(calls.contains { $0.language == "en" })
+        XCTAssertTrue(calls.contains { $0.language == "ja" })
+        let applied = try XCTUnwrap(generated.applying(to: fixture.source, song: song, analysis: analysis()))
+        XCTAssertEqual(applied.text, fixture.source.text)
+        XCTAssertEqual(applied.lines.map(\.start), fixture.source.lines.map(\.start))
+        XCTAssertEqual(applied.lines.map(\.end), fixture.source.lines.map(\.end))
+        XCTAssertTrue(applied.lines[0].hasValidCharacterTimings)
+        XCTAssertEqual(applied.lines[1], fixture.source.lines[1])
+        XCTAssertNil(generated.errorMessage)
+    }
+
+    func testInlineKoreanAndEnglishKeepBothRecognitionsWhenAnotherKoreanRowIsMissing() async throws {
+        let source = try AppleMusicLyricsParser.parse(ttml: """
+        <tt xml:lang="en"><body><p begin="9s" end="19s">별빛아래 summer moonlight 마음이빛나요</p><p begin="20s" end="25s">새벽이와요</p></body></tt>
+        """, songID: song.id)
+        let korean = [
+            RecognizedLyricToken(text: "별빛아래", start: 10, end: 12, confidence: 1),
+            RecognizedLyricToken(text: "썸머문라이트", start: 14, end: 15, confidence: 1),
+            RecognizedLyricToken(text: "마음이빛나요", start: 16, end: 18, confidence: 1)
+        ]
+        let english = [
+            RecognizedLyricToken(text: "summer", start: 13, end: 14, confidence: 1),
+            RecognizedLyricToken(text: "moonlight", start: 14, end: 15.5, confidence: 1)
+        ]
+        let transcriber = PCMTranscriberStub(languageTokens: ["ko": korean, "en": english])
+        let generated = try await AppleMusicLyricTiming.generate(lyrics: source, song: song,
+            analysis: analysis(), audioBuffer: pcm(), startTime: 0, transcriber: transcriber)
+        let calls = await transcriber.calls
+        XCTAssertTrue(calls.contains { $0.language == "ko" })
+        XCTAssertTrue(calls.contains { $0.language == "en" })
+        let applied = try XCTUnwrap(generated.applying(to: source, song: song, analysis: analysis()))
+        XCTAssertEqual(applied.text, source.text)
+        XCTAssertEqual(applied.lines.map(\.start), [9, 20])
+        XCTAssertEqual(applied.lines.map(\.end), [19, 25])
+        let mixed = applied.lines[0]
+        XCTAssertTrue(mixed.hasValidCharacterTimings)
+        guard mixed.hasValidCharacterTimings else { return }
+        XCTAssertEqual(mixed.characterTimings.first, LyricCharacterTiming(start: 10, end: 12))
+        XCTAssertEqual(mixed.characterTimings[5], LyricCharacterTiming(start: 13, end: 14))
+        XCTAssertEqual(mixed.characterTimings[12], LyricCharacterTiming(start: 14, end: 15.5))
+        XCTAssertEqual(mixed.characterTimings.last, LyricCharacterTiming(start: 16, end: 18))
+        XCTAssertEqual(applied.lines[1], source.lines[1])
         XCTAssertNil(generated.errorMessage)
     }
 
@@ -179,6 +277,7 @@ final class AppleMusicLyricTimingTests: XCTestCase {
         XCTAssertEqual(applied.lines.map(\.start), source.lines.map(\.start))
         XCTAssertEqual(applied.lines.map(\.end), source.lines.map(\.end))
         XCTAssertNil(generated.errorMessage)
+        XCTAssertEqual(generated.completion, .partialLyrics(recognized: 1, total: 2))
         var damaged = generated
         damaged.derivedLines?[0].start = 0
         XCTAssertNil(damaged.applying(to: source, song: song, analysis: analysis()))
@@ -199,7 +298,8 @@ final class AppleMusicLyricTimingTests: XCTestCase {
             RecognizedLyricToken(text: "AB", start: 10, end: 12, confidence: 1)
         ]
         let result = try AppleMusicLyricTiming.recognizedLines(source.lines,
-            analysis: AppleMusicLyricTiming.alignmentAnalysis(analysis(), songID: song.id), transcription: tokens)
+            analysis: AppleMusicLyricTiming.alignmentAnalysis(analysis(), songID: song.id),
+            recognitions: [(language: "en", tokens: tokens)])
         XCTAssertEqual(result[0].characterTimings.first?.start, 2)
         XCTAssertEqual(result[1].characterTimings.first?.start, 10)
         XCTAssertEqual(result[2], source.lines[2])
@@ -212,6 +312,15 @@ final class AppleMusicLyricTimingTests: XCTestCase {
         XCTAssertNil(generated.timeline)
         XCTAssertEqual(generated.errorMessage, PCMTranscriberStub.Failure.recognition.localizedDescription)
         XCTAssertNil(generated.applying(to: try lyrics(), song: song, analysis: analysis()))
+        XCTAssertEqual(generated.completion, .failedLyrics)
+    }
+
+    func testNoRecognizedOfficialRowsRemainUnmatchedInsteadOfComplete() async throws {
+        let generated = try await AppleMusicLyricTiming.generate(lyrics: lyrics(), song: song,
+            analysis: analysis(), audioBuffer: pcm(), startTime: 0, transcriber: PCMTranscriberStub())
+        XCTAssertNil(generated.errorMessage)
+        XCTAssertEqual(generated.derivedLines, try lyrics().lines)
+        XCTAssertEqual(generated.completion, .unmatchedLyrics)
     }
 
     func testGenerateDoesNotRecognizeNativeWordTimesOrMissingLyrics() async throws {
@@ -228,8 +337,10 @@ final class AppleMusicLyricTimingTests: XCTestCase {
         XCTAssertNil(generated.timeline)
         XCTAssertNil(generated.errorMessage)
         XCTAssertEqual(generated.sourceText, native.text)
+        XCTAssertEqual(generated.completion, .complete)
         XCTAssertNil(missing.timeline)
         XCTAssertNil(missing.errorMessage)
+        XCTAssertEqual(missing.completion, .noLyrics)
     }
 
     func testGeneratePropagatesCancellationInsteadOfSavingRecognitionFailure() async throws {
@@ -241,6 +352,28 @@ final class AppleMusicLyricTimingTests: XCTestCase {
         } catch is CancellationError {
             // The worker owns cancellation and must be able to abandon this result.
         }
+        let calls = await transcriber.calls
+        XCTAssertEqual(calls.count, 1)
+    }
+
+    private func mixedRecognition() throws -> (source: AppleMusicLyrics,
+                                               japanese: [RecognizedLyricToken], english: [RecognizedLyricToken]) {
+        let source = try AppleMusicLyricsParser.parse(ttml: """
+        <tt xml:lang="en"><body><p begin="1s" end="8s">静かな夜空に星が輝く</p><p begin="9s" end="20s">Summer moonlight shines above us</p></body></tt>
+        """, songID: song.id)
+        let japanese = source.lines[0].text.enumerated().map { index, character in
+            let start = 2 + Double(index) * 0.4
+            return RecognizedLyricToken(text: String(character), start: start,
+                end: start + (index.isMultiple(of: 2) ? 0.1 : 0.2), confidence: 1)
+        }
+        let english = [
+            RecognizedLyricToken(text: "Summer", start: 10, end: 10.8, confidence: 1),
+            RecognizedLyricToken(text: "moonlight", start: 11.5, end: 12.9, confidence: 1),
+            RecognizedLyricToken(text: "shines", start: 13.4, end: 14, confidence: 1),
+            RecognizedLyricToken(text: "above", start: 14.8, end: 15.5, confidence: 1),
+            RecognizedLyricToken(text: "us", start: 16, end: 16.3, confidence: 1)
+        ]
+        return (source, japanese, english)
     }
 
     private func pcm() throws -> AVAudioPCMBuffer {
@@ -259,6 +392,7 @@ private actor PCMTranscriberStub: LyricTranscribing {
         var sampleRate: Double
         var firstSample: Float
         var sourceText: String
+        var language: String?
         var fingerprint: String
     }
     enum Failure: Error, LocalizedError {
@@ -268,11 +402,16 @@ private actor PCMTranscriberStub: LyricTranscribing {
 
     private let tokens: [RecognizedLyricToken]
     private let failure: Failure?
+    private let languageTokens: [String: [RecognizedLyricToken]]
+    private let languageFailures: [String: Failure]
     private(set) var calls: [Call] = []
 
-    init(tokens: [RecognizedLyricToken] = [], failure: Failure? = nil) {
+    init(tokens: [RecognizedLyricToken] = [], failure: Failure? = nil,
+         languageTokens: [String: [RecognizedLyricToken]] = [:], languageFailures: [String: Failure] = [:]) {
         self.tokens = tokens
         self.failure = failure
+        self.languageTokens = languageTokens
+        self.languageFailures = languageFailures
     }
 
     func transcribe(audioURL: URL, sourceText: String, analysis: MusicAnalysis,
@@ -281,13 +420,14 @@ private actor PCMTranscriberStub: LyricTranscribing {
     }
 
     func transcribe(audioBuffer: AVAudioPCMBuffer, startTime: Double, sourceText: String,
-                    analysis: MusicAnalysis,
+                    language: String?, analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
         calls.append(Call(startTime: startTime, frames: audioBuffer.frameLength,
             sampleRate: audioBuffer.format.sampleRate, firstSample: audioBuffer.floatChannelData![0][0],
-            sourceText: sourceText, fingerprint: analysis.fingerprint))
+            sourceText: sourceText, language: language, fingerprint: analysis.fingerprint))
+        let failure = language.flatMap { languageFailures[$0] } ?? self.failure
         if case .cancelled? = failure { throw CancellationError() }
         if let failure { throw failure }
-        return tokens
+        return language.flatMap { languageTokens[$0] } ?? tokens
     }
 }

@@ -184,7 +184,7 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
         let ticket = try XCTUnwrap(ticketValue)
         try await seed.save(MusicAnalysis(fingerprint: "appleMusic:123", duration: 60, beats: [1, 2], bpm: 120), id: song.id, ticket: ticket)
         try await seed.saveLyricTiming(AppleMusicLyricTiming(songID: song.id, duration: song.duration,
-            sourceText: "", timeline: nil, errorMessage: nil), ticket: ticket)
+            sourceText: "", timeline: nil, errorMessage: nil, hasLyrics: false), ticket: ticket)
         let store = AppleMusicStore(analysisDirectory: directory)
         store.setQueueSongs([song])
         let view = store.webViewForDisplay()
@@ -221,6 +221,7 @@ final class AppleMusicPlaybackPolicyTests: XCTestCase {
         }
         XCTAssertFalse(store.preanalysis.isWorking)
         XCTAssertTrue(store.preanalysis.errors.isEmpty)
+        XCTAssertEqual(store.preanalysis.completions[song.id], .noLyrics)
         XCTAssertEqual(store.playback, previous)
         XCTAssertTrue(store.webViewForDisplay() === view)
         let calls = try await view.evaluateJavaScript("window.playCalls") as? Int

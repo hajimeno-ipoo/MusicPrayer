@@ -9,12 +9,14 @@ protocol LyricTranscribing: Sendable {
                     analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken]
     func transcribe(audioBuffer: AVAudioPCMBuffer, startTime: Double, sourceText: String,
+                    language: String?,
                     analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken]
 }
 
 extension LyricTranscribing {
     func transcribe(audioBuffer: AVAudioPCMBuffer, startTime: Double = 0, sourceText: String,
+                    language: String? = nil,
                     analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
         throw LyricRecognitionError.unavailable
@@ -57,18 +59,20 @@ struct AppleLyricTranscriber: LyricTranscribing {
     /// The buffer must use the original song's time scale; startTime is its song position.
     /// Captured Apple Music audio is never written to a temporary audio file.
     func transcribe(audioBuffer: AVAudioPCMBuffer, startTime: Double = 0, sourceText: String,
+                    language: String? = nil,
                     analysis: MusicAnalysis,
                     status: @escaping @Sendable (LyricTimingState) async -> Void) async throws -> [RecognizedLyricToken] {
         guard audioBuffer.frameLength > 0, startTime.isFinite, startTime >= 0 else {
             throw LyricRecognitionError.invalidAudioBuffer
         }
-        let prepared = try await prepare(sourceText: sourceText, status: status)
+        let prepared = try await prepare(sourceText: sourceText, language: language, status: status)
         let analyzer = SpeechAnalyzer(modules: [prepared.transcriber])
         await status(.recognizing)
         let inputs = try await sequence(audioBuffer: audioBuffer, startTime: startTime, modules: [prepared.transcriber])
         let tokens = try await recognize(analyzer: analyzer, analyze: {
             try await analyzer.analyzeSequence(inputs)
         }, collectResults: { try await collect(prepared.transcriber) })
+        Self.logger.info("Recognized PCM language=\(prepared.language, privacy: .public) tokens=\(tokens.count)")
         await status(.generating)
         return tokens
     }
@@ -123,16 +127,16 @@ struct AppleLyricTranscriber: LyricTranscribing {
         return inputs
     }
 
-    private func prepare(sourceText: String,
+    private func prepare(sourceText: String, language requestedLanguage: String? = nil,
                          status: @escaping @Sendable (LyricTimingState) async -> Void) async throws
         -> (transcriber: SpeechTranscriber, language: String) {
         try Task.checkCancellation()
         guard SpeechTranscriber.isAvailable else { throw LyricRecognitionError.unavailable }
-        let languageRecognizer = NLLanguageRecognizer()
-        languageRecognizer.processString(sourceText)
-        guard let language = languageRecognizer.dominantLanguage else { throw LyricRecognitionError.unknownLanguage }
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: language.rawValue)) else {
-            throw LyricRecognitionError.unsupportedLanguage(language.rawValue)
+        guard let language = requestedLanguage ?? NLLanguageRecognizer.dominantLanguage(for: sourceText)?.rawValue else {
+            throw LyricRecognitionError.unknownLanguage
+        }
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: language)) else {
+            throw LyricRecognitionError.unsupportedLanguage(language)
         }
         let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [],
                                            attributeOptions: [.audioTimeRange, .transcriptionConfidence])
@@ -145,7 +149,7 @@ struct AppleLyricTranscriber: LyricTranscribing {
         guard await AssetInventory.status(forModules: [transcriber]) == .installed else {
             throw LyricRecognitionError.modelNotInstalled
         }
-        return (transcriber, language.rawValue)
+        return (transcriber, language)
     }
 
     private func finish(_ primary: [RecognizedLyricToken], sourceText: String, analysis: MusicAnalysis,

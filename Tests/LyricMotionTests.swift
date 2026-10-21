@@ -17,9 +17,19 @@ final class LyricMotionTests: XCTestCase {
         }
     }
 
+    func testBundledRubifontUsesMediumFaceAtRequestedSizes() {
+        for size: CGFloat in [14, 24, 32] {
+            let font = LyricFont.rubifont.nativeFont(size: size)
+            XCTAssertEqual(font.fontName, "RubifontSansVF-Medium")
+            XCTAssertEqual(font.pointSize, size)
+            let variation = CTFontCopyVariation(font as CTFont) as? [NSNumber: NSNumber]
+            XCTAssertEqual(variation?[NSNumber(value: 2003265652)]?.doubleValue, 500)
+        }
+    }
+
     @MainActor
     func testFontSwitchChangesPausedLyricsAndRestoresSystemRendering() async throws {
-        let source = "日本語の歌詞と Music Prayer"
+        let source = "日本語の歌詞と Hello Settings Save"
         let audio = try silentAudioFixture()
         defer { try? FileManager.default.removeItem(at: audio) }
         let store = offscreenStore(source: source)
@@ -33,14 +43,16 @@ final class LyricMotionTests: XCTestCase {
             .frame(width: size.width, height: size.height).background(.black))
         let system = try pixels(renderer)
         try saveWrappingEvidence(renderer, name: "font-system-initial.png")
-        try await expectRendererUpdate(renderer) {
-            renderer.content = LyricMotionView(store: store, font: .furifont)
-                .frame(width: size.width, height: size.height).background(.black)
+        for font in [LyricFont.furifont, .rubifont] {
+            try await expectRendererUpdate(renderer) {
+                renderer.content = LyricMotionView(store: store, font: font)
+                    .frame(width: size.width, height: size.height).background(.black)
+            }
+            let rendered = try pixels(renderer)
+            XCTAssertGreaterThan(rendered.litPixels, 100)
+            XCTAssertFalse(system.bytes == rendered.bytes)
+            try saveWrappingEvidence(renderer, name: "font-\(font.rawValue).png")
         }
-        let furifont = try pixels(renderer)
-        XCTAssertGreaterThan(furifont.litPixels, 100)
-        XCTAssertFalse(system.bytes == furifont.bytes)
-        try saveWrappingEvidence(renderer, name: "font-furifont.png")
         try await expectRendererUpdate(renderer) {
             renderer.content = LyricMotionView(store: store, font: .system)
                 .frame(width: size.width, height: size.height).background(.black)
@@ -70,7 +82,7 @@ final class LyricMotionTests: XCTestCase {
         }
         let renderer = ImageRenderer(content: content(.system))
         _ = try pixels(renderer)
-        for font in [LyricFont.furifont, .system] {
+        for font in [LyricFont.furifont, .rubifont, .system] {
             renderer.content = content(font)
             let switched = try pixels(renderer)
             let fresh = try pixels(ImageRenderer(content: content(font)))
@@ -82,33 +94,35 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
-    func testFurifontLongLyricsFitAndKeepSeparateLayoutCache() throws {
-        for (index, source) in longLyricExamples.enumerated() {
-            let store = offscreenStore(source: source)
-            defer { store.engine.stop() }
-            for width in [600, 1000, 1280] {
-                let viewport = CGSize(width: width - 48, height: 208)
-                let system = LyricLineWrapping.presentation(text: source, viewport: viewport)
-                let presentation = try XCTUnwrap(LyricLineWrapping.presentation(text: source, viewport: viewport, font: .furifont))
-                let offset = try XCTUnwrap(presentation.breakOffset)
-                let characters = Array(source)
-                let rows = [String(characters[..<offset]), String(characters[offset...])]
-                let attributes: [NSAttributedString.Key: Any] = [.font: LyricFont.furifont.nativeFont(size: presentation.fontSize)]
-                for row in rows {
-                    XCTAssertLessThanOrEqual((row as NSString).size(withAttributes: attributes).width, viewport.width - 2)
+    func testBundledFontsLongLyricsFitAndKeepSeparateLayoutCache() throws {
+        for font in [LyricFont.furifont, .rubifont] {
+            for (index, source) in longLyricExamples.enumerated() {
+                let store = offscreenStore(source: source)
+                defer { store.engine.stop() }
+                for width in [600, 1000, 1280] {
+                    let viewport = CGSize(width: width - 48, height: 208)
+                    let system = LyricLineWrapping.presentation(text: source, viewport: viewport)
+                    let presentation = try XCTUnwrap(LyricLineWrapping.presentation(text: source, viewport: viewport, font: font))
+                    let offset = try XCTUnwrap(presentation.breakOffset)
+                    let characters = Array(source)
+                    let rows = [String(characters[..<offset]), String(characters[offset...])]
+                    let attributes: [NSAttributedString.Key: Any] = [.font: font.nativeFont(size: presentation.fontSize)]
+                    for row in rows {
+                        XCTAssertLessThanOrEqual((row as NSString).size(withAttributes: attributes).width, viewport.width - 2)
+                    }
+                    XCTAssertEqual(rows.joined(), source)
+                    XCTAssertEqual(system, LyricLineWrapping.presentation(text: source, viewport: viewport))
+                    let size = CGSize(width: width, height: 240)
+                    let renderer = ImageRenderer(content: LyricMotionView(store: store, font: font)
+                        .frame(width: size.width, height: size.height).background(.black))
+                    let image = try pixels(renderer)
+                    let bounds = try XCTUnwrap(image.litBounds)
+                    XCTAssertGreaterThan(bounds.minX, 24)
+                    XCTAssertLessThan(bounds.maxX, CGFloat(width - 24))
+                    XCTAssertGreaterThan(bounds.minY, 16)
+                    XCTAssertLessThan(bounds.maxY, 224)
+                    try saveWrappingEvidence(renderer, name: "\(font.rawValue)-example-\(index + 1)-\(width).png")
                 }
-                XCTAssertEqual(rows.joined(), source)
-                XCTAssertEqual(system, LyricLineWrapping.presentation(text: source, viewport: viewport))
-                let size = CGSize(width: width, height: 240)
-                let renderer = ImageRenderer(content: LyricMotionView(store: store, font: .furifont)
-                    .frame(width: size.width, height: size.height).background(.black))
-                let image = try pixels(renderer)
-                let bounds = try XCTUnwrap(image.litBounds)
-                XCTAssertGreaterThan(bounds.minX, 24)
-                XCTAssertLessThan(bounds.maxX, CGFloat(width - 24))
-                XCTAssertGreaterThan(bounds.minY, 16)
-                XCTAssertLessThan(bounds.maxY, 224)
-                try saveWrappingEvidence(renderer, name: "furifont-example-\(index + 1)-\(width).png")
             }
         }
     }

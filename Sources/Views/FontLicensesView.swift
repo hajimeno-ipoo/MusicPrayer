@@ -2,12 +2,15 @@ import SwiftUI
 
 struct FontLicensesView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedFont = LyricFont.furifont
 
-    private static let document: String? = {
-        guard let url = Bundle.module.url(forResource: "Furifont-LICENSES", withExtension: "txt", subdirectory: "Fonts") else {
-            return nil
-        }
-        return try? String(contentsOf: url, encoding: .utf8)
+    private static let documents: [LyricFont: String] = {
+        Dictionary(uniqueKeysWithValues: LyricFont.allCases.compactMap { font in
+            guard let resource = font.licenseResource,
+                  let url = Bundle.module.url(forResource: resource, withExtension: "txt", subdirectory: "Fonts"),
+                  let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+            return (font, text)
+        })
     }()
 
     var body: some View {
@@ -20,9 +23,17 @@ struct FontLicensesView: View {
                     .keyboardShortcut(.cancelAction)
             }
             .padding(20)
+            Picker("フォント", selection: $selectedFont) {
+                ForEach(LyricFont.allCases.filter { $0.licenseResource != nil }) { font in
+                    Text(font.title).tag(font)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
             Divider()
             ScrollView {
-                if let document = Self.document {
+                if let document = Self.documents[selectedFont] {
                     Text(verbatim: document)
                         .font(.system(size: 13))
                         .lineSpacing(4)
@@ -35,6 +46,7 @@ struct FontLicensesView: View {
                         .padding(24)
                 }
             }
+            .id(selectedFont)
         }
         .frame(width: 720, height: 620)
     }

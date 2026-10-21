@@ -2,6 +2,101 @@ import XCTest
 @testable import MusicPrayer
 
 final class AppleMusicLyricsTests: XCTestCase {
+    func testResponseUsesRealLyricDocumentBeforeCatalogAvailabilityFlag() throws {
+        let ttml = "<tt xml:lang=\"ja\"><body><p begin=\"1s\" end=\"4s\">取得した歌詞</p></body></tt>"
+        for flag in [NSNull(), NSNumber(value: true), NSNumber(value: false)] as [Any] {
+            let result = try XCTUnwrap(AppleMusicLyricsParser.parseResponse(
+                ["songID": "123", "ttml": ttml, "hasLyrics": flag], songID: "123"))
+            XCTAssertEqual(result.songID, "123")
+            XCTAssertEqual(result.text, "取得した歌詞")
+            XCTAssertEqual(result.languages, ["ja"])
+            XCTAssertEqual(result.lines.map(\.start), [1])
+            XCTAssertEqual(result.lines.map(\.end), [4])
+        }
+    }
+
+    func testResponseReturnsNoLyricsOnlyForConfirmedCatalogAbsence() throws {
+        XCTAssertNil(try AppleMusicLyricsParser.parseResponse(
+            ["songID": "123", "ttml": NSNull(), "hasLyrics": false], songID: "123"))
+        XCTAssertNil(try AppleMusicLyricsParser.parseResponse(
+            ["songID": "123", "ttml": "", "hasLyrics": false], songID: "123"))
+        for flag in [NSNull(), NSNumber(value: true), "false"] as [Any] {
+            XCTAssertThrowsError(try AppleMusicLyricsParser.parseResponse(
+                ["songID": "123", "ttml": NSNull(), "hasLyrics": flag], songID: "123")) {
+                XCTAssertEqual($0 as? AppleMusicLyricsParser.FetchError, .missingData)
+            }
+        }
+        XCTAssertThrowsError(try AppleMusicLyricsParser.parseResponse(
+            ["songID": "123"], songID: "123")) {
+            XCTAssertEqual($0 as? AppleMusicLyricsParser.FetchError, .missingData)
+        }
+    }
+
+    func testResponseRejectsMalformedOrEmptyDocumentsInsteadOfTreatingThemAsUnavailable() {
+        for (ttml, error) in [
+            ("<tt><body><p>途中", AppleMusicLyricsParser.FetchError.invalidDocument),
+            ("<tt><body><p>   </p></body></tt>", .emptyDocument)
+        ] {
+            XCTAssertThrowsError(try AppleMusicLyricsParser.parseResponse(
+                ["songID": "123", "ttml": ttml, "hasLyrics": false], songID: "123")) {
+                XCTAssertEqual($0 as? AppleMusicLyricsParser.FetchError, error)
+            }
+        }
+    }
+
+    func testResponseRejectsAnotherSongAndInvalidDocumentType() {
+        for response in [
+            ["songID": "456", "ttml": "<tt><body><p>別の曲</p></body></tt>"],
+            ["ttml": NSNull(), "hasLyrics": false],
+            ["songID": "123", "ttml": 12, "hasLyrics": false]
+        ] as [[String: Any]] {
+            XCTAssertThrowsError(try AppleMusicLyricsParser.parseResponse(response, songID: "123")) {
+                XCTAssertEqual($0 as? AppleMusicLyricsParser.FetchError, .invalidResponse)
+            }
+        }
+    }
+
+    func testSungLanguagesKeepRootAndBodyOrderWithoutHeadTranslationsOrDuplicates() throws {
+        let result = try AppleMusicLyricsParser.parse(ttml: """
+        <tt xml:lang="en">
+          <head><metadata xml:lang="fr"><translation xml:lang="es">Traduction</translation></metadata></head>
+          <body xml:lang="ja"><div xml:lang="ja">
+            <p begin="1s" end="4s" xml:lang="ko"><span begin="1s" end="2s" xml:lang="en">愛</span><span begin="3s" end="4s" xml:lang="de">Love</span></p>
+          </div></body>
+        </tt>
+        """, songID: "123")
+        XCTAssertEqual(result.languages, ["en", "ja", "ko", "de"])
+        XCTAssertEqual(result.text, "愛Love")
+        let line = try XCTUnwrap(result.lines.first)
+        XCTAssertEqual(line.text, "愛Love")
+        XCTAssertEqual(line.start, 1)
+        XCTAssertEqual(line.end, 4)
+        XCTAssertEqual(line.characterTimings, [LyricCharacterTiming(start: 1, end: 2)]
+            + Array(repeating: LyricCharacterTiming(start: 3, end: 4), count: 4))
+    }
+
+    func testMissingOrEmptyLanguageDoesNotAddAnInferredCandidate() throws {
+        for attribute in ["", " xml:lang=\"\"", " xml:lang=\"   \""] {
+            let result = try AppleMusicLyricsParser.parse(ttml: """
+            <tt\(attribute)><body\(attribute)><p begin="1s" end="4s"\(attribute)>愛とLove</p></body></tt>
+            """, songID: "123")
+            XCTAssertTrue(result.languages.isEmpty)
+            XCTAssertEqual(result.text, "愛とLove")
+            XCTAssertEqual(result.lines.map(\.start), [1])
+            XCTAssertEqual(result.lines.map(\.end), [4])
+            XCTAssertTrue(result.lines[0].characterTimings.isEmpty)
+        }
+    }
+
+    func testRootLanguageRemainsAvailableForMixedTextWithoutRowLanguageAttributes() throws {
+        let result = try AppleMusicLyricsParser.parse(ttml: """
+        <tt xml:lang="en"><body><div><p begin="1s" end="4s">愛とLove</p></div></body></tt>
+        """, songID: "123")
+        XCTAssertEqual(result.languages, ["en"])
+        XCTAssertEqual(result.text, "愛とLove")
+        XCTAssertEqual(result.lines.map(\.text), ["愛とLove"])
+    }
+
     func testParagraphTimesDoNotInventCharacterTimes() throws {
         let result = try parse("""
         <p begin="00:01:02.250" end="01:04.500">愛が止まらない</p>

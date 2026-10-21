@@ -3,7 +3,7 @@ import Foundation
 
 /// Only derived lyric timings are persisted; streamed audio stays in memory.
 struct AppleMusicLyricTiming: Codable, Sendable {
-    static let currentVersion = 3
+    static let currentVersion = 4
 
     var version = currentVersion
     var alignmentVersion = LyricVersions.alignment
@@ -14,6 +14,28 @@ struct AppleMusicLyricTiming: Codable, Sendable {
     var errorMessage: String?
     var derivedLines: [TimedLyricLine]?
     var analysisDigest: String?
+    /// False is saved only after Apple Music explicitly reports no lyrics.
+    var hasLyrics: Bool?
+    var usesOfficialWordTimings: Bool?
+
+    var completion: AppleMusicPreanalysis.Completion {
+        if errorMessage != nil { return .failedLyrics }
+        guard !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return hasLyrics == false ? .noLyrics : .missingLyrics
+        }
+        if let derivedLines {
+            let recognized = derivedLines.filter(\.hasValidCharacterTimings).count
+            guard recognized > 0 else { return .unmatchedLyrics }
+            return recognized == derivedLines.count ? .complete
+                : .partialLyrics(recognized: recognized, total: derivedLines.count)
+        }
+        if let timeline {
+            return !timeline.lines.isEmpty && timeline.lines.allSatisfy(\.hasValidCharacterTimings)
+                ? .complete : .unmatchedLyrics
+        }
+        // Only a verified native-word-timing result skips recognition.
+        return usesOfficialWordTimings == true ? .complete : .missingLyrics
+    }
 
     /// Reuse the same captured PCM and aligner as the music/local lyric paths.
     /// A failed recognition is retained as a failure, never estimated row progress.
@@ -22,24 +44,50 @@ struct AppleMusicLyricTiming: Codable, Sendable {
                          startTime: Double,
                          transcriber: any LyricTranscribing = AppleLyricTranscriber()) async throws -> Self {
         try Task.checkCancellation()
-        var result = Self(songID: song.id, duration: song.duration, sourceText: lyrics?.text ?? "")
-        guard let lyrics, !lyrics.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return result }
+        var result = Self(songID: song.id, duration: song.duration, sourceText: lyrics?.text ?? "",
+                          hasLyrics: lyrics != nil)
+        guard let lyrics else { return result }
+        guard !lyrics.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            result.errorMessage = "歌詞データの本文が空でした。"
+            return result
+        }
         do {
             guard lyrics.songID == song.id, analysis.fingerprint == "appleMusic:" + song.id else {
                 throw LyricAlignmentError.inconsistentSavedData
             }
-            guard lyrics.lines.isEmpty || !lyrics.lines.allSatisfy(\.hasValidCharacterTimings) else { return result }
+            guard lyrics.lines.isEmpty || !lyrics.lines.allSatisfy(\.hasValidCharacterTimings) else {
+                result.usesOfficialWordTimings = true
+                return result
+            }
             let music = alignmentAnalysis(analysis, songID: song.id)
-            let transcription = try await transcriber.transcribe(audioBuffer: audioBuffer, startTime: startTime,
-                sourceText: lyrics.text, analysis: music, status: { _ in })
+            let languages = LyricRecognitionRecovery.languageCandidates(sourceText: lyrics.text,
+                suppliedLanguages: lyrics.languages)
+            var recognitions: [(language: String, tokens: [RecognizedLyricToken])] = []
+            var recognitionError: Error?
+            for language in languages {
+                try Task.checkCancellation()
+                do {
+                    let tokens = try await transcriber.transcribe(audioBuffer: audioBuffer, startTime: startTime,
+                        sourceText: lyrics.text, language: language, analysis: music, status: { _ in })
+                    recognitions.append((language, tokens))
+                } catch is CancellationError { throw CancellationError() }
+                catch { if recognitionError == nil { recognitionError = error } }
+            }
+            guard !recognitions.isEmpty else { throw recognitionError ?? LyricRecognitionError.unknownLanguage }
             try Task.checkCancellation()
             let seed = result
+            let completed = recognitions
             let alignment = Task.detached(priority: .utility) { () throws -> Self in
                 var aligned = seed
                 if lyrics.lines.isEmpty {
-                    aligned.timeline = try LyricAligner.align(sourceText: lyrics.text, analysis: music, transcription: transcription)
+                    let recognized = try LyricRecognitionRecovery.combinedAlternatives(sourceText: lyrics.text,
+                        analysis: music, recognitions: completed)
+                    let window = LyricRecognitionRecovery.Window(start: 0, end: music.duration,
+                        sourceText: lyrics.text, language: "")
+                    aligned.timeline = try LyricRecognitionRecovery.selection(window: window,
+                        analysis: music, alternatives: recognized).timeline
                 } else {
-                    aligned.derivedLines = try recognizedLines(lyrics.lines, analysis: music, transcription: transcription)
+                    aligned.derivedLines = try recognizedLines(lyrics.lines, analysis: music, recognitions: completed)
                     aligned.analysisDigest = try LyricAligner.analysisDigest(music)
                 }
                 return aligned
@@ -60,13 +108,19 @@ struct AppleMusicLyricTiming: Codable, Sendable {
     /// Official row intervals keep repeats at the correct singing occurrence.
     /// A row without a match keeps its official interval and remains uncoloured.
     static func recognizedLines(_ lines: [TimedLyricLine], analysis: MusicAnalysis,
-                                transcription: [RecognizedLyricToken]) throws -> [TimedLyricLine] {
+                                recognitions: [(language: String, tokens: [RecognizedLyricToken])]) throws -> [TimedLyricLine] {
         try lines.map { source in
             try Task.checkCancellation()
             guard !source.hasValidCharacterTimings else { return source }
-            let tokens = transcription.filter { $0.start >= source.start && $0.end <= source.end }
             do {
-                let matched = try LyricAligner.align(sourceText: source.text, analysis: analysis, transcription: tokens)
+                let window = LyricRecognitionRecovery.Window(start: source.start, end: source.end,
+                    sourceText: source.text, language: "")
+                let alternatives = try LyricRecognitionRecovery.combinedAlternatives(sourceText: source.text,
+                    analysis: analysis, recognitions: recognitions.map { recognition in
+                        (recognition.language, recognition.tokens.filter { $0.start >= source.start && $0.end <= source.end })
+                    })
+                let matched = try LyricRecognitionRecovery.selection(window: window, analysis: analysis,
+                    alternatives: alternatives).timeline
                 guard let line = matched.lines.first, matched.lines.count == 1 else { return source }
                 var result = source
                 result.characterTimings = line.characterTimings
@@ -111,11 +165,11 @@ struct AppleMusicLyricTiming: Codable, Sendable {
                 guard result.characterTimings.isEmpty || result.hasValidCharacterTimings else { return nil }
                 if source.hasValidCharacterTimings, result != source { return nil }
             }
-            return AppleMusicLyrics(songID: lyrics.songID, text: lyrics.text, lines: derivedLines)
+            return AppleMusicLyrics(songID: lyrics.songID, text: lyrics.text, lines: derivedLines, languages: lyrics.languages)
         }
         guard let timeline, timeline.sourceText == sourceText,
               (try? LyricAligner.validate(timeline,
                   analysis: music)) != nil else { return nil }
-        return AppleMusicLyrics(songID: lyrics.songID, text: lyrics.text, lines: timeline.lines)
+        return AppleMusicLyrics(songID: lyrics.songID, text: lyrics.text, lines: timeline.lines, languages: lyrics.languages)
     }
 }

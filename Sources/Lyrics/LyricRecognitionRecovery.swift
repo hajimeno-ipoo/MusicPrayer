@@ -25,6 +25,69 @@ enum LyricRecognitionRecovery {
             range: NSRange(location: 0, length: (sourceText as NSString).length)) != nil
     }
 
+    /// Metadata describes the document, not every sung phrase. Keep the
+    /// languages found in individual rows and embedded Latin phrases as well.
+    static func languageCandidates(sourceText: String, suppliedLanguages: [String]) -> [String] {
+        var result: [String] = []
+        func append(_ language: String?) {
+            guard let language, !language.isEmpty else { return }
+            let locale = Locale(identifier: language).language
+            guard !result.contains(where: {
+                let other = Locale(identifier: $0).language
+                return other.languageCode == locale.languageCode && other.script == locale.script
+            }) else { return }
+            result.append(language)
+        }
+        for language in suppliedLanguages { append(language) }
+        for line in LyricParser.parse(sourceText) {
+            append(NLLanguageRecognizer.dominantLanguage(for: line.text)?.rawValue)
+            let source = line.text as NSString
+            var cursor = 0
+            for match in latin.matches(in: line.text, range: NSRange(line.text.startIndex..., in: line.text)) {
+                if match.range.location > cursor {
+                    append(NLLanguageRecognizer.dominantLanguage(for: source.substring(with:
+                        NSRange(location: cursor, length: match.range.location - cursor)))?.rawValue)
+                }
+                let text = source.substring(with: match.range)
+                // Match the existing recovery rule for short abbreviations.
+                if text.filter(\.isLetter).count >= 5 {
+                    append(NLLanguageRecognizer.dominantLanguage(for: text)?.rawValue)
+                }
+                cursor = NSMaxRange(match.range)
+            }
+            if cursor < source.length {
+                append(NLLanguageRecognizer.dominantLanguage(for: source.substring(from: cursor))?.rawValue)
+            }
+        }
+        return result
+    }
+
+    /// Reuse the bounded recovery path with recognition already obtained from
+    /// the same PCM. Native token edges remain the only merge boundaries.
+    static func combinedAlternatives(sourceText: String, analysis: MusicAnalysis,
+                                     recognitions: [(language: String, tokens: [RecognizedLyricToken])]) throws
+        -> [[RecognizedLyricToken]] {
+        var alternatives = recognitions.map(\.tokens)
+        guard recognitions.count > 1, containsLatinText(sourceText) else { return alternatives }
+        for recognition in recognitions {
+            try Task.checkCancellation()
+            do {
+                let windows = try plan(sourceText: sourceText, primaryLanguage: recognition.language,
+                    transcription: recognition.tokens, duration: analysis.duration)
+                guard !windows.isEmpty else { continue }
+                let replacements = try windows.map { window in
+                    try select(window: window, analysis: analysis, alternatives: recognitions.filter {
+                        Locale(identifier: $0.language).language.languageCode ==
+                            Locale(identifier: window.language).language.languageCode
+                    }.map { $0.tokens.filter { $0.start >= window.start && $0.end <= window.end } })
+                }
+                alternatives.append(try merge(recognition.tokens, windows: windows, replacements: replacements))
+            } catch is CancellationError { throw CancellationError() }
+            catch { continue }
+        }
+        return alternatives
+    }
+
     static func plan(sourceText: String, primaryLanguage: String,
                      transcription: [RecognizedLyricToken], duration: Double) throws -> [Window] {
         var parts: [Part] = []
@@ -108,6 +171,12 @@ enum LyricRecognitionRecovery {
     /// between native results; text supplied as a hint is never itself a result.
     static func select(window: Window, analysis: MusicAnalysis,
                        alternatives: [[RecognizedLyricToken]]) throws -> [RecognizedLyricToken] {
+        try selection(window: window, analysis: analysis, alternatives: alternatives).tokens
+    }
+
+    static func selection(window: Window, analysis: MusicAnalysis,
+                          alternatives: [[RecognizedLyricToken]]) throws
+        -> (timeline: LyricTimeline, tokens: [RecognizedLyricToken]) {
         var best: [(timeline: LyricTimeline, tokens: [RecognizedLyricToken])] = []
         for tokens in alternatives {
             try Task.checkCancellation()
@@ -135,7 +204,7 @@ enum LyricRecognitionRecovery {
                       }) else { throw LyricAlignmentError.ambiguousMatch }
             }
         }
-        return selected.tokens
+        return selected
     }
 
     static func merge(_ transcription: [RecognizedLyricToken], windows: [Window],

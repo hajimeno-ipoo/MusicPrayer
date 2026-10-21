@@ -72,6 +72,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
                     cancellations += 1
                     throw error
                 }
+                return .complete
             }
             defer { finish = true; store.appleMusic.preanalysis.setAllowed(false) }
             let view = store.appleMusicBrowser.webViewForDisplay()
@@ -119,7 +120,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
     @MainActor
     func testNativePlaybackAndLocalSelectionLeaveOfficialBrowserControlsIndependent() async throws {
         try await withLyricFixture { store, _ in
-            store.appleMusic.preanalysis.operation = { _ in }
+            store.appleMusic.preanalysis.operation = { _ in return .complete }
             let native = store.appleMusic.webViewForDisplay()
             let browser = store.appleMusicBrowser.webViewForDisplay()
             XCTAssertFalse(native === browser)
@@ -150,7 +151,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
     @MainActor
     func testOfficialBrowserCompletionAndControlsNeverAdvanceOrSeekNativeQueue() async throws {
         try await withLyricFixture { store, _ in
-            store.appleMusic.preanalysis.operation = { _ in }
+            store.appleMusic.preanalysis.operation = { _ in return .complete }
             let native = store.appleMusic.webViewForDisplay()
             let browser = store.appleMusicBrowser.webViewForDisplay()
             try await self.installFakeAppleMusic(in: native, songID: "native", playing: false, time: 0, volume: 0.75)
@@ -194,7 +195,7 @@ final class PlayerStoreTransitionTests: XCTestCase {
             try? queueBackup.restore()
             try? FileManager.default.removeItem(at: directory)
         }
-        store.appleMusic.preanalysis.operation = { _ in }
+        store.appleMusic.preanalysis.operation = { _ in return .complete }
         let native = store.appleMusic.webViewForDisplay()
         try await installFakeAppleMusic(in: native, songID: "native", playing: false, time: 0, volume: 0.75)
         _ = try await native.evaluateJavaScript("""

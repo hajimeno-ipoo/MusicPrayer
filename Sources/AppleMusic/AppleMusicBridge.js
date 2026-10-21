@@ -69,13 +69,18 @@ case "lyrics": {
     const response = await music.api.music("/v1/catalog/" + encodeURIComponent(music.storefrontId) + "/songs/" + value,
         { include: "syllable-lyrics,lyrics" });
     const catalog = response.data || {};
-    const song = catalog.data?.[0];
+    const song = catalog.data?.find(item => String(item.id) === value);
+    if (!song) throw new Error("The selected song is unavailable in the catalog");
     const related = [...(song?.relationships?.["syllable-lyrics"]?.data || []), ...(song?.relationships?.lyrics?.data || [])];
     const resources = [...related, ...(catalog.included || [])];
     const lyrics = ["syllable-lyrics", "lyrics"].map(type =>
         resources.find(item => item.type === type && typeof item.attributes?.ttml === "string" && item.attributes.ttml.length > 0)
     ).find(Boolean);
-    return { songID: value, ttml: lyrics?.attributes?.ttml || null };
+    return {
+        songID: String(song.id),
+        ttml: lyrics?.attributes?.ttml || null,
+        hasLyrics: typeof song.attributes?.hasLyrics === "boolean" ? song.attributes.hasLyrics : null
+    };
 }
 case "search": {
     if (typeof value !== "string" || !value.trim()) return { songs: [] };

@@ -5,10 +5,46 @@ struct AppleMusicLyrics: Equatable, Sendable {
     var songID: String
     var text: String
     var lines: [TimedLyricLine]
+    var languages: [String] = []
 }
 
 enum AppleMusicLyricsParser {
     enum ParseError: Error { case invalidXML }
+
+    enum FetchError: Error, LocalizedError, Equatable {
+        case invalidResponse
+        case missingData
+        case invalidDocument
+        case emptyDocument
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidResponse: return "選択中の曲に対応する歌詞データを取得できませんでした。"
+            case .missingData: return "歌詞データを取得できませんでした。もう一度お試しください。"
+            case .invalidDocument: return "取得した歌詞データを読み取れませんでした。"
+            case .emptyDocument: return "取得した歌詞データに本文がありません。"
+            }
+        }
+    }
+
+    /// A missing document is an unavailable lyric only when the catalog says so.
+    static func parseResponse(_ response: [String: Any], songID: String) throws -> AppleMusicLyrics? {
+        guard response["songID"] as? String == songID else { throw FetchError.invalidResponse }
+        if let value = response["ttml"], !(value is NSNull), !(value is String) {
+            throw FetchError.invalidResponse
+        }
+        if let ttml = response["ttml"] as? String, !ttml.isEmpty {
+            let lyrics: AppleMusicLyrics
+            do { lyrics = try parse(ttml: ttml, songID: songID) }
+            catch { throw FetchError.invalidDocument }
+            guard !lyrics.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw FetchError.emptyDocument
+            }
+            return lyrics
+        }
+        if let hasLyrics = response["hasLyrics"] as? Bool, !hasLyrics { return nil }
+        throw FetchError.missingData
+    }
 
     static func parse(ttml: String, songID: String) throws -> AppleMusicLyrics {
         let delegate = LyricsDelegate()
@@ -16,7 +52,8 @@ enum AppleMusicLyricsParser {
         parser.shouldResolveExternalEntities = false
         parser.delegate = delegate
         guard parser.parse() else { throw ParseError.invalidXML }
-        return AppleMusicLyrics(songID: songID, text: delegate.paragraphs.joined(separator: "\n"), lines: delegate.lines)
+        return AppleMusicLyrics(songID: songID, text: delegate.paragraphs.joined(separator: "\n"),
+                                lines: delegate.lines, languages: delegate.languages)
     }
 
     /// TTML clock-time and the second/millisecond offsets used in song lyrics.
@@ -59,6 +96,7 @@ enum AppleMusicLyricsParser {
     private struct Element {
         var timing: Interval?
         var preserveSpace: Bool
+        var isInBody: Bool
     }
 
     private struct Scalar {
@@ -76,6 +114,7 @@ enum AppleMusicLyricsParser {
     private final class LyricsDelegate: NSObject, XMLParserDelegate {
         var paragraphs: [String] = []
         var lines: [TimedLyricLine] = []
+        var languages: [String] = []
         private var stack: [Element] = []
         private var paragraphDepth: Int?
         private var paragraphTiming: Interval?
@@ -84,6 +123,12 @@ enum AppleMusicLyricsParser {
         func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes: [String: String]) {
             let name = elementName.split(separator: ":").last.map(String.init) ?? elementName
             let inherited = stack.last
+            let isInBody = name == "body" || inherited?.isInBody == true
+            if (stack.isEmpty && name == "tt") || isInBody,
+               let language = attributes["xml:lang"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !language.isEmpty, !languages.contains(language) {
+                languages.append(language)
+            }
             let preserve = attributes["xml:space"].map { $0 == "preserve" } ?? inherited?.preserveSpace ?? false
             var timing = inherited?.timing
             if name == "p" {
@@ -94,7 +139,7 @@ enum AppleMusicLyricsParser {
             } else if name == "span", attributes["begin"] != nil || attributes["end"] != nil {
                 timing = Interval(attributes)
             }
-            stack.append(Element(timing: timing, preserveSpace: preserve))
+            stack.append(Element(timing: timing, preserveSpace: preserve, isInBody: isInBody))
             if name == "br", paragraphDepth != nil {
                 scalars.append(Scalar(value: "\n", timing: timing, preserveSpace: true))
             }

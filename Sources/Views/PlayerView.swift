@@ -64,7 +64,7 @@ struct PlayerView: View {
                             if let error = store.playbackError { errorRow(error, retry: nil) }
                             if store.isAppleMusicActive, let error = store.appleMusic.audioCaptureError { errorRow(error, retry: nil) }
                             if store.isAppleMusicActive, let error = store.appleMusic.lyricTimingError {
-                                errorRow(error, retry: store.appleMusic.retryLyricTiming)
+                                errorRow(error, retry: store.appleMusic.retryLyricTiming, retryTitle: store.appleMusic.lyricRetryTitle)
                             }
                             if store.isAppleMusicActive, let error = store.appleMusic.errorMessage {
                                 HStack(spacing: 10) {
@@ -466,12 +466,12 @@ struct PlayerView: View {
         Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30).foregroundStyle(active ? cyan : Color.primary.opacity(0.85)) }
             .buttonStyle(.plain).help(label).accessibilityLabel(label)
     }
-    private func errorRow(_ error: String, retry: (() -> Void)?) -> some View {
+    private func errorRow(_ error: String, retry: (() -> Void)?, retryTitle: String = "解析をやり直す") -> some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.circle")
             Text(error).font(.system(size: 11)).lineLimit(2).textSelection(.enabled)
             Spacer()
-            if let retry { Button("解析をやり直す", action: retry).buttonStyle(.glass) }
+            if let retry { Button(retryTitle, action: retry).buttonStyle(.glass) }
             Button { store.playbackError = nil; store.analysisError = nil; store.appleMusic.audioCaptureError = nil } label: { Image(systemName: "xmark").font(.system(size: 10)) }.buttonStyle(.plain).help("閉じる")
         }
         .foregroundStyle(.orange.opacity(0.95)).padding(12).glassEffect(.regular, in: .rect(cornerRadius: 12))

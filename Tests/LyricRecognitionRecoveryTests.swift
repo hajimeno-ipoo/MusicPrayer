@@ -20,6 +20,14 @@ final class LyricRecognitionRecoveryTests: XCTestCase {
         XCTAssertTrue(LyricRecognitionRecovery.containsLatinText("AIの世界"))
     }
 
+    func testLanguageCandidatesKeepEmbeddedJapaneseBesideEnglishMetadataAndText() {
+        let candidates = LyricRecognitionRecovery.languageCandidates(
+            sourceText: "Summer moonlight shines above us and every gentle morning brings a new beginning 静かな夜空に星が輝く",
+            suppliedLanguages: ["en"])
+        XCTAssertTrue(candidates.contains("en"))
+        XCTAssertTrue(candidates.contains("ja"))
+    }
+
     func testForeignPrefixUsesSurroundingNativeEdges() throws {
         let speech = [token("고요한밤이와요", 10, 12), token("썸머문라이트", 18, 20),
                       token("반짝이는별빛", 20, 23), token("아침이밝아와요", 30, 32)]

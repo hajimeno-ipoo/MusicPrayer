@@ -204,7 +204,7 @@ final class AppleMusicBridgeTests: XCTestCase {
         let context = try XCTUnwrap(JSContext())
         context.evaluateScript("""
         var location={protocol:'https:',hostname:'music.apple.com'};
-        var player={storefrontId:'jp',api:{music:async()=>({data:{data:[{relationships:{lyrics:{data:[{type:'lyrics',attributes:{ttml:'line'}}]}}}],included:[{type:'syllable-lyrics',attributes:{ttml:'word'}}]}})}};
+        var player={storefrontId:'jp',api:{music:async()=>({data:{data:[{id:'123',relationships:{lyrics:{data:[{type:'lyrics',attributes:{ttml:'line'}}]}}}],included:[{type:'syllable-lyrics',attributes:{ttml:'word'}}]}})}};
         var window={MusicKit:{getInstance:()=>player}};
         """)
         let value = try await execute("lyrics", value: "123", in: context)
@@ -218,14 +218,57 @@ final class AppleMusicBridgeTests: XCTestCase {
         context.evaluateScript("""
         var location={protocol:'https:',hostname:'music.apple.com'};
         var calls=0;
-        var player={storefrontId:'jp',api:{music:async()=>{calls++;return {data:{data:[{id:'123'}]}};}}};
+        var player={storefrontId:'jp',api:{music:async()=>{calls++;return {data:{data:[{id:'123',attributes:{hasLyrics:false}}]}};}}};
         var window={MusicKit:{getInstance:()=>player}};
         """)
         let value = try await execute("lyrics", value: "123", in: context)
         let response = try XCTUnwrap(value as? [String: Any])
         XCTAssertTrue(response["ttml"] is NSNull)
+        XCTAssertEqual(response["hasLyrics"] as? Bool, false)
+        XCTAssertNil(response["diagnostic"])
         do { _ = try await execute("lyrics", value: "../other", in: context); XCTFail("不正な曲IDで通信しない") } catch {}
         XCTAssertEqual(context.objectForKeyedSubscript("calls")?.toInt32(), 1)
+    }
+
+    @MainActor
+    func testLyricsKeepsAvailableAndUnknownFlagsDistinctFromConfirmedAbsence() async throws {
+        for (flag, expected) in [("true", true), ("false", false)] {
+            let context = try XCTUnwrap(JSContext())
+            context.evaluateScript("""
+            var location={protocol:'https:',hostname:'music.apple.com'};
+            var player={storefrontId:'jp',api:{music:async()=>({data:{data:[{id:'123',attributes:{hasLyrics:\(flag)}}]}})}};
+            var window={MusicKit:{getInstance:()=>player}};
+            """)
+            let value = try await execute("lyrics", value: "123", in: context)
+            let response = try XCTUnwrap(value as? [String: Any])
+            XCTAssertTrue(response["ttml"] is NSNull)
+            XCTAssertEqual(response["hasLyrics"] as? Bool, expected)
+        }
+        for attributes in ["{}", "{hasLyrics:'false'}", "{hasLyrics:0}"] {
+            let context = try XCTUnwrap(JSContext())
+            context.evaluateScript("""
+            var location={protocol:'https:',hostname:'music.apple.com'};
+            var player={storefrontId:'jp',api:{music:async()=>({data:{data:[{id:'123',attributes:\(attributes)}]}})}};
+            var window={MusicKit:{getInstance:()=>player}};
+            """)
+            let value = try await execute("lyrics", value: "123", in: context)
+            let response = try XCTUnwrap(value as? [String: Any])
+            XCTAssertTrue(response["hasLyrics"] is NSNull)
+        }
+    }
+
+    @MainActor
+    func testLyricsRejectsCatalogResponseForAnotherSong() async throws {
+        let context = try XCTUnwrap(JSContext())
+        context.evaluateScript("""
+        var location={protocol:'https:',hostname:'music.apple.com'};
+        var player={storefrontId:'jp',api:{music:async()=>({data:{data:[{id:'456',attributes:{hasLyrics:false}}]}})}};
+        var window={MusicKit:{getInstance:()=>player}};
+        """)
+        do {
+            _ = try await execute("lyrics", value: "123", in: context)
+            XCTFail("別の曲の配信状態を選択曲へ適用しない")
+        } catch {}
     }
 
     @MainActor

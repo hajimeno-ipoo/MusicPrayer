@@ -6,6 +6,14 @@ import OSLog
 @MainActor @Observable
 final class AppleMusicPreanalysis {
     enum Phase { case preparing, capturing, analyzing, restoring }
+    enum Completion: Sendable, Equatable {
+        case complete
+        case noLyrics
+        case partialLyrics(recognized: Int, total: Int)
+        case failedLyrics
+        case missingLyrics
+        case unmatchedLyrics
+    }
 
     private struct Job {
         let ticket: UUID
@@ -16,7 +24,7 @@ final class AppleMusicPreanalysis {
     }
 
     @TaskLocal private static var currentTicket: UUID?
-    @ObservationIgnored var operation: (@MainActor (AppleMusicSong) async throws -> Void)?
+    @ObservationIgnored var operation: (@MainActor (AppleMusicSong) async throws -> Completion)?
     @ObservationIgnored private var songs: [AppleMusicSong] = []
     @ObservationIgnored private var registrations: [String: UUID] = [:]
     @ObservationIgnored private var attempted: Set<String> = []
@@ -25,6 +33,7 @@ final class AppleMusicPreanalysis {
     @ObservationIgnored private var stopWaiters = 0
     private var jobs: [String: Job] = [:]
     private(set) var errors: [String: String] = [:]
+    private(set) var completions: [String: Completion] = [:]
 
     var isWorking: Bool { !jobs.isEmpty }
 
@@ -39,7 +48,8 @@ final class AppleMusicPreanalysis {
             }
         }
         if errors[song.id] != nil { return "事前解析に失敗しました" }
-        return attempted.contains(song.id) ? "解析済み" : "解析待ち"
+        if completions[song.id] == .noLyrics { return "解析済み・歌詞なし" }
+        return completions[song.id] != nil ? "解析済み" : "解析待ち"
     }
 
     func progress(for song: AppleMusicSong) -> Double? {
@@ -66,6 +76,7 @@ final class AppleMusicPreanalysis {
         attempted.formIntersection(seen)
         pendingRetries.formIntersection(seen)
         errors = errors.filter { seen.contains($0.key) }
+        completions = completions.filter { seen.contains($0.key) }
         for (id, job) in jobs where registrations[id] != job.registration {
             job.task.cancel()
         }
@@ -80,6 +91,7 @@ final class AppleMusicPreanalysis {
 
     func retry(songID: String) {
         guard registrations[songID] != nil else { return }
+        completions[songID] = nil
         if currentJob(for: songID) != nil {
             pendingRetries.insert(songID)
             return
@@ -109,11 +121,11 @@ final class AppleMusicPreanalysis {
             guard let registration = registrations[song.id] else { continue }
             let ticket = UUID()
             let task = Task { @MainActor [weak self] in
-                let result: Result<Void, Error> = await Self.$currentTicket.withValue(ticket) {
+                let result: Result<Completion, Error> = await Self.$currentTicket.withValue(ticket) {
                     do {
-                        try await operation(song)
+                        let completion = try await operation(song)
                         try Task.checkCancellation()
-                        return .success(())
+                        return .success(completion)
                     } catch { return .failure(error) }
                 }
                 self?.finish(songID: song.id, ticket: ticket, result: result)
@@ -122,18 +134,22 @@ final class AppleMusicPreanalysis {
         }
     }
 
-    private func finish(songID: String, ticket: UUID, result: Result<Void, Error>) {
+    private func finish(songID: String, ticket: UUID, result: Result<Completion, Error>) {
         guard let job = jobs[songID], job.ticket == ticket else { return }
         jobs[songID] = nil
         if registrations[songID] == job.registration {
             if pendingRetries.remove(songID) != nil {
                 attempted.remove(songID)
                 errors[songID] = nil
+                completions[songID] = nil
             } else if !job.task.isCancelled {
                 attempted.insert(songID)
                 switch result {
-                case .success: errors[songID] = nil
+                case .success(let completion):
+                    errors[songID] = nil
+                    completions[songID] = completion
                 case .failure(let error):
+                    completions[songID] = nil
                     errors[songID] = error.localizedDescription
                     Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AppleMusicPreanalysis")
                         .error("song=\(songID, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")

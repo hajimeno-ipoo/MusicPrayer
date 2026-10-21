@@ -31,7 +31,7 @@ final class PlayerDropRoutingTests: XCTestCase {
             try writer.write(from: buffer)
         }
         let store = PlayerStore(lyricDirectory: directory.appendingPathComponent("Lyrics"), appleMusicAnalysisDirectory: directory.appendingPathComponent("AppleMusic"))
-        store.appleMusic.preanalysis.operation = { _ in }
+        store.appleMusic.preanalysis.operation = { _ in return .complete }
         if appleMusicActive {
             let song = AppleMusicSong(id: "123456", title: "配信曲", artist: "", album: "", duration: 180)
             store.tracks = [Track(appleMusicSong: song)]
