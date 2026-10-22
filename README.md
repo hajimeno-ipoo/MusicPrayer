@@ -102,7 +102,7 @@ Apple Musicが歌詞の未配信を明示した曲は「解析済み・歌詞な
 
 ### 歌詞フォント
 
-右上の歌詞フォントメニューで「システムフォント」「Furifont Sans VF」「Rubifont Sans VF」を切り替えられます。選択は保存され、ローカル曲とApple Musicの歌詞に共通で使われます。Rubifont Sans VF 0.6.6は、日本語の読みと、収録された英単語のカタカナ読みを表示します。
+右上の歌詞フォントメニューで「システムフォント」「Furifont Sans VF」「Rubifont Sans VF」を切り替えられます。選択は保存され、ローカル曲とApple Musicの歌詞に共通で使われます。Rubifont Sans VF 0.6.10は、日本語の読みと、収録された英単語のカタカナ読みを表示します。
 
 ## 曲の解析
 
@@ -147,7 +147,7 @@ Apple Musicの検索・再生・歌詞取得は公式サイトの構成に依存
 
 ## 同梱フォントのライセンス
 
-Rubifont Sans VF 0.6.6は、添付の配布フォルダから未改変で同梱しています。フォント・日本語の読み規則のライセンス原文と出典、英語一覧・日本語追加辞書のCC0 1.0通知は [Rubifont-LICENSES.txt](Sources/Resources/Fonts/Rubifont-LICENSES.txt) に収録しています。「Music Prayer」→「フォントのライセンス…」の画面上部で「Rubifont Sans VF」を選ぶと読めます。
+Rubifont Sans VF 0.6.10は、添付の配布フォルダから未改変で同梱しています。フォント・日本語の読み規則のライセンス原文と出典、英語一覧・日本語追加辞書のCC0 1.0通知は [Rubifont-LICENSES.txt](Sources/Resources/Fonts/Rubifont-LICENSES.txt) に収録しています。「Music Prayer」→「フォントのライセンス…」の画面上部で「Rubifont Sans VF」を選ぶと読めます。
 
 歌詞表示の切り替え用に、[Furifont](https://furifont.antfu.me/)（Anthony Fu and contributors）の **Furifont Sans VF v0.6.2** を未改変で同梱しています。フォントは Adobe の Source Han Sans JP を基にした **SIL Open Font License 1.1** の配布物です。アプリへの同梱・再配布・商用利用は認められていますが、著作権表示とライセンスを保持する必要があり、フォント単体での販売はできません。フォント自体を改変する場合は、予約されたフォント名などの条件も確認してください。
 
