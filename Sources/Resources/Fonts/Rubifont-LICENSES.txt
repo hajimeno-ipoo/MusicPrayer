@@ -1,26 +1,26 @@
 Music Prayer — Rubifont Sans VF のライセンス・出典
 
-歌詞表示用に Rubifont Sans VF 0.6.2 を未改変で同梱しています。
+歌詞表示用に Rubifont Sans VF 0.6.6 を未改変で同梱しています。
 Rubifont: hajimeno-ipoo/Rubifont
-配布ページ: https://github.com/hajimeno-ipoo/Rubifont/releases/tag/rubifont-v0.6.2
+配布ページ: https://github.com/hajimeno-ipoo/Rubifont/releases/tag/rubifont-v0.6.6
 ソースコード: https://github.com/hajimeno-ipoo/Rubifont
-生成元: Furifont v0.6.1 (Anthony Fu and contributors)
+生成元: Furifont v0.6.2 (Anthony Fu and contributors)
 https://github.com/antfu/furifont
-生成元コミット: afcb999aac301225b3b69b9a06c18add32aff471
+生成元コミット: da8ddae359aab8ba3df43b5156fb77fb1aa2b2c3
 ベース書体: Source Han Sans JP VF (Adobe)
 フォント: RubifontSansVF.ttf
-SHA256: 93e813496a88e1645c84358b717bcca855e774e5888b1a74b4e67406897fbf34
+SHA256: 635171e452bf7df1f6bff86415ff0633249447530cb68f9030ea878626436d30
 
 フォント内の出典（name ID 10、原文）:
 Furigana rules compiled from JMdict 2026-10-15, JMnedict 2026-10-15, JmdictFurigana 2.3.1+2026-09-25, KANJIDIC2 2026-10-15, JLPT yomitan-jlpt-vocab 2025.08.01.0, Tatoeba 2026-10-11 (CC BY-SA 4.0: EDRDG, JmdictFurigana, stephenmk after Jonathan Waller; CC BY 2.0 FR: Tatoeba). English katakana readings: Rubifont curated word list.
 
 配布READMEに記載された英語一覧・日本語追加辞書のライセンス:
-Rubifont用に作成した英語2,614語の一覧と日本語追加辞書: CC0 1.0
+Rubifont用に作成した英語2,657語の一覧と日本語追加辞書: CC0 1.0
 https://creativecommons.org/publicdomain/zero/1.0/
 日本語辞書・読み規則の出典と条件は以下のDATA-LICENSE.mdをご覧ください。
 EDRDGの利用条件: https://www.edrdg.org/edrdg/licence.html
 
-以下は添付のRubifont 0.6.2配布フォルダにあるライセンス原文の全文です。
+以下は添付のRubifont 0.6.6配布フォルダにあるライセンス原文の全文です。
 Music Prayerはビルド用コードを同梱していませんが、配布物のコードの通知も保持しています。
 
 ======================================================================

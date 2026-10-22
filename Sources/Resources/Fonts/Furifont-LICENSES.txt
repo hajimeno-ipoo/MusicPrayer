@@ -4,10 +4,10 @@ Music Prayer — Furifont Sans VF のライセンス・出典
 Furifont: Anthony Fu and contributors
 公式サイト: https://furifont.antfu.me/
 リポジトリ: https://github.com/antfu/furifont
-配布版: v0.5.1 / font Version 0.501
-配布ページ: https://github.com/antfu/furifont/releases/tag/v0.5.1
-フォント: https://github.com/antfu/furifont/releases/download/v0.5.1/FurifontSansVF.ttf
-SHA256: 9ae5c125a788989d9dcdfcec13c61d12b6709ecea68464e821ef3bd5de7c1ca0
+配布版: v0.6.2 / font Version 0.602
+配布ページ: https://github.com/antfu/furifont/releases/tag/v0.6.2
+フォント: https://github.com/antfu/furifont/releases/download/v0.6.2/FurifontSansVF.ttf
+SHA256: 5cd36ebcd9e9562351e01a8f06c9a0cccd2df610181f4d3e7a22381b7879c323
 
 Music Prayer は上記の公式配布フォントを未改変で同梱しています。
 フォントは Source Han Sans JP（Adobe）を基にした SIL Open Font License 1.1 の配布物です。
@@ -25,12 +25,12 @@ https://www.edrdg.org/edrdg/licence.html
 CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/
 CC BY 2.0 France: https://creativecommons.org/licenses/by/2.0/fr/
 
-以下は公式 v0.5.1 リリースのライセンスファイルの全文です。
+以下は公式 v0.6.2 リリースのライセンスファイルの全文です。
 この案内の日本語は内容の説明であり、以下のライセンス原文を変更するものではありません。
 
 ======================================================================
 OFL.txt — フォントの著作権表示とライセンス全文（原文）
-Source: https://github.com/antfu/furifont/releases/download/v0.5.1/OFL.txt
+Source: https://github.com/antfu/furifont/releases/download/v0.6.2/OFL.txt
 SHA256: fcac737e761ec63dbfbdce11030a1780161920d80315edba9c8beff1c2bac5a2
 ======================================================================
 
@@ -133,7 +133,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ======================================================================
 DATA-LICENSE.md — 辞書・読み規則の出典とライセンス通知（原文）
-Source: https://github.com/antfu/furifont/releases/download/v0.5.1/DATA-LICENSE.md
+Source: https://github.com/antfu/furifont/releases/download/v0.6.2/DATA-LICENSE.md
 SHA256: 28989f9dfb9ee3d81f814efdf7d0c1d0bb750ba45ea1d908c93260dfd920f607
 ======================================================================
 
