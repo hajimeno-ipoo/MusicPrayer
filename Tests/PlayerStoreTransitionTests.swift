@@ -1103,6 +1103,54 @@ final class PlayerStoreTransitionTests: XCTestCase {
     }
 
     @MainActor
+    func testLocalReadingsAreSavedBeforeCompletionAndOldTimingsNeedNoNewRecognition() async throws {
+        let transcriber = FixtureLyricTranscriber()
+        try await withLyricFixture(lyricTranscriber: transcriber) { store, fixture in
+            store.select(0, autoplay: false)
+            try await self.waitUntil("読み選別テストの解析が復元されること") {
+                store.analysis != nil && store.lyricFingerprint == fixture.fingerprints[0]
+            }
+            let source = "来ない\n来ます"
+            var observedCompletion = false
+            store.visualSource.observeFrames {
+                if store.lyricTimeline?.sourceText == source, case .generated = store.lyricTimingState {
+                    observedCompletion = true
+                    XCTAssertEqual(try? fixture.saved(index: 0)?.readings, store.lyricReadings,
+                                   "完了を公開する時点で読み指定も保存されていること")
+                }
+            }
+            defer { store.visualSource.observeFrames {} }
+            store.applyLyrics(source)
+            try await self.waitUntil("歌詞時刻と読み指定を保存してから完了すること") {
+                if case .generated = store.lyricTimingState { return store.lyricReadings != nil }
+                return false
+            }
+            XCTAssertTrue(observedCompletion)
+            let original = try XCTUnwrap(fixture.saved(index: 0))
+            XCTAssertEqual(original.readings?.readings(for: "来ない"), [LyricReading(start: 0, count: 1, salt: 5)])
+            XCTAssertEqual(original.readings?.readings(for: "来ます"), [])
+            let calls = await transcriber.callCount
+            let file = fixture.lyrics.appendingPathComponent("\(fixture.fingerprints[0]).json")
+            var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            legacy.removeValue(forKey: "readings")
+            try JSONSerialization.data(withJSONObject: legacy).write(to: file, options: .atomic)
+            store.select(1, autoplay: false)
+            try await self.waitUntil("別曲へ切り替わること") { store.lyricFingerprint == fixture.fingerprints[1] }
+            store.select(0, autoplay: false)
+            try await self.waitUntil("有効な旧時刻へ読み指定だけを補完すること") {
+                if case .generated = store.lyricTimingState {
+                    return store.lyricTimeline?.sourceText == source && store.lyricReadings == original.readings
+                }
+                return false
+            }
+            let finalCalls = await transcriber.callCount
+            XCTAssertEqual(finalCalls, calls, "読み指定の追加で音声認識をやり直さないこと")
+            XCTAssertEqual(store.lyricTimeline, original.timeline)
+            XCTAssertEqual(try fixture.saved(index: 0)?.readings, original.readings)
+        }
+    }
+
+    @MainActor
     func testTerminationSaveFailureReopensRequestsAndRetryCanFinish() async throws {
         try await withLyricFixture { store, fixture in
             store.select(0, autoplay: false)
@@ -1114,6 +1162,8 @@ final class PlayerStoreTransitionTests: XCTestCase {
             try await self.waitUntil("生成結果を保持し、保存失敗だけを表示すること") {
                 store.hasPendingLyricSaveFailure && store.lyricTimeline != nil
             }
+            XCTAssertEqual(store.lyricTimingState, .failed)
+            XCTAssertNil(store.lyricReadings, "未保存の読み指定をRubifontの描画へ渡さないこと")
             let cancelled = await store.finishLyricsBeforeTermination()
             XCTAssertFalse(cancelled, "未保存の確定本文が残ると終了をキャンセルすること")
             XCTAssertTrue(store.lyricsAcceptingRequests)

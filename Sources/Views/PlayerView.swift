@@ -333,6 +333,9 @@ struct PlayerView: View {
             } else if store.analyzing {
                 ProgressView().controlSize(.mini)
                 Text(store.isAppleMusicActive ? "再生しながら解析中" : "曲を解析中 · 再生できます").font(.system(size: 14)).foregroundStyle(.white.opacity(0.9))
+            } else if !store.isAppleMusicActive, store.lyricTimingState.isGenerating {
+                ProgressView().controlSize(.mini)
+                Text("歌詞を準備中").font(.system(size: 14)).foregroundStyle(.white.opacity(0.9))
             } else {
                 if let section = store.moment.section ?? (store.position == 0 && store.analysis?.sections.isEmpty == false ? 1 : nil) { Text("SECTION \(section)") }
                 if let bpm = store.moment.bpm { Text("\(Int(bpm.rounded())) BPM") }

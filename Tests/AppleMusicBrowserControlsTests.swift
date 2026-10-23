@@ -112,6 +112,80 @@ final class AppleMusicBrowserControlsTests: XCTestCase {
     }
 
     @MainActor
+    func testAddNoticeShowsResultAndExpiresWithoutInterruptingControls() async throws {
+        _ = NSApplication.shared
+        let store = AppleMusicStore(websiteDataStore: .nonPersistent(), usesAnalysisWorkers: false, isOfficialBrowser: true)
+        let view = store.webViewForDisplay()
+        view.stopLoading()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 800), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        window.orderBack(nil)
+        defer { store.stop(); window.orderOut(nil); window.contentView = nil }
+        view.loadHTMLString("""
+        <html><head><style>
+        .app-container { --systemPrimary:rgb(0,0,0) }
+        .player-bar__floating-player { position:fixed; bottom:20px; right:0; height:56px }
+        .chrome-player { height:56px; border-radius:1000px }
+        .chrome-player::before { content:''; position:absolute; inset:0; background:rgba(245,245,247,.8); backdrop-filter:blur(16px); border-radius:inherit }
+        </style></head><body><div class="app-container">
+        <div class="player-bar__floating-player"><div class="chrome-player">Official player</div></div>
+        </div></body></html>
+        """, baseURL: URL(string: "https://music.apple.com/jp/"))
+        try await waitFor(view, "!!document.querySelector('.music-prayer-add-notice')")
+        try await waitFor(view, "document.querySelector('.music-prayer-add-notice').hidden")
+
+        func updateMessage(_ message: String) async throws {
+            let data = try JSONSerialization.data(withJSONObject: ["canGoBack": true, "canAdd": true, "isAdding": false, "message": message])
+            let json = String(decoding: data, as: UTF8.self)
+            _ = try await view.evaluateJavaScript("window.musicPrayerControls.update(\(json)); true")
+        }
+
+        let message = "「曲名 <b>テスト</b>」を一覧に追加しました。"
+        try await updateMessage(message)
+        let text = try await view.evaluateJavaScript("document.querySelector('.music-prayer-add-notice').textContent") as? String
+        XCTAssertEqual(text, message, "曲名はHTMLとして解釈せず、そのまま表示する")
+        let visible = try await view.evaluateJavaScript("""
+        (() => {
+            const notice = document.querySelector('.music-prayer-add-notice');
+            const rect = notice.getBoundingClientRect();
+            return !notice.hidden && rect.width > 0 && rect.height > 0
+                && rect.left >= 0 && rect.right <= innerWidth && rect.bottom < innerHeight - 76
+                && getComputedStyle(notice).pointerEvents === 'none'
+                && notice.getAttribute('role') === 'status'
+                && !notice.querySelector('b')
+                && !document.querySelector('[data-action="add"]').disabled;
+        })()
+        """) as? Bool
+        XCTAssertEqual(visible, true)
+        try await Task.sleep(for: .milliseconds(2200))
+        try await updateMessage(message)
+        try await Task.sleep(for: .milliseconds(2000))
+        try await waitFor(view, "document.querySelector('.music-prayer-add-notice').hidden")
+        try await updateMessage(message)
+        try await waitFor(view, "document.querySelector('.music-prayer-add-notice').hidden")
+
+        // A new add clears the old result, allowing the same song's result to appear again.
+        try await updateMessage("")
+        try await updateMessage(message)
+        try await waitFor(view, "!document.querySelector('.music-prayer-add-notice').hidden")
+        try await Task.sleep(for: .milliseconds(2200))
+        let nextMessage = "曲を追加できませんでした。Apple Musicの配信曲を再生し、接続状態を確認してもう一度押してください。"
+        try await updateMessage(nextMessage)
+        try await Task.sleep(for: .milliseconds(2000))
+        try await waitFor(view, "!document.querySelector('.music-prayer-add-notice').hidden")
+        let updatedText = try await view.evaluateJavaScript("document.querySelector('.music-prayer-add-notice').textContent") as? String
+        XCTAssertEqual(updatedText, nextMessage, "連続した結果は最新の案内へ更新する")
+        let fits = try await view.evaluateJavaScript("(() => { const n = document.querySelector('.music-prayer-add-notice'); return n.scrollWidth <= n.clientWidth && n.getBoundingClientRect().height > 50; })()") as? Bool
+        XCTAssertEqual(fits, true, "長い案内は通知内で折り返す")
+        try await Task.sleep(for: .milliseconds(2200))
+        try await waitFor(view, "document.querySelector('.music-prayer-add-notice').hidden")
+        try await updateMessage("「曲名」はすでに一覧に登録されています。")
+        try await waitFor(view, "!document.querySelector('.music-prayer-add-notice').hidden")
+        try await updateMessage("")
+        try await waitFor(view, "document.querySelector('.music-prayer-add-notice').hidden")
+    }
+
+    @MainActor
     private func waitFor(_ view: WKWebView, _ condition: String) async throws {
         for _ in 0..<100 {
             if (try? await view.evaluateJavaScript(condition)) as? Bool == true { return }

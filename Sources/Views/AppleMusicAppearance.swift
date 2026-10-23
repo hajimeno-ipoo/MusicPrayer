@@ -85,10 +85,35 @@ enum AppleMusicAppearance {
             }
             .music-prayer-controls button:disabled { opacity: .4; cursor: default; }
             .music-prayer-controls svg { width: 20px; height: 20px; }
+            .music-prayer-add-notice {
+                position: fixed !important;
+                bottom: 96px;
+                inset-inline-end: 20px;
+                z-index: 9999;
+                box-sizing: border-box;
+                width: max-content;
+                max-width: min(420px, calc(100vw - 40px));
+                height: auto !important;
+                min-height: 0 !important;
+                padding: 16px 20px;
+                margin: 0 !important;
+                border-radius: 16px !important;
+                color: var(--systemPrimary);
+                font-size: 14px;
+                line-height: 1.5;
+                white-space: normal;
+                overflow-wrap: anywhere;
+                pointer-events: none;
+            }
+            .music-prayer-add-notice[hidden] { display: none !important; }
+            .music-prayer-add-notice span { position: relative; z-index: 1; }
         `;
         document.head.appendChild(style);
 
         let controls;
+        let notice;
+        let noticeTimeout;
+        let lastMessage = '';
         let state = { canGoBack: false, canAdd: false, isAdding: false, message: '' };
         const update = next => {
             state = next;
@@ -98,6 +123,13 @@ enum AppleMusicAppearance {
             add.disabled = !state.canAdd || state.isAdding;
             add.title = state.message || '再生中の曲を一覧に追加';
             add.setAttribute('aria-busy', String(state.isAdding));
+            if (notice && state.message !== lastMessage) {
+                lastMessage = state.message;
+                clearTimeout(noticeTimeout);
+                notice.querySelector('span').textContent = state.message;
+                notice.hidden = !state.message;
+                if (state.message) noticeTimeout = setTimeout(() => { notice.hidden = true; }, 4000);
+            }
         };
         window.musicPrayerControls = { update };
         const mount = () => {
@@ -125,6 +157,16 @@ enum AppleMusicAppearance {
                 controls.appendChild(button);
             }
             player.parentElement.appendChild(controls);
+            if (!notice?.isConnected) {
+                notice = document.createElement('div');
+                notice.className = player.className + ' music-prayer-add-notice';
+                notice.hidden = true;
+                notice.setAttribute('role', 'status');
+                notice.setAttribute('aria-live', 'polite');
+                notice.setAttribute('aria-atomic', 'true');
+                notice.appendChild(document.createElement('span'));
+                player.closest('.app-container').appendChild(notice);
+            }
             update(state);
             window.webkit?.messageHandlers?.musicPrayerControls?.postMessage('ready');
         };

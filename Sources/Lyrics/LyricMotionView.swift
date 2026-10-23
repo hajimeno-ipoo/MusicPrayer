@@ -263,13 +263,22 @@ struct LyricMotionLineView: View {
     let viewport: CGSize
     let font: LyricFont
     var estimatedProgress: Double? = nil
+    var readings: [LyricReading] = []
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
 
-    private func lyricText(breakOffset: Int? = nil) -> Text {
+    private func lyricText(size: CGFloat, breakOffset: Int? = nil) -> Text {
         let total = max(1, line.text.reduce(0.0) { $0 + LyricParser.characterWeight($1) })
+        let readings = font == .rubifont ? readings : []
+        let readingFonts = Dictionary(uniqueKeysWithValues: Set(readings.map(\.salt)).map {
+            ($0, font.font(size: size, salt: $0))
+        })
         var offset = 0.0
         return line.text.enumerated().reduce(Text("")) { text, element in
-            let character = Text(String(element.element))
+            var character = Text(String(element.element))
+            if let reading = readings.first(where: { $0.start <= element.offset && element.offset < $0.start + $0.count }),
+               let selectedFont = readingFonts[reading.salt] {
+                character = character.font(selectedFont)
+            }
             let end = offset + LyricParser.characterWeight(element.element) / total
             let fragment = colourTimings.indices.contains(element.offset)
                 ? character.customAttribute(LyricProgressAttribute(timing: colourTimings[element.offset]))
@@ -282,7 +291,7 @@ struct LyricMotionLineView: View {
     }
 
     private func styledText(size: CGFloat, breakOffset: Int? = nil) -> some View {
-        lyricText(breakOffset: breakOffset)
+        lyricText(size: size, breakOffset: breakOffset)
             .font(font.font(size: size))
             .foregroundStyle(.white)
             .multilineTextAlignment(.center)
@@ -295,7 +304,8 @@ struct LyricMotionLineView: View {
 
     var body: some View {
         Group {
-            if let presentation = LyricLineWrapping.presentation(text: line.text, viewport: viewport, font: font) {
+            if let presentation = LyricLineWrapping.presentation(text: line.text, viewport: viewport, font: font,
+                                                                 readings: readings) {
                 styledText(size: presentation.fontSize, breakOffset: presentation.breakOffset)
                     .frame(maxHeight: .infinity, alignment: .center)
             } else {
@@ -328,9 +338,10 @@ struct LyricMotionView: View {
             Group {
                 if store.isAppleMusicActive {
                     if let lyrics = store.appleMusic.lyrics,
-                       lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id {
+                       lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id,
+                       font != .rubifont || lyrics.readings != nil {
                         if lyrics.lines.isEmpty {
-                            Text(lyrics.text)
+                            untimedText(lyrics.text, readings: lyrics.readings?.readings(for: lyrics.text) ?? [])
                                 .font(font.font(size: 28))
                                 .foregroundStyle(.white)
                                 .multilineTextAlignment(.center)
@@ -339,11 +350,13 @@ struct LyricMotionView: View {
                             let windows = LyricMotion.displayWindows(lyrics.lines)
                             TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !store.isPlaying)) { _ in
                                 lyricLines(LyricMotion.visibleLines(lyrics.lines, at: store.position, windows: windows),
-                                           time: store.position, viewport: viewport, windows: windows)
+                                           time: store.position, viewport: viewport, readings: lyrics.readings,
+                                           windows: windows)
                             }
                         }
                     }
                 } else if let timeline = store.lyricTimeline, !timeline.lines.isEmpty,
+                          font != .rubifont || store.lyricReadings != nil,
                           timeline.lines.allSatisfy(\.hasValidCharacterTimings), viewport.width > 0, viewport.height > 0 {
                     let displayStarts = LyricMotion.displayStarts(timeline, analysis: store.analysis)
                     let windows = LyricMotion.displayWindows(timeline.lines, displayStarts: displayStarts)
@@ -355,7 +368,8 @@ struct LyricMotionView: View {
                            timeline.analysisFingerprint == fingerprint,
                            frame.time >= 0, frame.time <= frame.duration {
                             lyricLines(LyricMotion.visibleLines(timeline, at: frame.time, displayStarts: displayStarts, windows: windows),
-                                       time: frame.time, viewport: viewport, frame: frame, displayStarts: displayStarts, windows: windows)
+                                       time: frame.time, viewport: viewport, frame: frame, displayStarts: displayStarts,
+                                       readings: store.lyricReadings, windows: windows)
                         }
                     }
                     .id(store.lyricFrameRevision)
@@ -377,8 +391,24 @@ struct LyricMotionView: View {
         .allowsHitTesting(false)
     }
 
+    private func untimedText(_ text: String, readings: [LyricReading]) -> Text {
+        guard font == .rubifont, !readings.isEmpty else { return Text(text) }
+        let fonts = Dictionary(uniqueKeysWithValues: Set(readings.map(\.salt)).map {
+            ($0, font.font(size: 28, salt: $0))
+        })
+        return text.enumerated().reduce(Text("")) { result, element in
+            var character = Text(String(element.element))
+            if let reading = readings.first(where: { $0.start <= element.offset && element.offset < $0.start + $0.count }),
+               let selectedFont = fonts[reading.salt] {
+                character = character.font(selectedFont)
+            }
+            return Text("\(result)\(character)")
+        }
+    }
+
     private func lyricLines(_ lines: [TimedLyricLine], time: Double, viewport: CGSize,
                             frame: LyricPlaybackFrame? = nil, displayStarts: [Int: Double] = [:],
+                            readings: LyricReadings? = nil,
                             windows: [Int: LyricDisplayWindow]) -> some View {
         ZStack {
             ForEach(lines) { line in
@@ -392,7 +422,8 @@ struct LyricMotionView: View {
                                        motion: motion, time: time, viewport: viewport, font: font,
                                        estimatedProgress: store.isAppleMusicActive && !line.hasValidCharacterTimings
                                            ? store.analysis.map { LyricMusicContext(analysis: $0).colourProgress(
-                                                in: LyricCharacterTiming(start: line.start, end: line.end), at: time) } ?? motion.progress : nil)
+                                                in: LyricCharacterTiming(start: line.start, end: line.end), at: time) } ?? motion.progress : nil,
+                                       readings: readings?.readings(for: line.text) ?? [])
                 }
             }
         }

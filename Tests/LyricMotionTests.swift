@@ -28,6 +28,134 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
+    func testSavedRubifontReadingsKeepColourProgressAndSeekWithoutChangingTimings() throws {
+        let source = "😀来ない 一回り"
+        let store = offscreenStore(source: source)
+        defer { store.engine.stop() }
+        let timings = store.lyricTimeline?.lines.first?.characterTimings
+        let plan = LyricReadings(sourceTextHash: LyricHash.text(source), lines: [source: [
+            LyricReading(start: 1, count: 1, salt: 5),
+            LyricReading(start: 5, count: 2, salt: 2)
+        ]])
+        func render(_ font: LyricFont) throws -> RenderedPixels {
+            try pixels(ImageRenderer(content: LyricMotionView(store: store, font: font)
+                .frame(width: 600, height: 240).background(.black)))
+        }
+        let original = try render(.rubifont)
+        let system = try render(.system)
+        let furifont = try render(.furifont)
+        store.lyricReadings = nil
+        XCTAssertEqual(try render(.rubifont).litPixels, 0, "読みの準備前にRubifontの既定読みを先行表示しないこと")
+        // This value represents a restored JSON result; no resolver is called by the view.
+        store.lyricReadings = try JSONDecoder().decode(LyricReadings.self, from: JSONEncoder().encode(plan))
+        let selected = try render(.rubifont)
+        XCTAssertGreaterThan(selected.litPixels, 30)
+        XCTAssertNotEqual(original.bytes, selected.bytes, "保存したsalt指定で実際の読み字形が変わること")
+        // Rebuilding Text can change an 8-bit antialiasing sample by one step.
+        let systemAfter = try render(.system)
+        let systemDifference = zip(system.bytes, systemAfter.bytes).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        XCTAssertLessThanOrEqual(systemDifference, 1)
+        XCTAssertEqual(furifont.bytes, try render(.furifont).bytes)
+        var frame = try XCTUnwrap(store.visualSource.snapshot().lyrics)
+        frame.time = 2.5
+        publish(frame, to: store)
+        let progressed = try render(.rubifont)
+        XCTAssertNotEqual(selected.bytes, progressed.bytes, "読み指定と文字色の進行が両立すること")
+        frame.time = 1
+        publish(frame, to: store)
+        XCTAssertEqual(selected.bytes, try render(.rubifont).bytes, "シークで同じ読みと色へ戻ること")
+        XCTAssertEqual(store.lyricTimeline?.lines.first?.characterTimings, timings)
+        XCTAssertEqual(store.lyricTimeline?.sourceText, source)
+    }
+
+    @MainActor
+    func testPreparedReportedReadingsRenderWithBundledFontAndKeepOriginalText() async throws {
+        _ = NSApplication.shared
+        let sources = ["暗闇走り抜ける", "1つの街と人が", "2人でいても離れていても", "車道で踊るあの娘", "想い出を", "１つの街と人が", "２人でいても離れていても",
+                       "2つの国と", "あの時感じた", "不満の声", "あなたの声聞きたくて", "金のハンドルで街を飛びまわれ", "胸の鼓動焼きつけろ", "AH AHいくつかの場面", "２つの国と",
+                       "そんな1日でもいいでしょう", "そんな１日でもいいでしょう", "Oh 人生楽ありゃ苦あり", "大きな声で 自由に歌っているの",
+                       "もっと楽に生きていきたい", "今朝もミニのスカートで 人ゴミの中走ってく", "ゴミの中走っていく", "走っていく", "candy pretty doll"]
+        let plan = try await LyricReadingResolver().prepare(sourceText: sources.joined(separator: "\n"), lines: sources)
+        let viewport = CGSize(width: 800, height: 160)
+        for (index, source) in sources.enumerated() {
+            let timings = source.map { _ in LyricCharacterTiming(start: 1, end: 3) }
+            let line = TimedLyricLine(id: "reported-\(index)", ordinal: index, text: source, start: 1, end: 3,
+                                      textWeight: Double(source.count), confidence: 1, characterTimings: timings)
+            let motion = try XCTUnwrap(LyricMotion.parameters(for: line, time: 1, vocal: nil,
+                                                             beat: 0, beatPhase: 0, barPhase: 0))
+            let readings = try XCTUnwrap(plan.readings(for: source))
+            let original = ImageRenderer(content: LyricMotionLineView(line: line, colourTimings: timings,
+                motion: motion, time: 1, viewport: viewport, font: .rubifont).background(.black))
+            let selected = ImageRenderer(content: LyricMotionLineView(line: line, colourTimings: timings,
+                motion: motion, time: 1, viewport: viewport, font: .rubifont, readings: readings).background(.black))
+            let before = try pixels(original)
+            let after = try pixels(selected)
+            XCTAssertGreaterThan(after.litPixels, 100, source)
+            if !readings.isEmpty {
+                XCTAssertNotEqual(before.bytes, after.bytes, "準備した読み指定が実際の描画へ反映されること: \(source)")
+            }
+            XCTAssertEqual(line.text, source)
+            XCTAssertEqual(line.characterTimings, timings)
+            try saveWrappingEvidence(original, name: "reported-\(index + 1)-default.png")
+            try saveWrappingEvidence(selected, name: "reported-\(index + 1)-prepared.png")
+        }
+    }
+
+    @MainActor
+    func testShomonWordDefaultAndExplicitAlternateRenderDifferentReadings() throws {
+        _ = NSApplication.shared
+        let source = "声聞"
+        let timings = source.map { _ in LyricCharacterTiming(start: 1, end: 3) }
+        let line = TimedLyricLine(id: "shomon-alternate", ordinal: 0, text: source, start: 1, end: 3,
+                                  textWeight: Double(source.count), confidence: 1, characterTimings: timings)
+        let motion = try XCTUnwrap(LyricMotion.parameters(for: line, time: 1, vocal: nil,
+                                                         beat: 0, beatPhase: 0, barPhase: 0))
+        let viewport = CGSize(width: 400, height: 160)
+        let original = ImageRenderer(content: LyricMotionLineView(line: line, colourTimings: timings,
+            motion: motion, time: 1, viewport: viewport, font: .rubifont).background(.black))
+        let alternate = ImageRenderer(content: LyricMotionLineView(line: line, colourTimings: timings,
+            motion: motion, time: 1, viewport: viewport, font: .rubifont,
+            readings: [LyricReading(start: 0, count: 2, salt: 2)]).background(.black))
+        let before = try pixels(original)
+        let after = try pixels(alternate)
+        XCTAssertGreaterThan(before.litPixels, 30)
+        XCTAssertGreaterThan(after.litPixels, 30)
+        XCTAssertNotEqual(before.bytes, after.bytes, "声聞の通常読みと明示した別読みが描き分けられること")
+        XCTAssertEqual(line.text, source)
+        XCTAssertEqual(line.characterTimings, timings)
+        try saveWrappingEvidence(original, name: "shomon-default-koeki.png")
+        try saveWrappingEvidence(alternate, name: "shomon-alternate-shomon.png")
+    }
+
+    @MainActor
+    func testSavedMultiKanjiReadingsFitWrappingAndRemainOnOneRow() throws {
+        let source = "夜が明けてから一回りして、来ない人を待ちながら街を一回り歩いて帰ります。"
+        let readings = [LyricReading(start: 7, count: 2, salt: 2),
+                        LyricReading(start: 13, count: 1, salt: 5),
+                        LyricReading(start: 25, count: 2, salt: 2)]
+        let store = offscreenStore(source: source)
+        defer { store.engine.stop() }
+        store.lyricReadings = LyricReadings(sourceTextHash: LyricHash.text(source), lines: [source: readings])
+        for width in [600, 1000] {
+            let viewport = CGSize(width: width - 48, height: 208)
+            let initial = LyricLineWrapping.presentation(text: source, viewport: viewport, font: .rubifont)
+            let selected = try XCTUnwrap(LyricLineWrapping.presentation(text: source, viewport: viewport,
+                                                                       font: .rubifont, readings: readings))
+            let split = try XCTUnwrap(selected.breakOffset)
+            XCTAssertFalse(readings.contains { $0.start < split && split < $0.start + $0.count })
+            XCTAssertEqual(initial, LyricLineWrapping.presentation(text: source, viewport: viewport, font: .rubifont),
+                           "読み指定ありの計測を既定表示のキャッシュへ混ぜないこと")
+            let image = try pixels(ImageRenderer(content: LyricMotionView(store: store, font: .rubifont)
+                .frame(width: CGFloat(width), height: 240).background(.black)))
+            let bounds = try XCTUnwrap(image.litBounds)
+            XCTAssertGreaterThan(bounds.minX, 24)
+            XCTAssertLessThan(bounds.maxX, CGFloat(width - 24))
+            XCTAssertGreaterThan(bounds.minY, 16)
+            XCTAssertLessThan(bounds.maxY, 224)
+        }
+    }
+
+    @MainActor
     func testFontSwitchChangesPausedLyricsAndRestoresSystemRendering() async throws {
         let source = "日本語の歌詞と Hello Settings Save"
         let audio = try silentAudioFixture()
@@ -798,6 +926,8 @@ final class LyricMotionTests: XCTestCase {
                                             mode: .speechRecognition, lines: [timed], confidence: 1,
                                             frames: [LyricStructureFrame(start: 0, end: 10, section: 0, segment: 0,
                                                 lineOrdinals: [0], support: LyricFrameSupport())])
+        // Layout fixtures represent preparation completed with no override.
+        store.lyricReadings = LyricReadings(sourceTextHash: LyricHash.text(source), lines: [source: []])
         let frame = LyricPlaybackFrame(trackID: store.currentTrack?.id, playbackGeneration: 7,
                                        audioFingerprint: store.lyricFingerprint, time: 1, duration: 10,
                                        isPlaying: false, isPreviewing: false, vocal: nil, beat: 0,

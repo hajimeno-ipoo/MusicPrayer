@@ -38,7 +38,16 @@ final class AppleMusicStore: NSObject {
             await self.musicAnalysis.queueRegistration?.value
             let savedAnalysis = await cache.load(id: song.id, duration: song.duration)
             if savedAnalysis != nil, let savedTiming = await cache.loadLyricTiming(for: song) {
-                if savedTiming.completion != .missingLyrics { return savedTiming.completion }
+                if savedTiming.completion != .missingLyrics {
+                    guard let ticket = await cache.ticket(for: song.id) else { throw CancellationError() }
+                    let prepared = try await self.preparingReadings(for: savedTiming, song: song)
+                    try Task.checkCancellation()
+                    if prepared.readings != savedTiming.readings {
+                        guard try await cache.saveLyricTiming(prepared, ticket: ticket) else { throw CancellationError() }
+                    }
+                    await self.refreshLyricTiming(for: song)
+                    return prepared.completion
+                }
                 // Old empty/native caches did not record whether lyrics were
                 // supplied. Verify the response without replaying saved music.
                 guard let ticket = await cache.ticket(for: song.id) else { throw CancellationError() }
@@ -48,7 +57,8 @@ final class AppleMusicStore: NSObject {
                         let verified = AppleMusicLyricTiming(songID: song.id, duration: song.duration,
                             sourceText: source?.text ?? "", hasLyrics: source != nil,
                             usesOfficialWordTimings: source != nil)
-                        guard try await cache.saveLyricTiming(verified, ticket: ticket) else { throw CancellationError() }
+                        let prepared = try await self.preparingReadings(for: verified, song: song, source: source)
+                        guard try await cache.saveLyricTiming(prepared, ticket: ticket) else { throw CancellationError() }
                         await self.refreshLyricTiming(for: song)
                         return verified.completion
                     }
@@ -81,13 +91,15 @@ final class AppleMusicStore: NSObject {
                     self.workerStartup.release(permit)
                 })
             try Task.checkCancellation()
+            let prepared = try await self.preparingReadings(for: result.lyricTiming, song: song)
+            try Task.checkCancellation()
             guard try await cache.save(result.analysis, id: song.id, ticket: ticket),
-                  try await cache.saveLyricTiming(result.lyricTiming, ticket: ticket) else { throw CancellationError() }
-            let rows = result.lyricTiming.derivedLines ?? result.lyricTiming.timeline?.lines ?? []
+                  try await cache.saveLyricTiming(prepared, ticket: ticket) else { throw CancellationError() }
+            let rows = prepared.derivedLines ?? prepared.timeline?.lines ?? []
             Logger(subsystem: "com.hazimeno.MusicPrayer", category: "AppleMusicLyrics").notice("Saved song=\(song.id, privacy: .public) rows=\(rows.count) timed=\(rows.filter(\.hasValidCharacterTimings).count)")
             self.musicAnalysis.refreshSavedAnalysis(for: song)
             await self.refreshLyricTiming(for: song)
-            return result.lyricTiming.completion
+            return prepared.completion
         }
     }
     private(set) var artworkData: Data?
@@ -110,16 +122,16 @@ final class AppleMusicStore: NSObject {
         guard let selectedSong else { return nil }
         guard let sourceLyrics else { return lyricTimingFailure }
         guard
-              sourceLyrics.lines.isEmpty || !sourceLyrics.lines.allSatisfy(\.hasValidCharacterTimings),
-              lyrics == sourceLyrics else { return nil }
+              lyrics == nil || sourceLyrics.lines.isEmpty || !sourceLyrics.lines.allSatisfy(\.hasValidCharacterTimings),
+              lyrics == nil || lyrics?.lines == sourceLyrics.lines else { return nil }
         return lyricTimingFailure ?? preanalysis.errors[selectedSong.id].map { "歌詞の時刻を解析できませんでした：" + $0 }
     }
     var lyricTimingStatus: String? {
         guard selectedSong != nil, lyricTimingError == nil else { return nil }
         guard let sourceLyrics else { return lyricTimingMessage }
         guard
-              sourceLyrics.lines.isEmpty || !sourceLyrics.lines.allSatisfy(\.hasValidCharacterTimings),
-              lyrics == sourceLyrics else { return nil }
+              lyrics == nil || sourceLyrics.lines.isEmpty || !sourceLyrics.lines.allSatisfy(\.hasValidCharacterTimings),
+              lyrics == nil || lyrics?.lines == sourceLyrics.lines else { return nil }
         return lyricTimingMessage
     }
     @ObservationIgnored private var sourceLyrics: AppleMusicLyrics?
@@ -227,9 +239,13 @@ final class AppleMusicStore: NSObject {
                        let ticket = await self.analysisCache.ticket(for: song.id) {
                         guard !Task.isCancelled, generation == self.lyricsGeneration,
                               self.selectedSong?.id == song.id else { return }
-                        let verified = AppleMusicLyricTiming(songID: song.id, duration: song.duration,
+                        var verified = AppleMusicLyricTiming(songID: song.id, duration: song.duration,
                             sourceText: fetched?.text ?? "", hasLyrics: fetched != nil,
                             usesOfficialWordTimings: fetched != nil)
+                        let existing = await self.analysisCache.loadLyricTiming(for: song)
+                        if existing?.sourceText == verified.sourceText {
+                            verified.readings = existing?.readings
+                        }
                         guard try await self.analysisCache.saveLyricTiming(verified, ticket: ticket) else { return }
                         guard !Task.isCancelled, generation == self.lyricsGeneration,
                               self.selectedSong?.id == song.id else { return }
@@ -257,40 +273,70 @@ final class AppleMusicStore: NSObject {
         return try AppleMusicLyricsParser.parseResponse(response, songID: song.id)
     }
 
+    /// Called only by preanalysis, before the timing cache is saved and completed.
+    private func preparingReadings(for timing: AppleMusicLyricTiming, song: AppleMusicSong,
+                                  source: AppleMusicLyrics? = nil) async throws -> AppleMusicLyricTiming {
+        guard !timing.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return timing }
+        var result = timing
+        var lines = timing.derivedLines ?? timing.timeline?.lines
+        let source = source ?? (sourceLyrics?.songID == song.id ? sourceLyrics : nil)
+        if let readings = timing.readings, readings.isCurrent(sourceText: timing.sourceText),
+           readings.readings(for: timing.sourceText) != nil,
+           (lines ?? []).allSatisfy({ readings.readings(for: $0.text) != nil }),
+           source == nil || (source?.text == timing.sourceText &&
+               source!.lines.allSatisfy({ readings.readings(for: $0.text) != nil })) { return timing }
+        if lines == nil {
+            let fetched: AppleMusicLyrics?
+            if let source { fetched = source }
+            else { fetched = try await fetchLyrics(for: song) }
+            guard let fetched, fetched.text == timing.sourceText else {
+                throw LyricAlignmentError.inconsistentSavedData
+            }
+            lines = fetched.lines
+        }
+        result.readings = try await LyricReadingResolver.shared.prepare(sourceText: timing.sourceText,
+            lines: [timing.sourceText] + (lines ?? []).map(\.text), existing: timing.readings)
+        try Task.checkCancellation()
+        return result
+    }
+
     private func refreshLyricTiming(for song: AppleMusicSong) async {
         let generation = lyricsGeneration
         let timing = await analysisCache.loadLyricTiming(for: song)
         let analysis = await analysisCache.load(id: song.id, duration: song.duration)
         guard generation == lyricsGeneration, selectedSong?.id == song.id,
               let source = sourceLyrics, source.songID == song.id else { return }
-        if let timing, let analysis, let recognized = timing.applying(to: source, song: song, analysis: analysis) {
-            lyrics = recognized
+        let recognized = timing.flatMap { timing in
+            analysis.flatMap { timing.applying(to: source, song: song, analysis: $0) }
+        }
+        let display = recognized ?? source
+        let prepared = timing?.applyingReadings(to: display)
+        lyrics = prepared ?? display
+        if prepared == nil, !preanalysis.isAnalyzing(songID: song.id) {
+            preanalysis.retry(songID: song.id)
+        }
+        if lyrics != nil, recognized != nil || (!source.lines.isEmpty && source.lines.allSatisfy(\.hasValidCharacterTimings)) {
             lyricTimingMessage = nil
             lyricTimingFailure = nil
+        } else if let timing, timing.sourceText == source.text, let error = timing.errorMessage {
+            lyricTimingMessage = nil
+            lyricTimingFailure = "歌詞の同期を生成できませんでした：" + error
         } else {
-            lyrics = source
-            if !source.lines.isEmpty, source.lines.allSatisfy(\.hasValidCharacterTimings) {
-                lyricTimingMessage = nil
-                lyricTimingFailure = nil
-            } else if let timing, timing.sourceText == source.text, let error = timing.errorMessage {
-                lyricTimingMessage = nil
-                lyricTimingFailure = "歌詞の同期を生成できませんでした：" + error
-            } else {
-                lyricTimingMessage = "音声から歌詞の時刻を解析しています"
-                lyricTimingFailure = nil
-                if timing != nil {
-                    do {
-                        try await analysisCache.invalidateLyricTiming(for: song)
-                        guard generation == lyricsGeneration, selectedSong?.id == song.id else { return }
-                        preanalysis.retry(songID: song.id)
-                    } catch {
-                        guard generation == lyricsGeneration, selectedSong?.id == song.id else { return }
-                        lyricTimingMessage = nil
-                        lyricTimingFailure = "歌詞の時刻を更新できませんでした。"
-                    }
-                } else if !preanalysis.isAnalyzing(songID: song.id) {
+            lyricTimingMessage = lyrics == nil ? "歌詞の読みを準備しています" : "音声から歌詞の時刻を解析しています"
+            lyricTimingFailure = nil
+            if let timing, timing.sourceText != source.text ||
+                (recognized == nil && !source.lines.allSatisfy(\.hasValidCharacterTimings) && lyrics != nil) {
+                do {
+                    try await analysisCache.invalidateLyricTiming(for: song)
+                    guard generation == lyricsGeneration, selectedSong?.id == song.id else { return }
                     preanalysis.retry(songID: song.id)
+                } catch {
+                    guard generation == lyricsGeneration, selectedSong?.id == song.id else { return }
+                    lyricTimingMessage = nil
+                    lyricTimingFailure = "歌詞の時刻を更新できませんでした。"
                 }
+            } else if !preanalysis.isAnalyzing(songID: song.id) {
+                preanalysis.retry(songID: song.id)
             }
         }
     }

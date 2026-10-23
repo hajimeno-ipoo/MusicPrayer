@@ -43,18 +43,27 @@ enum LyricFont: String, CaseIterable, Identifiable {
         return font.fontDescriptor
     }
 
-    func nativeFont(size: CGFloat) -> NSFont {
+    func nativeFont(size: CGFloat, salt: Int = 0) -> NSFont {
         switch self {
         case .system: return .systemFont(ofSize: size, weight: .medium)
         case .furifont: return NSFont(descriptor: Self.furifontDescriptor, size: size)!
-        case .rubifont: return NSFont(descriptor: Self.rubifontDescriptor, size: size)!
+        case .rubifont:
+            let base = NSFont(descriptor: Self.rubifontDescriptor, size: size)!
+            guard salt > 0 else { return base }
+            let descriptor = CTFontDescriptorCreateWithAttributes([
+                kCTFontFeatureSettingsAttribute: [[
+                    kCTFontOpenTypeFeatureTag: "salt",
+                    kCTFontOpenTypeFeatureValue: salt
+                ]]
+            ] as CFDictionary)
+            return CTFontCreateCopyWithAttributes(base as CTFont, size, nil, descriptor) as NSFont
         }
     }
 
-    func font(size: CGFloat) -> Font {
+    func font(size: CGFloat, salt: Int = 0) -> Font {
         switch self {
         case .system: return .system(size: size, weight: .medium)
-        case .furifont, .rubifont: return Font(nativeFont(size: size))
+        case .furifont, .rubifont: return Font(nativeFont(size: size, salt: salt))
         }
     }
 }

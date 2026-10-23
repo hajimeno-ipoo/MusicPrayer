@@ -105,6 +105,7 @@ struct SavedLyrics: Codable, Sendable, Equatable {
     var sourceText: String
     var sourceTextHash: String
     var timeline: LyricTimeline?
+    var readings: LyricReadings? = nil
 }
 
 enum LyricTimingState: Sendable, Equatable {

@@ -17,6 +17,7 @@ struct AppleMusicLyricTiming: Codable, Sendable {
     /// False is saved only after Apple Music explicitly reports no lyrics.
     var hasLyrics: Bool?
     var usesOfficialWordTimings: Bool?
+    var readings: LyricReadings? = nil
 
     var completion: AppleMusicPreanalysis.Completion {
         if errorMessage != nil { return .failedLyrics }
@@ -144,6 +145,17 @@ struct AppleMusicLyricTiming: Codable, Sendable {
         version == Self.currentVersion && alignmentVersion == LyricVersions.alignment &&
             songID == song.id && duration.isFinite && duration > 0 &&
             song.duration.isFinite && song.duration > 0 && abs(duration - song.duration) < 1
+    }
+
+    /// Reading selection is independent of official or recognized word times.
+    func applyingReadings(to lyrics: AppleMusicLyrics) -> AppleMusicLyrics? {
+        guard songID == lyrics.songID, sourceText == lyrics.text,
+              let readings, readings.isCurrent(sourceText: lyrics.text),
+              readings.readings(for: lyrics.text) != nil,
+              lyrics.lines.allSatisfy({ readings.readings(for: $0.text) != nil }) else { return nil }
+        var result = lyrics
+        result.readings = readings
+        return result
     }
 
     /// Never apply a recognized result to another catalog recording, lyric text,

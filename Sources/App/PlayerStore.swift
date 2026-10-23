@@ -43,6 +43,7 @@ final class PlayerStore {
     var previewTime: Double? { didSet { publishLyricEvent() } }
     var lyricText = ""
     var lyricTimeline: LyricTimeline?
+    var lyricReadings: LyricReadings?
     var lyricTimingState = LyricTimingState.unset
     var lyricTimingError: String?
     var lyricSaveError: String?
@@ -611,6 +612,7 @@ private struct LyricSaveRequest {
     var title: String
     var text: String?
     var timeline: LyricTimeline?
+    var readings: LyricReadings? = nil
     var trackID: UUID?
     var playbackGeneration: UInt64
     var lyricGeneration: UInt64
@@ -639,7 +641,7 @@ extension PlayerStore {
         if LyricParser.parse(text).isEmpty { clearLyrics(); return }
         lyricLoadTask?.cancel(); lyricTask?.cancel()
         lyricRequestGeneration &+= 1
-        lyricText = text; lyricTimeline = nil; restoredLyricTimeline = nil; lyricTimingError = nil
+        lyricText = text; lyricTimeline = nil; lyricReadings = nil; restoredLyricTimeline = nil; lyricTimingError = nil
         lyricTimingState = lyricFingerprint == nil ? .checkingAudio : .waitingForAnalysis
         let request = makeLyricSaveRequest(track: track, text: text)
         let task = enqueueLyricSave(request)
@@ -652,7 +654,7 @@ extension PlayerStore {
         guard lyricsAcceptingRequests, let track = currentTrack else { return }
         lyricLoadTask?.cancel(); lyricTask?.cancel()
         lyricRequestGeneration &+= 1
-        lyricText = ""; lyricTimeline = nil; restoredLyricTimeline = nil; lyricTimingError = nil; lyricTimingState = .unset
+        lyricText = ""; lyricTimeline = nil; lyricReadings = nil; restoredLyricTimeline = nil; lyricTimingError = nil; lyricTimingState = .unset
         let request = makeLyricSaveRequest(track: track, text: nil)
         currentLyricSave = (request, enqueueLyricSave(request))
         publishLyricEvent()
@@ -669,7 +671,8 @@ extension PlayerStore {
                 request.trackID = currentTrack?.id
                 request.playbackGeneration = playbackGeneration
                 request.lyricGeneration = lyricRequestGeneration
-                request.timeline = lyricTimeline
+                request.timeline = lyricTimeline ?? request.timeline
+                request.readings = lyricReadings ?? request.readings
             }
             let task = enqueueLyricSave(request)
             if requestMatchesCurrent(request) { currentLyricSave = (request, task) }
@@ -699,7 +702,7 @@ extension PlayerStore {
     private func resetLyricsForSelection() {
         playbackGeneration &+= 1; lyricRequestGeneration &+= 1
         lyricLoadTask?.cancel(); lyricTask?.cancel()
-        lyricText = ""; lyricTimeline = nil; restoredLyricTimeline = nil; lyricFingerprint = nil
+        lyricText = ""; lyricTimeline = nil; lyricReadings = nil; restoredLyricTimeline = nil; lyricFingerprint = nil
         lyricTimingError = nil; lyricTimingState = .unset; currentLyricSave = nil
         refreshLyricSaveError()
     }
@@ -731,6 +734,7 @@ extension PlayerStore {
                 self.lyricText = failedIsCurrent ? (failed?.text ?? "") : (saved?.sourceText ?? "")
                 // Restored times stay hidden until their analysis digest is checked.
                 self.restoredLyricTimeline = failedIsCurrent ? failed?.timeline : saved?.timeline
+                self.lyricReadings = failedIsCurrent ? failed?.readings : saved?.readings
                 if let failed, !failedIsCurrent {
                     self.failedLyricSaves.removeValue(forKey: failed.sequence)
                     self.refreshLyricSaveError()
@@ -773,7 +777,7 @@ extension PlayerStore {
                 if let text = request.text {
                     fingerprint = try await lyricStore.saveText(url: request.url, text: text, request: request.sequence)
                     if let timeline = request.timeline {
-                        try await lyricStore.saveTimeline(timeline, request: request.sequence)
+                        try await lyricStore.saveTimeline(timeline, request: request.sequence, readings: request.readings)
                     }
                 } else {
                     fingerprint = try await lyricStore.clear(url: request.url, request: request.sequence,
@@ -786,6 +790,13 @@ extension PlayerStore {
                     self.refreshLyricSaveError()
                     if self.requestMatchesCurrent(request) {
                         self.lyricFingerprint = fingerprint
+                        if let timeline = request.timeline, let readings = request.readings,
+                           readings.isCurrent(sourceText: self.lyricText), let analysis = self.analysis,
+                           (try? LyricAligner.validate(timeline, analysis: analysis)) != nil {
+                            self.lyricTimeline = timeline
+                            self.lyricReadings = readings
+                            self.lyricTimingState = .generated(timeline.mode)
+                        }
                         if !self.lyricTimingState.isGenerating && self.lyricTimeline == nil { self.alignLyricsIfReady() }
                         self.publishLyricEvent()
                     }
@@ -837,6 +848,7 @@ extension PlayerStore {
         lyricTask?.cancel()
         let generation = playbackGeneration, requestGeneration = lyricRequestGeneration
         let trackID = currentTrack?.id, text = lyricText, cached = lyricTimeline ?? restoredLyricTimeline
+        let cachedReadings = lyricReadings
         restoredLyricTimeline = nil
         let save = currentLyricSave
         lyricTimeline = nil
@@ -851,18 +863,27 @@ extension PlayerStore {
             }
         }
         lyricTask = Task { [weak self, lyricStore] in
-            let worker = Task.detached(priority: .userInitiated) { () async throws -> LyricTimeline in
+            let worker = Task.detached(priority: .userInitiated) { () async throws -> (LyricTimeline, LyricReadings) in
+                let timeline: LyricTimeline
                 if let cached, cached.sourceText == text,
-                   (try? LyricAligner.validate(cached, analysis: analysis)) != nil { return cached }
-                let transcription = try await transcriber.transcribe(audioURL: audioURL, sourceText: text,
-                                                                    analysis: analysis, status: updateStatus)
+                   (try? LyricAligner.validate(cached, analysis: analysis)) != nil {
+                    timeline = cached
+                } else {
+                    let transcription = try await transcriber.transcribe(audioURL: audioURL, sourceText: text,
+                                                                        analysis: analysis, status: updateStatus)
+                    try Task.checkCancellation()
+                    await updateStatus(.generating)
+                    timeline = try LyricAligner.align(sourceText: text, analysis: analysis, transcription: transcription)
+                }
+                let readings = try await LyricReadingResolver.shared.prepare(sourceText: text,
+                    lines: timeline.lines.map(\.text), existing: cachedReadings)
                 try Task.checkCancellation()
-                await updateStatus(.generating)
-                return try LyricAligner.align(sourceText: text, analysis: analysis, transcription: transcription)
+                return (timeline, readings)
             }
             let result: LyricTimeline
+            let readings: LyricReadings
             do {
-                result = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+                (result, readings) = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
             } catch {
                 guard !Task.isCancelled, let self, self.playbackGeneration == generation,
                       self.lyricRequestGeneration == requestGeneration, self.currentTrack?.id == trackID else { return }
@@ -875,28 +896,49 @@ extension PlayerStore {
                   self.lyricText == result.sourceText, self.lyricFingerprint == result.analysisFingerprint,
                   self.analysis?.fingerprint == result.analysisFingerprint,
                   self.analysis?.version == result.analysisVersion else { return }
-            self.lyricTimeline = result
-            self.lyricTimingState = .generated(result.mode); self.publishLyricEvent()
-            if result == cached { return }
+            if result == cached, readings == cachedReadings, save == nil {
+                self.lyricTimeline = result; self.lyricReadings = readings
+                self.lyricTimingState = .generated(result.mode); self.publishLyricEvent()
+                return
+            }
             // Restored text with an obsolete timeline needs a fresh save request too.
             let saved = save ?? self.currentTrack.map { track -> (request: LyricSaveRequest, task: Task<String, Error>) in
                 var request = self.makeLyricSaveRequest(track: track, text: text)
                 request.timeline = result
+                request.readings = readings
                 let task = self.enqueueLyricSave(request)
                 self.currentLyricSave = (request, task)
                 return (request, task)
             }
-            guard let saved, saved.request.timeline == nil else { return }
+            guard let saved else { return }
             do {
                 _ = try await saved.task.value
                 guard !Task.isCancelled else { return }
-                try await lyricStore.saveTimeline(result, request: saved.request.sequence)
+                if saved.request.timeline != result || saved.request.readings != readings {
+                    try await lyricStore.saveTimeline(result, request: saved.request.sequence, readings: readings)
+                }
+                guard !Task.isCancelled, self.lyricsAcceptingRequests,
+                      self.playbackGeneration == generation, self.lyricRequestGeneration == requestGeneration,
+                      self.currentTrack?.id == trackID, self.lyricText == result.sourceText else { return }
+                self.lyricTimeline = result; self.lyricReadings = readings
+                var completedRequest = saved.request
+                completedRequest.timeline = result; completedRequest.readings = readings
+                self.currentLyricSave = (completedRequest, saved.task)
+                self.lyricTimingState = .generated(result.mode); self.publishLyricEvent()
             } catch {
                 if (error as? LyricStoreError) != .staleRequest,
                    self.latestLyricURLRequest[saved.request.url.standardizedFileURL.absoluteString] == saved.request.sequence {
-                    var failed = saved.request; failed.timeline = result
+                    var failed = saved.request; failed.timeline = result; failed.readings = readings
                     self.failedLyricSaves[failed.sequence] = failed
                     self.refreshLyricSaveError(reason: error.localizedDescription)
+                    if self.requestMatchesCurrent(failed) {
+                        // Keep the generated timing for the existing save retry.
+                        // Rubifont is not published until its reading result is saved.
+                        self.lyricTimeline = result
+                        self.lyricReadings = nil
+                        self.lyricTimingState = .failed
+                        self.publishLyricEvent()
+                    }
                     Self.lyricLogger.error("Save failed operation=timeline request=\(failed.sequence): \(error.localizedDescription, privacy: .public)")
                 }
             }

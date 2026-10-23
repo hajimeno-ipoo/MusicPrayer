@@ -20,16 +20,20 @@ enum LyricLineWrapping {
         return cache
     }()
 
-    static func presentation(text: String, viewport: CGSize, font: LyricFont = .system) -> LyricLinePresentation? {
+    static func presentation(text: String, viewport: CGSize, font: LyricFont = .system,
+                             readings: [LyricReading] = []) -> LyricLinePresentation? {
         guard viewport.width > 0, viewport.height > 0, !text.isEmpty else { return nil }
-        let key = "\(font.rawValue):\(viewport.width):\(viewport.height):\(text)" as NSString
+        let readings = font == .rubifont ? readings : []
+        let readingKey = readings.map { "\($0.start),\($0.count),\($0.salt)" }.joined(separator: ";")
+        let key = "\(font.rawValue):\(viewport.width):\(viewport.height):\(readingKey):\(text)" as NSString
         if let cached = cache.object(forKey: key) { return cached.value }
-        let value = measure(text: text, viewport: viewport, font: font)
+        let value = measure(text: text, viewport: viewport, font: font, readings: readings)
         cache.setObject(Cached(value), forKey: key)
         return value
     }
 
-    private static func measure(text: String, viewport: CGSize, font: LyricFont) -> LyricLinePresentation? {
+    private static func measure(text: String, viewport: CGSize, font: LyricFont,
+                                readings: [LyricReading]) -> LyricLinePresentation? {
         let characters = Array(text)
         guard !characters.contains("\n") else { return nil }
         let indices = Array(text.indices) + [text.endIndex]
@@ -54,6 +58,8 @@ enum LyricLineWrapping {
             if opening.contains(previous) { depth += 1 }
             if closingBrackets.contains(previous) { depth = max(0, depth - 1) }
             guard !opening.contains(previous), !closing.contains(next), !next.isWhitespace else { continue }
+            // A multi-kanji reading must keep its shaping context on one row.
+            guard !readings.contains(where: { $0.start < offset && offset < $0.start + $0.count }) else { continue }
             let punctuation = "。！？.!?".contains(previous) ? -0.30 : ("、，,;；".contains(previous) ? -0.18 : 0)
             let whitespace = previous.isWhitespace || next.isWhitespace
             guard boundaries.contains(offset) || punctuation < 0 || whitespace else { continue }
@@ -68,8 +74,15 @@ enum LyricLineWrapping {
         }
 
         for size in stride(from: 32, through: 14, by: -1) {
-            let attributes: [NSAttributedString.Key: Any] = [.font: font.nativeFont(size: CGFloat(size))]
-            let fullSize = (text as NSString).size(withAttributes: attributes)
+            let attributed = NSMutableAttributedString(string: text,
+                attributes: [.font: font.nativeFont(size: CGFloat(size))])
+            for reading in readings where reading.start >= 0 && reading.count > 0
+                && reading.start <= characters.count && reading.count <= characters.count - reading.start {
+                let range = indices[reading.start]..<indices[reading.start + reading.count]
+                attributed.addAttribute(.font, value: font.nativeFont(size: CGFloat(size), salt: reading.salt),
+                                        range: NSRange(range, in: text))
+            }
+            let fullSize = attributed.size()
             if fullSize.width <= viewport.width - 2, fullSize.height <= viewport.height {
                 return LyricLinePresentation(fontSize: CGFloat(size), breakOffset: nil)
             }
@@ -81,8 +94,8 @@ enum LyricLineWrapping {
                 let first = String(text[..<split])
                 let second = String(text[split...])
                 guard !first.isEmpty, !second.isEmpty else { continue }
-                let firstWidth = (first as NSString).size(withAttributes: attributes).width
-                let secondWidth = (second as NSString).size(withAttributes: attributes).width
+                let firstWidth = attributed.attributedSubstring(from: NSRange(text.startIndex..<split, in: text)).size().width
+                let secondWidth = attributed.attributedSubstring(from: NSRange(split..<text.endIndex, in: text)).size().width
                 guard max(firstWidth, secondWidth) <= viewport.width - 2 else { continue }
                 let imbalance = Double(abs(firstWidth - secondWidth) / max(firstWidth, secondWidth))
                 let score = imbalance + candidate.penalty

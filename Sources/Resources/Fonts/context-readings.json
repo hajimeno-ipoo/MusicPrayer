@@ -1,0 +1,160 @@
+[
+  {
+    "text": "人ゴミ",
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 3
+      }
+    ]
+  },
+  {
+    "text": "人生楽ありゃ",
+    "selections": [
+      {
+        "start": 0,
+        "count": 3,
+        "salt": 2
+      }
+    ]
+  },
+  {
+    "text": "1日",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 2
+      },
+      {
+        "start": 1,
+        "count": 1,
+        "salt": 1
+      }
+    ]
+  },
+  {
+    "text": "１日",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 2
+      },
+      {
+        "start": 1,
+        "count": 1,
+        "salt": 1
+      }
+    ]
+  },
+  {
+    "text": "2つ",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 1
+      }
+    ]
+  },
+  {
+    "text": "２つ",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 1
+      }
+    ]
+  },
+  {
+    "text": "不満の声",
+    "selections": [
+      {
+        "start": 3,
+        "count": 1,
+        "salt": 2
+      }
+    ]
+  },
+  {
+    "text": "金のハンドル",
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 1
+      }
+    ]
+  },
+  {
+    "text": "あの娘",
+    "selections": [
+      {
+        "start": 2,
+        "count": 1,
+        "salt": 2
+      }
+    ]
+  },
+  {
+    "text": "1つ",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 1
+      }
+    ]
+  },
+  {
+    "text": "2人",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 1
+      },
+      {
+        "start": 1,
+        "count": 1,
+        "salt": 5
+      }
+    ]
+  },
+  {
+    "text": "１つ",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 1
+      }
+    ]
+  },
+  {
+    "text": "２人",
+    "numberBoundary": true,
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 1
+      },
+      {
+        "start": 1,
+        "count": 1,
+        "salt": 5
+      }
+    ]
+  }
+]

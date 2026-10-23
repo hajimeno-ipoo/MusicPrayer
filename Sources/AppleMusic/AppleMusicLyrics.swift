@@ -6,6 +6,7 @@ struct AppleMusicLyrics: Equatable, Sendable {
     var text: String
     var lines: [TimedLyricLine]
     var languages: [String] = []
+    var readings: LyricReadings? = nil
 }
 
 enum AppleMusicLyricsParser {

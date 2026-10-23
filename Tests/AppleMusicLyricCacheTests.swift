@@ -2,6 +2,63 @@ import XCTest
 @testable import MusicPrayer
 
 final class AppleMusicLyricCacheTests: XCTestCase {
+    func testPreparedReadingsSurviveCacheRestartWithoutChangingOfficialWordTimes() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let song = AppleMusicSong(id: "reading-song", title: "", artist: "", album: "", duration: 60)
+        let source = try AppleMusicLyricsParser.parse(ttml: """
+        <tt><body><p begin="1s" end="4s"><span begin="1s" end="2s">来ない</span></p>
+        <p begin="5s" end="8s"><span begin="5s" end="7s">来ます</span></p></body></tt>
+        """, songID: song.id)
+        var timing = AppleMusicLyricTiming(songID: song.id, duration: 60, sourceText: source.text,
+            hasLyrics: true, usesOfficialWordTimings: true)
+        timing.readings = try await LyricReadingResolver.shared.prepare(sourceText: source.text,
+            lines: [source.text] + source.lines.map(\.text))
+        let cache = AppleMusicAnalysisCache(directory: directory)
+        try await cache.retainSongs([song.id])
+        let issued = await cache.ticket(for: song.id)
+        let ticket = try XCTUnwrap(issued)
+        let saved = try await cache.saveLyricTiming(timing, ticket: ticket)
+        XCTAssertTrue(saved)
+
+        let reopened = AppleMusicAnalysisCache(directory: directory)
+        try await reopened.retainSongs([song.id])
+        let loaded = await reopened.loadLyricTiming(for: song)
+        let restored = try XCTUnwrap(loaded)
+        let displayed = try XCTUnwrap(restored.applyingReadings(to: source))
+        XCTAssertEqual(restored.completion, .complete)
+        XCTAssertEqual(displayed.lines, source.lines)
+        XCTAssertEqual(displayed.text, source.text)
+        XCTAssertEqual(displayed.readings?.readings(for: "来ない"), [LyricReading(start: 0, count: 1, salt: 5)])
+        XCTAssertEqual(displayed.readings?.readings(for: "来ます"), [])
+        XCTAssertEqual(displayed.readings, timing.readings)
+    }
+
+    func testReadingApplicationRejectsStaleTextAndMissingDisplayLineButAcceptsOldJSON() throws {
+        let source = try AppleMusicLyricsParser.parse(ttml: """
+        <tt><body><p begin="1s" end="4s">来ない</p></body></tt>
+        """, songID: "reading-song")
+        var timing = AppleMusicLyricTiming(songID: source.songID, duration: 60, sourceText: source.text,
+            readings: LyricReadings(sourceTextHash: LyricHash.text(source.text),
+                lines: [source.text: [LyricReading(start: 0, count: 1, salt: 5)]]))
+        XCTAssertNotNil(timing.applyingReadings(to: source))
+        var changed = source
+        changed.lines[0].text = "来る"
+        XCTAssertNil(timing.applyingReadings(to: changed))
+        changed = source
+        changed.text += "。"
+        XCTAssertNil(timing.applyingReadings(to: changed))
+        timing.readings?.version = "old"
+        XCTAssertNil(timing.applyingReadings(to: source))
+
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(timing)) as? [String: Any])
+        object.removeValue(forKey: "readings")
+        let legacy = try JSONDecoder().decode(AppleMusicLyricTiming.self,
+            from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertNil(legacy.readings)
+        XCTAssertEqual(legacy.sourceText, source.text)
+    }
+
     func testCachedAvailabilityKeepsUnknownUnpublishedAndNativeOutcomesDistinctAfterRestart() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

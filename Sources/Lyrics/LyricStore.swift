@@ -44,7 +44,8 @@ actor LyricStore {
         }
         return SavedLyrics(schemaVersion: LyricVersions.schema, audioFingerprint: fingerprint,
                            sourceText: envelope.sourceText, sourceTextHash: actualTextHash,
-                           timeline: timeline)
+                           timeline: timeline,
+                           readings: envelope.readings?.isCurrent(sourceText: envelope.sourceText) == true ? envelope.readings : nil)
     }
 
     @discardableResult
@@ -58,7 +59,7 @@ actor LyricStore {
         return fingerprint
     }
 
-    func saveTimeline(_ timeline: LyricTimeline, request: UInt64) throws {
+    func saveTimeline(_ timeline: LyricTimeline, request: UInt64, readings: LyricReadings? = nil) throws {
         let fingerprint = timeline.analysisFingerprint
         try acceptFingerprint(fingerprint, request: request)
         guard var saved = try load(fingerprint: fingerprint),
@@ -68,6 +69,13 @@ actor LyricStore {
             throw LyricStoreError.inconsistentData
         }
         saved.timeline = timeline
+        if let readings {
+            guard readings.isCurrent(sourceText: saved.sourceText),
+                  timeline.lines.allSatisfy({ readings.readings(for: $0.text) != nil }) else {
+                throw LyricStoreError.inconsistentData
+            }
+            saved.readings = readings
+        }
         try write(saved)
     }
 
@@ -167,9 +175,10 @@ private struct SavedEnvelope: Decodable {
     var sourceText: String
     var sourceTextHash: String
     var timeline: LyricTimeline?
+    var readings: LyricReadings?
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, audioFingerprint, sourceText, sourceTextHash, timeline
+        case schemaVersion, audioFingerprint, sourceText, sourceTextHash, timeline, readings
     }
 
     init(from decoder: Decoder) throws {
@@ -179,5 +188,6 @@ private struct SavedEnvelope: Decodable {
         sourceText = try values.decode(String.self, forKey: .sourceText)
         sourceTextHash = try values.decode(String.self, forKey: .sourceTextHash)
         timeline = try? values.decodeIfPresent(LyricTimeline.self, forKey: .timeline)
+        readings = try? values.decodeIfPresent(LyricReadings.self, forKey: .readings)
     }
 }
