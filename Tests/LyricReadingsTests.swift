@@ -132,21 +132,42 @@ final class LyricReadingsTests: XCTestCase {
             XCTAssertEqual(plan.readings(for: text), [LyricReading(start: 0, count: 1, salt: 1)], text)
         }
         let source = "そんな1日でもいいでしょう"
-        let stale = LyricReadings(version: "rubifont-0.6.18-1", sourceTextHash: LyricHash.text(source), lines: [source: []])
+        let stale = LyricReadings(version: "rubifont-0.6.19-1", sourceTextHash: LyricHash.text(source), lines: [source: []])
         let refreshed = try await resolver.prepare(sourceText: source, lines: [source], existing: stale)
-        XCTAssertEqual(refreshed.version, "rubifont-0.6.19-1")
+        XCTAssertEqual(refreshed.version, "rubifont-0.6.20-1")
         XCTAssertEqual(refreshed.readings(for: source), [LyricReading(start: 3, count: 1, salt: 2),
                                                         LyricReading(start: 4, count: 1, salt: 1)])
         XCTAssertTrue(refreshed.isCurrent(sourceText: source))
     }
 
+    func testEmbraceAcceptAndColloquialEndingReadingsReplacePreviousCache() async throws {
+        let lines = ["あぁ、愛で全部抱きしめて愛して", "受け入れて", "終わんないで 見続けてる 逃さないで", "抱きしめて", "抱いた", "入る"]
+        let source = lines.joined(separator: "\n")
+        let stale = LyricReadings(version: "rubifont-0.6.19-1", sourceTextHash: LyricHash.text(source), lines: [
+            lines[0]: [], lines[1]: [], lines[2]: [LyricReading(start: 0, count: 1, salt: 6),
+                                                  LyricReading(start: 13, count: 1, salt: 2)]
+        ])
+        let plan = try await LyricReadingResolver().prepare(sourceText: source, lines: lines, existing: stale)
+
+        XCTAssertEqual(plan.readings(for: lines[0]), [LyricReading(start: 5, count: 3, salt: 2)])
+        XCTAssertEqual(plan.readings(for: lines[1]), [LyricReading(start: 2, count: 1, salt: 2)])
+        XCTAssertEqual(plan.readings(for: lines[2]), [LyricReading(start: 13, count: 1, salt: 2)],
+                       "終の短い送り仮名に誤一致した旧salt6を引き継がず、通常のおを表示すること")
+        XCTAssertEqual(plan.readings(for: "抱きしめて"), [LyricReading(start: 0, count: 1, salt: 3)])
+        XCTAssertEqual(plan.readings(for: "抱いた"), [])
+        XCTAssertEqual(plan.readings(for: "入る"), [])
+        XCTAssertEqual(plan.version, "rubifont-0.6.20-1")
+        XCTAssertEqual(plan.sourceTextHash, LyricHash.text(source))
+        XCTAssertTrue(plan.isCurrent(sourceText: source))
+    }
+
     func testPreviousDictionaryVersionRecomputesContextReadingsWithoutChangingText() async throws {
         let source = "😀あの娘と2人で想い出を"
-        let stale = LyricReadings(version: "rubifont-0.6.18-1", sourceTextHash: LyricHash.text(source), lines: [source: []])
+        let stale = LyricReadings(version: "rubifont-0.6.19-1", sourceTextHash: LyricHash.text(source), lines: [source: []])
         XCTAssertFalse(stale.isCurrent(sourceText: source))
         let refreshed = try await LyricReadingResolver().prepare(sourceText: source, lines: [source], existing: stale)
 
-        XCTAssertEqual(refreshed.version, "rubifont-0.6.19-1")
+        XCTAssertEqual(refreshed.version, "rubifont-0.6.20-1")
         XCTAssertEqual(refreshed.readings(for: source), [LyricReading(start: 3, count: 1, salt: 2),
                                                         LyricReading(start: 5, count: 1, salt: 1),
                                                         LyricReading(start: 6, count: 1, salt: 5),
@@ -160,7 +181,7 @@ final class LyricReadingsTests: XCTestCase {
                                         lines: [voiceSource: [LyricReading(start: 4, count: 2, salt: 2)]])
         let voiceRefreshed = try await LyricReadingResolver().prepare(sourceText: voiceSource, lines: [voiceSource],
                                                                      existing: oldVoicePlan)
-        XCTAssertEqual(voiceRefreshed.version, "rubifont-0.6.19-1")
+        XCTAssertEqual(voiceRefreshed.version, "rubifont-0.6.20-1")
         XCTAssertEqual(voiceRefreshed.readings(for: voiceSource), [], "旧辞書の声聞salt2指定を新辞書へ持ち越さないこと")
         XCTAssertTrue(voiceRefreshed.isCurrent(sourceText: voiceSource))
 
@@ -169,7 +190,7 @@ final class LyricReadingsTests: XCTestCase {
                                         lines: [crowdSource: []])
         let crowdRefreshed = try await LyricReadingResolver().prepare(sourceText: crowdSource, lines: [crowdSource],
                                                                      existing: oldCrowdPlan)
-        XCTAssertEqual(crowdRefreshed.version, "rubifont-0.6.19-1")
+        XCTAssertEqual(crowdRefreshed.version, "rubifont-0.6.20-1")
         XCTAssertEqual(crowdRefreshed.readings(for: crowdSource), [LyricReading(start: 12, count: 1, salt: 3)])
         XCTAssertTrue(crowdRefreshed.isCurrent(sourceText: crowdSource))
     }

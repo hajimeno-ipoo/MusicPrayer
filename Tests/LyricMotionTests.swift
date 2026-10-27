@@ -74,7 +74,8 @@ final class LyricMotionTests: XCTestCase {
         let sources = ["暗闇走り抜ける", "1つの街と人が", "2人でいても離れていても", "車道で踊るあの娘", "想い出を", "１つの街と人が", "２人でいても離れていても",
                        "2つの国と", "あの時感じた", "不満の声", "あなたの声聞きたくて", "金のハンドルで街を飛びまわれ", "胸の鼓動焼きつけろ", "AH AHいくつかの場面", "２つの国と",
                        "そんな1日でもいいでしょう", "そんな１日でもいいでしょう", "Oh 人生楽ありゃ苦あり", "大きな声で 自由に歌っているの",
-                       "もっと楽に生きていきたい", "今朝もミニのスカートで 人ゴミの中走ってく", "ゴミの中走っていく", "走っていく", "candy pretty doll"]
+                       "もっと楽に生きていきたい", "今朝もミニのスカートで 人ゴミの中走ってく", "ゴミの中走っていく", "走っていく", "candy pretty doll",
+                       "あぁ、愛で全部抱きしめて愛して", "受け入れて", "終わんないで 見続けてる 逃さないで"]
         let plan = try await LyricReadingResolver().prepare(sourceText: sources.joined(separator: "\n"), lines: sources)
         let viewport = CGSize(width: 800, height: 160)
         for (index, source) in sources.enumerated() {

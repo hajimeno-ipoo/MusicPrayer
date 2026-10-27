@@ -1,5 +1,25 @@
 [
   {
+    "text": "全部抱きしめ",
+    "selections": [
+      {
+        "start": 0,
+        "count": 3,
+        "salt": 2
+      }
+    ]
+  },
+  {
+    "text": "入れて",
+    "selections": [
+      {
+        "start": 0,
+        "count": 1,
+        "salt": 2
+      }
+    ]
+  },
+  {
     "text": "人ゴミ",
     "selections": [
       {

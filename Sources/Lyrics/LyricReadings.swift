@@ -8,7 +8,7 @@ struct LyricReading: Codable, Sendable, Equatable {
 }
 
 struct LyricReadings: Codable, Sendable, Equatable {
-    static let currentVersion = "rubifont-0.6.19-1"
+    static let currentVersion = "rubifont-0.6.20-1"
     var version = currentVersion
     var sourceTextHash: String
     /// An empty array is a completed selection with no font override.
