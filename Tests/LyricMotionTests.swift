@@ -7,6 +7,32 @@ import XCTest
 @testable import MusicPrayer
 
 final class LyricMotionTests: XCTestCase {
+    @MainActor
+    func testUntimedLyricsRemainScrollablePastTheVisibleLines() throws {
+        _ = NSApplication.shared
+        let source = (1...36).map { "歌詞の行 \($0)" }.joined(separator: "\n")
+        let hosting = NSHostingView(rootView: UntimedLyricReadingView(text: source)
+            .frame(width: 380, height: 300))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 300),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        defer { window.close() }
+        hosting.layoutSubtreeIfNeeded()
+
+        func scrollView(in view: NSView) -> NSScrollView? {
+            if let scroll = view as? NSScrollView { return scroll }
+            return view.subviews.compactMap { scrollView(in: $0) }.first
+        }
+        let scroll = try XCTUnwrap(scrollView(in: hosting))
+        let contentHeight = try XCTUnwrap(scroll.documentView).bounds.height
+        XCTAssertGreaterThan(contentHeight, scroll.contentView.bounds.height)
+        let firstPosition = scroll.contentView.bounds.origin.y
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: contentHeight - scroll.contentView.bounds.height))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        XCTAssertGreaterThan(scroll.contentView.bounds.origin.y, firstPosition)
+    }
+
     func testBundledFurifontUsesMediumFaceAtRequestedSizes() {
         for size: CGFloat in [14, 24, 32] {
             let font = LyricFont.furifont.nativeFont(size: size)

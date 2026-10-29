@@ -311,6 +311,7 @@ final class AppleMusicLyricTimingTests: XCTestCase {
             analysis: analysis(), audioBuffer: pcm(), startTime: 0, transcriber: transcriber)
         XCTAssertNil(generated.timeline)
         XCTAssertEqual(generated.errorMessage, PCMTranscriberStub.Failure.recognition.localizedDescription)
+        XCTAssertEqual(generated.hasOfficialUntimedLyrics, false)
         XCTAssertNil(generated.applying(to: try lyrics(), song: song, analysis: analysis()))
         XCTAssertEqual(generated.completion, .failedLyrics)
     }
@@ -341,6 +342,27 @@ final class AppleMusicLyricTimingTests: XCTestCase {
         XCTAssertNil(missing.timeline)
         XCTAssertNil(missing.errorMessage)
         XCTAssertEqual(missing.completion, .noLyrics)
+    }
+
+    func testOfficialUntimedLyricsRemainPlainTextWithoutSpeechRecognition() async throws {
+        let source = try AppleMusicLyricsParser.parse(ttml: """
+        <tt><body><p>First line</p><p>Second line</p></body></tt>
+        """, songID: song.id)
+        XCTAssertTrue(source.lines.isEmpty)
+        let transcriber = PCMTranscriberStub(failure: .recognition)
+        let generated = try await AppleMusicLyricTiming.generate(lyrics: source, song: song,
+            analysis: analysis(), audioBuffer: pcm(), startTime: 0, transcriber: transcriber)
+        let calls = await transcriber.calls
+        XCTAssertTrue(calls.isEmpty)
+        XCTAssertEqual(generated.completion, .untimedLyrics)
+        XCTAssertEqual(generated.hasOfficialUntimedLyrics, true)
+        XCTAssertEqual(generated.sourceText, source.text)
+        XCTAssertNil(generated.timeline)
+        XCTAssertNil(generated.derivedLines)
+        XCTAssertNil(generated.errorMessage)
+        let decoded = try JSONDecoder().decode(AppleMusicLyricTiming.self, from: JSONEncoder().encode(generated))
+        XCTAssertEqual(decoded.completion, .untimedLyrics)
+        XCTAssertNil(decoded.applying(to: source, song: song, analysis: analysis()))
     }
 
     func testGeneratePropagatesCancellationInsteadOfSavingRecognitionFailure() async throws {

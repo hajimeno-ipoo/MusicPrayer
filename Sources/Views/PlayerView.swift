@@ -23,9 +23,16 @@ struct PlayerView: View {
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
     private var overlayVisible: Bool { store.isAppleMusicActive || engaged || !store.isPlaying }
     private var controlGlass: Glass { .regular.interactive() }
+    private var hasUntimedAppleMusicLyrics: Bool {
+        guard store.isAppleMusicActive,
+              let lyrics = store.appleMusic.lyrics,
+              lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id else { return false }
+        return lyrics.lines.isEmpty && !lyrics.text.isEmpty
+    }
 
     var body: some View {
         GeometryReader { geometry in
+            let untimedArtworkSize = min(420, geometry.size.width * 0.34, geometry.size.height * 0.42)
             ZStack {
                 if store.isAppleMusicActive || store.appleMusic.isInitialized {
                     AppleMusicWebView(store: store.appleMusic)
@@ -36,11 +43,21 @@ struct PlayerView: View {
                 ZStack {
                     MetalVisualizerView(source: store.visualSource, backgroundOpacity: reduceTransparency ? 1 : 0)
                         .ignoresSafeArea()
-                    if store.isAppleMusicActive && store.visualizerStyle != .cassette {
+                    if store.isAppleMusicActive && (hasUntimedAppleMusicLyrics || store.visualizerStyle != .cassette) {
                         appleMusicArtwork
-                            .frame(width: min(240, geometry.size.height * 0.26), height: min(240, geometry.size.height * 0.26))
+                            .frame(width: hasUntimedAppleMusicLyrics
+                                   ? untimedArtworkSize
+                                   : min(240, geometry.size.height * 0.26),
+                                   height: hasUntimedAppleMusicLyrics
+                                   ? untimedArtworkSize
+                                   : min(240, geometry.size.height * 0.26))
                             .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
-                            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.55)
+                            .position(x: hasUntimedAppleMusicLyrics
+                                      ? max(24, geometry.size.width * 0.05) + untimedLeftWidth(for: geometry.size.width) / 2
+                                      : geometry.size.width / 2,
+                                      y: hasUntimedAppleMusicLyrics
+                                         ? headerHeight + 108 + untimedArtworkSize / 2
+                                         : geometry.size.height * 0.55)
                     }
                     PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont)
                         .environment(\.colorScheme, .dark)
@@ -401,69 +418,76 @@ struct PlayerView: View {
     private var controls: some View {
         GlassEffectContainer(spacing: 18) {
             HStack(spacing: 18) {
-                HStack(spacing: 10) {
-                    iconButton("シャッフル", "shuffle", active: store.shuffle, action: { store.shuffle.toggle() })
-                    iconButton("前の曲", "backward.end.fill", action: store.previous)
-                        .disabled(!store.canSkipPrevious)
-                    Button(action: store.togglePlayback) {
-                        Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 22, weight: .semibold)).frame(width: 58, height: 50)
-                    }.buttonStyle(.plain).help(store.isPlaying ? "一時停止（Space）" : "再生（Space）")
-                        .accessibilityLabel(store.isPlaying ? "一時停止" : "再生")
-                        .disabled(!store.canTogglePlayback)
-                    iconButton("次の曲", "forward.end.fill", action: store.next)
-                        .disabled(!store.canSkipNext)
-                    iconButton("リピート", store.repeatSetting == .one ? "repeat.1" : "repeat", active: store.repeatSetting != .off,
-                               action: { store.repeatSetting = RepeatSetting(rawValue: (store.repeatSetting.rawValue + 1) % 3)! })
-                }
-                .padding(.horizontal, 14).padding(.vertical, 5)
-                .glassEffect(controlGlass, in: .capsule)
-
-                HStack(spacing: 10) {
-                    Button(action: store.toggleMute) {
-                        Image(systemName: store.isMuted || store.volume == 0 ? "speaker.slash" : "speaker.wave.2")
-                            .font(.system(size: 12)).frame(width: 24, height: 28)
-                            .foregroundStyle(store.isMuted ? cyan : .primary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(store.isMuted ? "ミュートを解除" : "ミュート")
-                    .accessibilityLabel(store.isMuted ? "ミュートを解除" : "ミュート")
-                    .accessibilityValue(store.isMuted ? "オン" : "オフ")
-                    Slider(value: $store.volume, in: 0...1).frame(width: 100).tint(cyan)
-                        .environment(\.colorScheme, .dark)
-                        .accessibilityLabel("音量")
-                    Menu {
-                        Picker("出力先", selection: Binding(get: { store.selectedOutputID }, set: store.chooseOutput)) {
-                            Text("Macの既定の出力先").tag(UInt32(0))
-                            ForEach(store.devices) { device in
-                                Text(device.name).tag(device.id)
-                            }
-                        }
-                        .pickerStyle(.inline)
-                        Divider()
-                        Button("一覧を更新", action: store.refreshDevices)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "hifispeaker")
-                            Text(store.outputDeviceName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
-                        }
-                        .frame(width: 180, height: 28, alignment: .leading)
-                        .foregroundStyle(.primary)
-                    }
-                    .environment(\.colorScheme, glassColorScheme)
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 180)
-                    .tint(.primary)
-                    .help("音の出力先：\(store.outputName)")
-                    .accessibilityLabel("音の出力先：\(store.outputName)")
-                }
-                .padding(.horizontal, 18).padding(.vertical, 16)
-                .glassEffect(controlGlass, in: .capsule)
-                .opacity(overlayVisible ? 1 : 0)
-                .allowsHitTesting(overlayVisible)
+                transportControls
+                outputControls
             }
         }
         .foregroundStyle(.primary)
         .environment(\.colorScheme, glassColorScheme)
+    }
+
+    private var transportControls: some View {
+        HStack(spacing: 10) {
+            iconButton("シャッフル", "shuffle", active: store.shuffle, action: { store.shuffle.toggle() })
+            iconButton("前の曲", "backward.end.fill", action: store.previous)
+                .disabled(!store.canSkipPrevious)
+            Button(action: store.togglePlayback) {
+                Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 22, weight: .semibold)).frame(width: 58, height: 50)
+            }.buttonStyle(.plain).help(store.isPlaying ? "一時停止（Space）" : "再生（Space）")
+                .accessibilityLabel(store.isPlaying ? "一時停止" : "再生")
+                .disabled(!store.canTogglePlayback)
+            iconButton("次の曲", "forward.end.fill", action: store.next)
+                .disabled(!store.canSkipNext)
+            iconButton("リピート", store.repeatSetting == .one ? "repeat.1" : "repeat", active: store.repeatSetting != .off,
+                       action: { store.repeatSetting = RepeatSetting(rawValue: (store.repeatSetting.rawValue + 1) % 3)! })
+        }
+        .padding(.horizontal, 14).padding(.vertical, 5)
+        .glassEffect(controlGlass, in: .capsule)
+    }
+
+    private var outputControls: some View {
+        HStack(spacing: 10) {
+            Button(action: store.toggleMute) {
+                Image(systemName: store.isMuted || store.volume == 0 ? "speaker.slash" : "speaker.wave.2")
+                    .font(.system(size: 12)).frame(width: 24, height: 28)
+                    .foregroundStyle(store.isMuted ? cyan : .primary)
+            }
+            .buttonStyle(.plain)
+            .help(store.isMuted ? "ミュートを解除" : "ミュート")
+            .accessibilityLabel(store.isMuted ? "ミュートを解除" : "ミュート")
+            .accessibilityValue(store.isMuted ? "オン" : "オフ")
+            Slider(value: $store.volume, in: 0...1).frame(width: 100).tint(cyan)
+                .environment(\.colorScheme, .dark)
+                .accessibilityLabel("音量")
+            Menu {
+                Picker("出力先", selection: Binding(get: { store.selectedOutputID }, set: store.chooseOutput)) {
+                    Text("Macの既定の出力先").tag(UInt32(0))
+                    ForEach(store.devices) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+                .pickerStyle(.inline)
+                Divider()
+                Button("一覧を更新", action: store.refreshDevices)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "hifispeaker")
+                    Text(store.outputDeviceName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
+                }
+                .frame(width: 180, height: 28, alignment: .leading)
+                .foregroundStyle(.primary)
+            }
+            .environment(\.colorScheme, glassColorScheme)
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 180)
+            .tint(.primary)
+            .help("音の出力先：\(store.outputName)")
+            .accessibilityLabel("音の出力先：\(store.outputName)")
+        }
+        .padding(.horizontal, 18).padding(.vertical, 16)
+        .glassEffect(controlGlass, in: .capsule)
+        .opacity(overlayVisible ? 1 : 0)
+        .allowsHitTesting(overlayVisible)
     }
     private func iconButton(_ label: String, _ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: icon).font(.system(size: 13, weight: .medium)).frame(width: 30, height: 30).foregroundStyle(active ? cyan : Color.primary.opacity(0.85)) }
@@ -529,10 +553,14 @@ struct PlayerView: View {
             withAnimation(.easeInOut(duration: 0.6)) { engaged = false }
         }
     }
+
+    private func untimedLeftWidth(for width: CGFloat) -> CGFloat {
+        min(600, max(390, width * 0.43))
+    }
 }
 
-/// The second reference image places the lyric centre at 24% of the window height.
-/// The analysis panel is independent of this region.
+/// Timed lyrics retain their upper-centred stage. Untimed Apple Music lyrics use
+/// a scrollable reading column above the unchanged bottom player controls.
 struct PlayerLyricRegion: View {
     let store: PlayerStore
     let size: CGSize
@@ -540,10 +568,27 @@ struct PlayerLyricRegion: View {
     var font: LyricFont = .system
 
     var body: some View {
-        LyricMotionView(store: store, font: font)
-            .frame(width: size.width, height: max(0, size.height * 0.48 - 2 * headerHeight))
-            .position(x: size.width / 2, y: size.height * 0.24)
-            .allowsHitTesting(false)
+        if hasUntimedAppleMusicLyrics {
+            let left = max(size.width * 0.52, max(24, size.width * 0.05) + min(600, max(390, size.width * 0.43)) + 20)
+            let right = size.width - max(24, size.width * 0.05)
+            let top = headerHeight + 50
+            let bottom = size.height - 230
+            LyricMotionView(store: store, font: font)
+                .frame(width: max(0, right - left), height: max(0, bottom - top))
+                .position(x: (left + right) / 2, y: (top + bottom) / 2)
+        } else {
+            LyricMotionView(store: store, font: font)
+                .frame(width: size.width, height: max(0, size.height * 0.48 - 2 * headerHeight))
+                .position(x: size.width / 2, y: size.height * 0.24)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var hasUntimedAppleMusicLyrics: Bool {
+        guard store.isAppleMusicActive,
+              let lyrics = store.appleMusic.lyrics,
+              lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id else { return false }
+        return lyrics.lines.isEmpty && !lyrics.text.isEmpty
     }
 }
 

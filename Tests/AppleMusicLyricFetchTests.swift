@@ -69,6 +69,114 @@ final class AppleMusicLyricFetchTests: XCTestCase {
         XCTAssertEqual(music?.bpm, 120)
     }
 
+    func testUntimedOfficialLyricsReplaceOldSynchronizationFailureWithoutRetry() async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.close() }
+        let song = fixture.songs[0]
+        let issuedTicket = await fixture.cache.ticket(for: song.id)
+        let ticket = try XCTUnwrap(issuedTicket)
+        try await fixture.cache.saveLyricTiming(AppleMusicLyricTiming(songID: song.id, duration: song.duration,
+            sourceText: "First line\nSecond line", errorMessage: "すべての行を配置できる候補がありません。",
+            hasLyrics: true), ticket: ticket)
+        _ = try await fixture.view.evaluateJavaScript("window.responseMode='untimed'")
+
+        let selected = await fixture.store.playSong(song, autoplay: false)
+        XCTAssertTrue(selected)
+        try await waitUntil("時間のない公式歌詞が表示状態へ届きませんでした") {
+            let saved = await fixture.cache.loadLyricTiming(for: song)
+            return fixture.store.lyrics?.text == "First line\nSecond line" &&
+                saved?.completion == .untimedLyrics
+        }
+        XCTAssertTrue(fixture.store.lyrics?.lines.isEmpty == true)
+        XCTAssertNil(fixture.store.lyricTimingError)
+        XCTAssertNil(fixture.store.lyricTimingStatus)
+        fixture.store.retryLyricTiming()
+        await Task.yield()
+        let requests = try await fixture.view.evaluateJavaScript("window.lyricRequests") as? [String]
+        XCTAssertEqual(requests, [song.id])
+        let music = await fixture.cache.load(id: song.id, duration: song.duration)
+        XCTAssertEqual(music?.bpm, 120)
+    }
+
+    func testPreanalysisMigratesOldGeneratedTimelineAfterOneOfficialFetch() async throws {
+        let fixture = try await makeFixture(usesAnalysisWorkers: true)
+        defer { fixture.close() }
+        let song = fixture.songs[0]
+        let text = "First line\nSecond line"
+        let interval = LyricCharacterTiming(start: 1, end: 3)
+        let line = TimedLyricLine(id: "legacy-generated", ordinal: 0, text: "First line",
+            start: 1, end: 3, textWeight: 10, confidence: 1,
+            characterTimings: Array(repeating: interval, count: "First line".count))
+        let timeline = LyricTimeline(version: LyricVersions.alignment, analysisVersion: 0,
+            analysisFingerprint: "", analysisDigest: "", sourceText: text,
+            sourceTextHash: LyricHash.text(text), mode: .speechRecognition,
+            lines: [line], confidence: 1)
+        let issuedTicket = await fixture.cache.ticket(for: song.id)
+        let ticket = try XCTUnwrap(issuedTicket)
+        try await fixture.cache.saveLyricTiming(AppleMusicLyricTiming(songID: song.id,
+            duration: song.duration, sourceText: text, timeline: timeline, hasLyrics: true), ticket: ticket)
+        _ = try await fixture.view.evaluateJavaScript("window.responseMode='untimed'")
+
+        let operation = try XCTUnwrap(fixture.store.preanalysis.operation)
+        let first = try await operation(song)
+        let migrated = await fixture.cache.loadLyricTiming(for: song)
+        XCTAssertEqual(first, .untimedLyrics)
+        XCTAssertEqual(migrated?.completion, .untimedLyrics)
+        XCTAssertNil(migrated?.timeline)
+        XCTAssertNil(migrated?.errorMessage)
+
+        let second = try await operation(song)
+        XCTAssertEqual(second, .untimedLyrics)
+        let requests = try await fixture.view.evaluateJavaScript("window.lyricRequests") as? [String]
+        XCTAssertEqual(requests, [song.id], "移行後に公式歌詞を繰り返し取得しない")
+    }
+
+    func testPreanalysisKeepsTimedPartialCacheWithoutOfficialRefetch() async throws {
+        let fixture = try await makeFixture(usesAnalysisWorkers: true)
+        defer { fixture.close() }
+        let song = fixture.songs[0]
+        let firstText = "First line"
+        let first = TimedLyricLine(id: "official-0", ordinal: 0, text: firstText,
+            start: 1, end: 3, textWeight: 10, confidence: 1,
+            characterTimings: Array(repeating: LyricCharacterTiming(start: 1, end: 3), count: firstText.count))
+        let second = TimedLyricLine(id: "official-1", ordinal: 1, text: "Second line",
+            start: 4, end: 6, textWeight: 11, confidence: 1)
+        let issuedTicket = await fixture.cache.ticket(for: song.id)
+        let ticket = try XCTUnwrap(issuedTicket)
+        try await fixture.cache.saveLyricTiming(AppleMusicLyricTiming(songID: song.id,
+            duration: song.duration, sourceText: "First line\nSecond line",
+            derivedLines: [first, second], hasLyrics: true), ticket: ticket)
+        _ = try await fixture.view.evaluateJavaScript("window.responseMode='untimed'")
+
+        let operation = try XCTUnwrap(fixture.store.preanalysis.operation)
+        let completion = try await operation(song)
+        XCTAssertEqual(completion, .partialLyrics(recognized: 1, total: 2))
+        let saved = await fixture.cache.loadLyricTiming(for: song)
+        XCTAssertEqual(saved?.completion, .partialLyrics(recognized: 1, total: 2))
+        let requests = try await fixture.view.evaluateJavaScript("window.lyricRequests") as? [String]
+        XCTAssertEqual(requests, [], "時刻のある行を持つ部分結果は移行用の再取得をしない")
+    }
+
+    func testConfirmedTimedRecognitionFailureIsNotMigratedAgain() async throws {
+        let fixture = try await makeFixture(usesAnalysisWorkers: true)
+        defer { fixture.close() }
+        let song = fixture.songs[0]
+        let text = "First line\nSecond line"
+        let readings = LyricReadings(sourceTextHash: LyricHash.text(text), lines: [text: []])
+        let issuedTicket = await fixture.cache.ticket(for: song.id)
+        let ticket = try XCTUnwrap(issuedTicket)
+        try await fixture.cache.saveLyricTiming(AppleMusicLyricTiming(songID: song.id,
+            duration: song.duration, sourceText: text, errorMessage: "recognition failed",
+            hasLyrics: true, hasOfficialUntimedLyrics: false, readings: readings), ticket: ticket)
+        _ = try await fixture.view.evaluateJavaScript("window.responseMode='untimed'")
+
+        let operation = try XCTUnwrap(fixture.store.preanalysis.operation)
+        let completion = try await operation(song)
+        XCTAssertEqual(completion, .failedLyrics)
+        let requests = try await fixture.view.evaluateJavaScript("window.lyricRequests") as? [String]
+        XCTAssertEqual(requests, [], "公式行時刻を確認済みの失敗は旧キャッシュ移行の対象外")
+    }
+
     func testPreviousSongsDelayedFailureDoesNotReplaceNewSongsLyrics() async throws {
         let fixture = try await makeFixture()
         defer { fixture.close() }
@@ -115,7 +223,7 @@ final class AppleMusicLyricFetchTests: XCTestCase {
         }
     }
 
-    private func makeFixture() async throws -> Fixture {
+    private func makeFixture(usesAnalysisWorkers: Bool = false) async throws -> Fixture {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let songs = ["101", "202"].map {
@@ -129,7 +237,8 @@ final class AppleMusicLyricFetchTests: XCTestCase {
             try await cache.save(MusicAnalysis(fingerprint: "appleMusic:" + song.id, duration: 60,
                 beats: [1, 2], bpm: 120), id: song.id, ticket: ticket)
         }
-        let store = AppleMusicStore(analysisDirectory: directory, websiteDataStore: .nonPersistent(), usesAnalysisWorkers: false)
+        let store = AppleMusicStore(analysisDirectory: directory, websiteDataStore: .nonPersistent(),
+            usesAnalysisWorkers: usesAnalysisWorkers)
         store.setQueueSongs(songs)
         await store.musicAnalysis.queueRegistration?.value
         let view = store.webViewForDisplay()
@@ -163,7 +272,10 @@ final class AppleMusicLyricFetchTests: XCTestCase {
                 }
                 const hasLyrics=window.responseMode!=='unavailable';
                 const lyricData=(window.responseMode==='native' || window.responseMode==='delayed')
-                    ? [{id:id,type:'lyrics',attributes:{ttml:window.nativeTTML}}] : [];
+                    ? [{id:id,type:'lyrics',attributes:{ttml:window.nativeTTML}}]
+                    : window.responseMode==='untimed'
+                        ? [{id:id,type:'lyrics',attributes:{ttml:'<tt><body><p>First line</p><p>Second line</p></body></tt>'}}]
+                        : [];
                 return {data:{data:[{id:id,type:'songs',attributes:{hasLyrics:hasLyrics},relationships:{lyrics:{data:lyricData}}}]}};
             }}
         };

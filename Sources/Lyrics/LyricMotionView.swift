@@ -328,6 +328,43 @@ struct LyricMotionLineView: View {
     }
 }
 
+struct UntimedLyricReadingView: View {
+    let text: String
+    var font: LyricFont = .system
+    var readings: [LyricReading] = []
+
+    var body: some View {
+        ScrollView(.vertical) {
+            renderedText
+                .font(font.font(size: 22))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.leading)
+                .lineSpacing(10)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+        }
+        .scrollIndicators(.hidden)
+        .accessibilityLabel("歌詞")
+    }
+
+    private var renderedText: Text {
+        guard font == .rubifont, !readings.isEmpty else { return Text(text) }
+        let fonts = Dictionary(uniqueKeysWithValues: Set(readings.map(\.salt)).map {
+            ($0, font.font(size: 22, salt: $0))
+        })
+        return text.enumerated().reduce(Text("")) { result, element in
+            var character = Text(String(element.element))
+            if let reading = readings.first(where: { $0.start <= element.offset && element.offset < $0.start + $0.count }),
+               let selectedFont = fonts[reading.salt] {
+                character = character.font(selectedFont)
+            }
+            return Text("\(result)\(character)")
+        }
+    }
+}
+
 struct LyricMotionView: View {
     let store: PlayerStore
     var font: LyricFont = .system
@@ -341,11 +378,9 @@ struct LyricMotionView: View {
                        lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id,
                        font != .rubifont || lyrics.readings != nil {
                         if lyrics.lines.isEmpty {
-                            untimedText(lyrics.text, readings: lyrics.readings?.readings(for: lyrics.text) ?? [])
-                                .font(font.font(size: 28))
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                                .lineSpacing(12)
+                            UntimedLyricReadingView(text: lyrics.text, font: font,
+                                readings: lyrics.readings?.readings(for: lyrics.text) ?? [])
+                                .id(lyrics.songID)
                         } else {
                             let windows = LyricMotion.displayWindows(lyrics.lines)
                             TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !store.isPlaying)) { _ in
@@ -375,7 +410,8 @@ struct LyricMotionView: View {
                     .id(store.lyricFrameRevision)
                 }
             }
-            .frame(width: viewport.width, height: viewport.height)
+            .frame(width: viewport.width, height: viewport.height,
+                   alignment: hasUntimedAppleMusicLyrics ? .topLeading : .center)
             .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
             .overlay(alignment: .bottom) {
                 if store.isAppleMusicActive, let message = store.appleMusic.lyricTimingStatus {
@@ -388,22 +424,14 @@ struct LyricMotionView: View {
                 }
             }
         }
-        .allowsHitTesting(false)
+        .allowsHitTesting(hasUntimedAppleMusicLyrics)
     }
 
-    private func untimedText(_ text: String, readings: [LyricReading]) -> Text {
-        guard font == .rubifont, !readings.isEmpty else { return Text(text) }
-        let fonts = Dictionary(uniqueKeysWithValues: Set(readings.map(\.salt)).map {
-            ($0, font.font(size: 28, salt: $0))
-        })
-        return text.enumerated().reduce(Text("")) { result, element in
-            var character = Text(String(element.element))
-            if let reading = readings.first(where: { $0.start <= element.offset && element.offset < $0.start + $0.count }),
-               let selectedFont = fonts[reading.salt] {
-                character = character.font(selectedFont)
-            }
-            return Text("\(result)\(character)")
-        }
+    private var hasUntimedAppleMusicLyrics: Bool {
+        guard store.isAppleMusicActive,
+              let lyrics = store.appleMusic.lyrics,
+              lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id else { return false }
+        return lyrics.lines.isEmpty && !lyrics.text.isEmpty
     }
 
     private func lyricLines(_ lines: [TimedLyricLine], time: Double, viewport: CGSize,

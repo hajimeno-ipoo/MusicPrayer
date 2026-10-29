@@ -22,7 +22,7 @@ final class AppleMusicPreanalysisTests: XCTestCase {
 
     func testEachCompletionKeepsItsOutcomeAndShowsSimpleStatusWithoutAutomaticRetry() async throws {
         let outcomes: [AppleMusicPreanalysis.Completion] = [
-            .complete, .noLyrics, .partialLyrics(recognized: 3, total: 8),
+            .complete, .noLyrics, .untimedLyrics, .partialLyrics(recognized: 3, total: 8),
             .failedLyrics, .missingLyrics, .unmatchedLyrics
         ]
         for completion in outcomes {

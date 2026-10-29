@@ -17,6 +17,8 @@ struct AppleMusicLyricTiming: Codable, Sendable {
     /// False is saved only after Apple Music explicitly reports no lyrics.
     var hasLyrics: Bool?
     var usesOfficialWordTimings: Bool?
+    /// Set only after the official lyric document supplies text without row intervals.
+    var hasOfficialUntimedLyrics: Bool? = nil
     var readings: LyricReadings? = nil
 
     var completion: AppleMusicPreanalysis.Completion {
@@ -24,6 +26,7 @@ struct AppleMusicLyricTiming: Codable, Sendable {
         guard !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return hasLyrics == false ? .noLyrics : .missingLyrics
         }
+        if hasOfficialUntimedLyrics == true { return .untimedLyrics }
         if let derivedLines {
             let recognized = derivedLines.filter(\.hasValidCharacterTimings).count
             guard recognized > 0 else { return .unmatchedLyrics }
@@ -52,11 +55,13 @@ struct AppleMusicLyricTiming: Codable, Sendable {
             result.errorMessage = "歌詞データの本文が空でした。"
             return result
         }
+        result.hasOfficialUntimedLyrics = lyrics.lines.isEmpty
         do {
             guard lyrics.songID == song.id, analysis.fingerprint == "appleMusic:" + song.id else {
                 throw LyricAlignmentError.inconsistentSavedData
             }
-            guard lyrics.lines.isEmpty || !lyrics.lines.allSatisfy(\.hasValidCharacterTimings) else {
+            guard !lyrics.lines.isEmpty else { return result }
+            guard !lyrics.lines.allSatisfy(\.hasValidCharacterTimings) else {
                 result.usesOfficialWordTimings = true
                 return result
             }
@@ -80,17 +85,8 @@ struct AppleMusicLyricTiming: Codable, Sendable {
             let completed = recognitions
             let alignment = Task.detached(priority: .utility) { () throws -> Self in
                 var aligned = seed
-                if lyrics.lines.isEmpty {
-                    let recognized = try LyricRecognitionRecovery.combinedAlternatives(sourceText: lyrics.text,
-                        analysis: music, recognitions: completed)
-                    let window = LyricRecognitionRecovery.Window(start: 0, end: music.duration,
-                        sourceText: lyrics.text, language: "")
-                    aligned.timeline = try LyricRecognitionRecovery.selection(window: window,
-                        analysis: music, alternatives: recognized).timeline
-                } else {
-                    aligned.derivedLines = try recognizedLines(lyrics.lines, analysis: music, recognitions: completed)
-                    aligned.analysisDigest = try LyricAligner.analysisDigest(music)
-                }
+                aligned.derivedLines = try recognizedLines(lyrics.lines, analysis: music, recognitions: completed)
+                aligned.analysisDigest = try LyricAligner.analysisDigest(music)
                 return aligned
             }
             result = try await withTaskCancellationHandler {
@@ -166,7 +162,7 @@ struct AppleMusicLyricTiming: Codable, Sendable {
               sourceText == lyrics.text, errorMessage == nil,
               analysis.fingerprint == "appleMusic:" + song.id,
               analysis.duration.isFinite, abs(analysis.duration - duration) < 1,
-              lyrics.lines.isEmpty || !lyrics.lines.allSatisfy(\.hasValidCharacterTimings) else { return nil }
+              !lyrics.lines.isEmpty, !lyrics.lines.allSatisfy(\.hasValidCharacterTimings) else { return nil }
         let music = Self.alignmentAnalysis(analysis, songID: song.id)
         if let derivedLines {
             guard let expectedDigest = try? LyricAligner.analysisDigest(music), analysisDigest == expectedDigest,

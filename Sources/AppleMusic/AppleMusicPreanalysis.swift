@@ -9,6 +9,7 @@ final class AppleMusicPreanalysis {
     enum Completion: Sendable, Equatable {
         case complete
         case noLyrics
+        case untimedLyrics
         case partialLyrics(recognized: Int, total: Int)
         case failedLyrics
         case missingLyrics
