@@ -64,7 +64,7 @@ final class LyricMotionTests: XCTestCase {
             LyricReading(start: 5, count: 2, salt: 2)
         ]])
         func render(_ font: LyricFont) throws -> RenderedPixels {
-            try pixels(ImageRenderer(content: LyricMotionView(store: store, font: font)
+            try pixels(ImageRenderer(content: SingleLyricLineFixture(store: store, font: font)
                 .frame(width: 600, height: 240).background(.black)))
         }
         let original = try render(.rubifont)
@@ -172,7 +172,7 @@ final class LyricMotionTests: XCTestCase {
             XCTAssertFalse(readings.contains { $0.start < split && split < $0.start + $0.count })
             XCTAssertEqual(initial, LyricLineWrapping.presentation(text: source, viewport: viewport, font: .rubifont),
                            "読み指定ありの計測を既定表示のキャッシュへ混ぜないこと")
-            let image = try pixels(ImageRenderer(content: LyricMotionView(store: store, font: .rubifont)
+            let image = try pixels(ImageRenderer(content: SingleLyricLineFixture(store: store, font: .rubifont)
                 .frame(width: CGFloat(width), height: 240).background(.black)))
             let bounds = try XCTUnwrap(image.litBounds)
             XCTAssertGreaterThan(bounds.minX, 24)
@@ -194,13 +194,13 @@ final class LyricMotionTests: XCTestCase {
         store.previewTime = 1
         let timings = store.lyricTimeline?.lines[0].characterTimings
         let size = CGSize(width: 600, height: 240)
-        let renderer = ImageRenderer(content: LyricMotionView(store: store)
+        let renderer = ImageRenderer(content: SingleLyricLineFixture(store: store)
             .frame(width: size.width, height: size.height).background(.black))
         let system = try pixels(renderer)
         try saveWrappingEvidence(renderer, name: "font-system-initial.png")
         for font in [LyricFont.furifont, .rubifont] {
             try await expectRendererUpdate(renderer) {
-                renderer.content = LyricMotionView(store: store, font: font)
+                renderer.content = SingleLyricLineFixture(store: store, font: font)
                     .frame(width: size.width, height: size.height).background(.black)
             }
             let rendered = try pixels(renderer)
@@ -209,7 +209,7 @@ final class LyricMotionTests: XCTestCase {
             try saveWrappingEvidence(renderer, name: "font-\(font.rawValue).png")
         }
         try await expectRendererUpdate(renderer) {
-            renderer.content = LyricMotionView(store: store, font: .system)
+            renderer.content = SingleLyricLineFixture(store: store, font: .system)
                 .frame(width: size.width, height: size.height).background(.black)
         }
         let returned = try pixels(renderer)
@@ -233,7 +233,7 @@ final class LyricMotionTests: XCTestCase {
             XCTAssertNil(LyricLineWrapping.presentation(text: source, viewport: viewport, font: font))
         }
         func content(_ font: LyricFont) -> some View {
-            LyricMotionView(store: store, font: font).frame(width: 300, height: 120).background(.black)
+            SingleLyricLineFixture(store: store, font: font).frame(width: 300, height: 120).background(.black)
         }
         let renderer = ImageRenderer(content: content(.system))
         _ = try pixels(renderer)
@@ -268,7 +268,7 @@ final class LyricMotionTests: XCTestCase {
                     XCTAssertEqual(rows.joined(), source)
                     XCTAssertEqual(system, LyricLineWrapping.presentation(text: source, viewport: viewport))
                     let size = CGSize(width: width, height: 240)
-                    let renderer = ImageRenderer(content: LyricMotionView(store: store, font: font)
+                    let renderer = ImageRenderer(content: SingleLyricLineFixture(store: store, font: font)
                         .frame(width: size.width, height: size.height).background(.black))
                     let image = try pixels(renderer)
                     let bounds = try XCTUnwrap(image.litBounds)
@@ -427,34 +427,75 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
-    func testPlayerLyricPositionStaysFixedWhenAnalysisPanelOpens() throws {
+    func testAppleMusicCoverUsesColumnBeforeLyricsArrive() {
+        let store = offscreenStore(source: "準備中")
+        defer { store.engine.stop() }
+        store.isAppleMusicActive = true
+        for id in ["first", "second"] {
+            store.tracks = [Track(appleMusicSong: AppleMusicSong(id: id, title: id,
+                artist: "", album: "", artworkURL: nil, duration: 60))]
+            store.currentIndex = 0
+            XCTAssertNil(store.appleMusic.lyrics)
+            let presentation = PlayerLyricPresentation(store: store)
+            XCTAssertFalse(presentation.hasLyrics)
+            XCTAssertTrue(presentation.usesArtworkColumn,
+                          "歌詞取得前も選曲直後から左の大きなカバー位置を使うこと")
+        }
+    }
+
+    @MainActor
+    func testLocalCoverUsesLargeArtworkLayoutWithoutPreparedLyrics() throws {
+        _ = NSApplication.shared
+        let store = offscreenStore(source: "歌詞はまだ準備されていない")
+        defer { store.engine.stop() }
+        store.lyricTimeline = nil
+        store.lyricReadings = nil
+        store.tracks[0].artwork = try XCTUnwrap(
+            NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?.tiffRepresentation)
+
+        let presentation = PlayerLyricPresentation(store: store)
+        XCTAssertFalse(presentation.hasLyrics)
+        XCTAssertNotNil(presentation.localArtwork)
+        XCTAssertTrue(presentation.usesArtworkColumn,
+                      "同期歌詞が未保存でも、ローカル曲のカバーは左の大きな表示を使うこと")
+    }
+
+    @MainActor
+    func testPlayerLyricRegionUsesArtworkColumnOrWideReadingAreaAboveControls() throws {
         _ = NSApplication.shared
         let store = offscreenStore(source: "誰かのために 僕は歌う")
         defer { store.engine.stop() }
+        let artwork = try XCTUnwrap(NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?.tiffRepresentation)
         for height in [800.0, 850.0, 1000.0] {
             let size = CGSize(width: 1000, height: height)
-            func region(_ showAnalysis: Bool) -> some View {
-                ZStack {
-                    PlayerLyricRegion(store: store, size: size, headerHeight: 58)
-                    if showAnalysis {
-                        AnalysisPanel(analysis: MusicAnalysis(duration: 10), time: 1, duration: 10, isPlaying: false)
-                            .frame(height: min(400, max(280, height - 460)))
-                            .frame(maxHeight: .infinity, alignment: .bottom)
-                    }
+            for hasArtwork in [false, true] {
+                store.tracks[0].artwork = hasArtwork ? artwork : nil
+                let hosting = NSHostingView(rootView: PlayerLyricRegion(store: store, size: size, headerHeight: 58)
+                    .frame(width: size.width, height: size.height))
+                let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
+                                      styleMask: [.titled], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.contentView = hosting
+                hosting.layoutSubtreeIfNeeded()
+                let scroll = try XCTUnwrap(findScrollView(in: hosting))
+                let frame = hosting.convert(scroll.bounds, from: scroll)
+                XCTAssertGreaterThan(frame.minY, 58, "歌詞欄をヘッダーの下へ置くこと")
+                XCTAssertLessThan(frame.maxY, height - 200, "歌詞欄を下部の操作領域へ重ねないこと")
+                if hasArtwork {
+                    XCTAssertGreaterThan(frame.minX, size.width * 0.5, "カバーがある曲では右の歌詞欄を使うこと")
+                } else {
+                    XCTAssertGreaterThan(frame.width, size.width * 0.7, "カバーなしでも広い歌詞欄を使うこと")
+                    XCTAssertEqual(frame.midX, size.width / 2, accuracy: 1)
                 }
-                .frame(width: size.width, height: size.height).background(.black)
+                window.close()
             }
-            let closed = try pixels(ImageRenderer(content: region(false)))
-            let opened = try pixels(ImageRenderer(content: region(true)))
-            let bounds = try XCTUnwrap(closed.litBounds)
-            XCTAssertEqual(bounds.midY, height * 0.24, accuracy: 3, "画像2の上寄りの位置を保つこと")
-            XCTAssertGreaterThan(bounds.minY, 58, "ヘッダーに重ならないこと")
-            // Compare the lyric area of the actual wrapper with a real panel sibling.
-            let first = Int(bounds.minY) * 1000 * 4
-            let last = Int(bounds.maxY) * 1000 * 4
-            XCTAssertTrue(closed.bytes[first..<last] == opened.bytes[first..<last],
-                          "解析パネルを開閉しても歌詞の画素位置を変えないこと")
         }
+    }
+
+    @MainActor
+    private func findScrollView(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        return view.subviews.compactMap { findScrollView(in: $0) }.first
     }
 
     private func line(_ ordinal: Int, _ start: Double, _ end: Double) -> TimedLyricLine {
@@ -832,11 +873,21 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
-    func testOffscreenSnapshotIdentityMismatchHidesLyrics() throws {
+    func testPlaybackSnapshotIdentityMismatchHidesTimedReadingView() throws {
         let store = offscreenStore(source: "同じ曲をもう一度")
         defer { store.engine.stop() }
+        func hasReadingView() -> Bool {
+            let hosting = NSHostingView(rootView: LyricMotionView(store: store).frame(width: 600, height: 400))
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 600, height: 400),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = hosting
+            hosting.layoutSubtreeIfNeeded()
+            defer { window.close() }
+            return findScrollView(in: hosting) != nil
+        }
         let matching = try XCTUnwrap(store.visualSource.snapshot().lyrics)
-        XCTAssertGreaterThan(try pixels(renderer(for: store)).litPixels, 0)
+        XCTAssertTrue(hasReadingView())
         var wrongTrack = matching
         wrongTrack.trackID = UUID()
         var wrongGeneration = matching
@@ -845,10 +896,10 @@ final class LyricMotionTests: XCTestCase {
         wrongAudio.audioFingerprint = String(repeating: "b", count: 64)
         for mismatch in [wrongTrack, wrongGeneration, wrongAudio] {
             publish(mismatch, to: store)
-            XCTAssertEqual(try pixels(renderer(for: store)).litPixels, 0)
+            XCTAssertFalse(hasReadingView())
         }
         publish(matching, to: store)
-        XCTAssertGreaterThan(try pixels(renderer(for: store)).litPixels, 0)
+        XCTAssertTrue(hasReadingView())
     }
 
     @MainActor
@@ -974,7 +1025,7 @@ final class LyricMotionTests: XCTestCase {
     @MainActor
     private func renderer(for store: PlayerStore, size: CGSize = CGSize(width: 600, height: 240))
         -> ImageRenderer<some View> {
-        ImageRenderer(content: LyricMotionView(store: store)
+        ImageRenderer(content: SingleLyricLineFixture(store: store)
             .frame(width: size.width, height: size.height).background(.black))
     }
 
@@ -1049,4 +1100,41 @@ private struct RenderedPixels {
     var litPixels: Int
     var totalBrightness: Int
     var litBounds: CGRect?
+}
+
+/// Isolate the existing single-line renderer's wrapping, readings and colour
+/// behavior from the native ScrollView used by the new reading column.
+private struct SingleLyricLineFixture: View {
+    let store: PlayerStore
+    var font: LyricFont = .system
+
+    var body: some View {
+        GeometryReader { geometry in
+            let viewport = CGSize(width: max(0, geometry.size.width - 48), height: max(0, geometry.size.height - 32))
+            let revision = store.lyricFrameRevision
+            Group {
+                if let timeline = store.lyricTimeline,
+                   font != .rubifont || store.lyricReadings != nil,
+                   let frame = store.visualSource.snapshot().lyrics {
+                    let starts = LyricMotion.displayStarts(timeline, analysis: store.analysis)
+                    let windows = LyricMotion.displayWindows(timeline.lines, displayStarts: starts)
+                    ZStack {
+                        ForEach(LyricMotion.visibleLines(timeline, at: frame.time, displayStarts: starts, windows: windows)) { line in
+                            if let motion = LyricMotion.parameters(for: line, time: frame.time, vocal: frame.vocal,
+                                beat: frame.beat, beatPhase: frame.beatPhase, barPhase: frame.barPhase,
+                                displayStart: starts[line.ordinal], window: windows[line.ordinal]) {
+                                LyricMotionLineView(line: line,
+                                    colourTimings: LyricMotion.colourTimings(for: line, displayStart: starts[line.ordinal]),
+                                    motion: motion, time: frame.time, viewport: viewport, font: font,
+                                    readings: store.lyricReadings?.readings(for: line.text) ?? [])
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(width: viewport.width, height: viewport.height)
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            .id(revision)
+        }
+    }
 }

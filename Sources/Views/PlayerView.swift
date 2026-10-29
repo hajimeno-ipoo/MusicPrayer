@@ -23,16 +23,12 @@ struct PlayerView: View {
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
     private var overlayVisible: Bool { store.isAppleMusicActive || engaged || !store.isPlaying }
     private var controlGlass: Glass { .regular.interactive() }
-    private var hasUntimedAppleMusicLyrics: Bool {
-        guard store.isAppleMusicActive,
-              let lyrics = store.appleMusic.lyrics,
-              lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id else { return false }
-        return lyrics.lines.isEmpty && !lyrics.text.isEmpty
-    }
+    private var lyricPresentation: PlayerLyricPresentation { PlayerLyricPresentation(store: store) }
 
     var body: some View {
         GeometryReader { geometry in
-            let untimedArtworkSize = min(420, geometry.size.width * 0.34, geometry.size.height * 0.42)
+            let presentation = lyricPresentation
+            let lyricArtworkSize = min(420, geometry.size.width * 0.34, geometry.size.height * 0.42)
             ZStack {
                 if store.isAppleMusicActive || store.appleMusic.isInitialized {
                     AppleMusicWebView(store: store.appleMusic)
@@ -43,21 +39,20 @@ struct PlayerView: View {
                 ZStack {
                     MetalVisualizerView(source: store.visualSource, backgroundOpacity: reduceTransparency ? 1 : 0)
                         .ignoresSafeArea()
-                    if store.isAppleMusicActive && (hasUntimedAppleMusicLyrics || store.visualizerStyle != .cassette) {
-                        appleMusicArtwork
-                            .frame(width: hasUntimedAppleMusicLyrics
-                                   ? untimedArtworkSize
-                                   : min(240, geometry.size.height * 0.26),
-                                   height: hasUntimedAppleMusicLyrics
-                                   ? untimedArtworkSize
-                                   : min(240, geometry.size.height * 0.26))
+                    if presentation.usesArtworkColumn {
+                        Group {
+                            if store.isAppleMusicActive {
+                                appleMusicArtwork
+                            } else if let image = presentation.localArtwork {
+                                Image(nsImage: image).resizable().scaledToFill()
+                                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                                    .accessibilityLabel("曲のカバーアート")
+                            }
+                        }
+                            .frame(width: lyricArtworkSize, height: lyricArtworkSize)
                             .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
-                            .position(x: hasUntimedAppleMusicLyrics
-                                      ? max(24, geometry.size.width * 0.05) + untimedLeftWidth(for: geometry.size.width) / 2
-                                      : geometry.size.width / 2,
-                                      y: hasUntimedAppleMusicLyrics
-                                         ? headerHeight + 108 + untimedArtworkSize / 2
-                                         : geometry.size.height * 0.55)
+                            .position(x: max(24, geometry.size.width * 0.05) + lyricArtworkColumnWidth(for: geometry.size.width) / 2,
+                                      y: headerHeight + 108 + lyricArtworkSize / 2)
                     }
                     PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont)
                         .environment(\.colorScheme, .dark)
@@ -325,7 +320,7 @@ struct PlayerView: View {
                 Spacer(minLength: 20)
                 activityIndicators
             } else if let track = store.currentTrack {
-                if let data = track.artwork, let image = NSImage(data: data) {
+                if !lyricPresentation.usesArtworkColumn, let data = track.artwork, let image = NSImage(data: data) {
                     Image(nsImage: image).resizable().scaledToFill().frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 VStack(alignment: .leading, spacing: 7) {
@@ -554,13 +549,12 @@ struct PlayerView: View {
         }
     }
 
-    private func untimedLeftWidth(for width: CGFloat) -> CGFloat {
+    private func lyricArtworkColumnWidth(for width: CGFloat) -> CGFloat {
         min(600, max(390, width * 0.43))
     }
 }
 
-/// Timed lyrics retain their upper-centred stage. Untimed Apple Music lyrics use
-/// a scrollable reading column above the unchanged bottom player controls.
+/// The artwork and lyric reading area sit above the unchanged bottom controls.
 struct PlayerLyricRegion: View {
     let store: PlayerStore
     let size: CGSize
@@ -568,12 +562,15 @@ struct PlayerLyricRegion: View {
     var font: LyricFont = .system
 
     var body: some View {
-        if hasUntimedAppleMusicLyrics {
-            let left = max(size.width * 0.52, max(24, size.width * 0.05) + min(600, max(390, size.width * 0.43)) + 20)
-            let right = size.width - max(24, size.width * 0.05)
+        let presentation = PlayerLyricPresentation(store: store)
+        if presentation.hasLyrics {
+            let left = presentation.usesArtworkColumn
+                ? max(size.width * 0.52, max(24, size.width * 0.05) + min(600, max(390, size.width * 0.43)) + 20)
+                : max(24, size.width * 0.12)
+            let right = size.width - max(24, size.width * (presentation.usesArtworkColumn ? 0.05 : 0.12))
             let top = headerHeight + 50
             let bottom = size.height - 230
-            LyricMotionView(store: store, font: font)
+            LyricMotionView(store: store, font: font, centersLyrics: !presentation.usesArtworkColumn)
                 .frame(width: max(0, right - left), height: max(0, bottom - top))
                 .position(x: (left + right) / 2, y: (top + bottom) / 2)
         } else {
@@ -583,12 +580,29 @@ struct PlayerLyricRegion: View {
                 .allowsHitTesting(false)
         }
     }
+}
 
-    private var hasUntimedAppleMusicLyrics: Bool {
-        guard store.isAppleMusicActive,
-              let lyrics = store.appleMusic.lyrics,
-              lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id else { return false }
-        return lyrics.lines.isEmpty && !lyrics.text.isEmpty
+@MainActor
+struct PlayerLyricPresentation {
+    let hasLyrics: Bool
+    let localArtwork: NSImage?
+    let usesArtworkColumn: Bool
+
+    init(store: PlayerStore) {
+        if store.isAppleMusicActive {
+            localArtwork = nil
+            if let lyrics = store.appleMusic.lyrics,
+               lyrics.songID == store.currentQueueTrack?.appleMusicSong?.id {
+                hasLyrics = !lyrics.text.isEmpty
+            } else { hasLyrics = false }
+            usesArtworkColumn = store.currentQueueTrack?.appleMusicSong != nil
+        } else {
+            localArtwork = store.currentTrack?.artwork.flatMap { NSImage(data: $0) }
+            if let timeline = store.lyricTimeline {
+                hasLyrics = !timeline.lines.isEmpty && timeline.lines.allSatisfy(\.hasValidCharacterTimings)
+            } else { hasLyrics = false }
+            usesArtworkColumn = localArtwork != nil
+        }
     }
 }
 
