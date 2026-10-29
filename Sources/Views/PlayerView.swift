@@ -19,6 +19,7 @@ struct PlayerView: View {
     @State private var headerHeight: CGFloat = 58
     @State private var engaged = true
     @State private var hideTask: Task<Void, Never>?
+    @State private var contentDisplay = PlayerContentDisplay.initial
     private var dropTarget: Bool { fileDropSession.isTargeted }
     private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
     private var overlayVisible: Bool { store.isAppleMusicActive || engaged || !store.isPlaying }
@@ -39,7 +40,7 @@ struct PlayerView: View {
                 ZStack {
                     MetalVisualizerView(source: store.visualSource, backgroundOpacity: reduceTransparency ? 1 : 0)
                         .ignoresSafeArea()
-                    if presentation.usesArtworkColumn {
+                    if contentDisplay.showsArtwork && presentation.usesArtworkColumn {
                         Group {
                             if store.isAppleMusicActive {
                                 appleMusicArtwork
@@ -51,11 +52,15 @@ struct PlayerView: View {
                         }
                             .frame(width: lyricArtworkSize, height: lyricArtworkSize)
                             .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
-                            .position(x: max(24, geometry.size.width * 0.05) + lyricArtworkColumnWidth(for: geometry.size.width) / 2,
+                            .position(x: contentDisplay.showsLyrics
+                                      ? max(24, geometry.size.width * 0.05) + lyricArtworkColumnWidth(for: geometry.size.width) / 2
+                                      : geometry.size.width / 2,
                                       y: headerHeight + 108 + lyricArtworkSize / 2)
                     }
-                    PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont)
-                        .environment(\.colorScheme, .dark)
+                    if contentDisplay.showsLyrics {
+                        PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont)
+                            .environment(\.colorScheme, .dark)
+                    }
                     VStack(spacing: 0) {
                         header
                         if store.tracks.isEmpty && !store.isAppleMusicActive {
@@ -320,7 +325,8 @@ struct PlayerView: View {
                 Spacer(minLength: 20)
                 activityIndicators
             } else if let track = store.currentTrack {
-                if !lyricPresentation.usesArtworkColumn, let data = track.artwork, let image = NSImage(data: data) {
+                if contentDisplay.showsArtwork && !lyricPresentation.usesArtworkColumn,
+                   let data = track.artwork, let image = NSImage(data: data) {
                     Image(nsImage: image).resizable().scaledToFill().frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 VStack(alignment: .leading, spacing: 7) {
@@ -436,6 +442,15 @@ struct PlayerView: View {
                 .disabled(!store.canSkipNext)
             iconButton("リピート", store.repeatSetting == .one ? "repeat.1" : "repeat", active: store.repeatSetting != .off,
                        action: { store.repeatSetting = RepeatSetting(rawValue: (store.repeatSetting.rawValue + 1) % 3)! })
+            Button {
+                contentDisplay = contentDisplay.next
+            } label: {
+                PlayerContentDisplayIcon(display: contentDisplay)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("表示切替：\(contentDisplay.title)")
+            .accessibilityValue(contentDisplay.title)
+            .help("表示：\(contentDisplay.title)／次：\(contentDisplay.next.title)")
         }
         .padding(.horizontal, 14).padding(.vertical, 5)
         .glassEffect(controlGlass, in: .capsule)

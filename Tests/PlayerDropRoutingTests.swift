@@ -16,6 +16,16 @@ final class PlayerDropRoutingTests: XCTestCase {
     }
 
     @MainActor
+    func testEmptyPlayerRoutesAudioAndLyricsTogetherIntoSelectedSongAndEditor() async throws {
+        try await verifyLyricDrop(includesAudio: true)
+    }
+
+    @MainActor
+    func testSelectedLocalSongRoutesLyricFileIntoEditor() async throws {
+        try await verifyLyricDrop(includesAudio: false)
+    }
+
+    @MainActor
     private func verifyFileDrop(appleMusicActive: Bool) async throws {
         _ = NSApplication.shared
         let queue = try? Data(contentsOf: QueuePersistence.file)
@@ -59,7 +69,7 @@ final class PlayerDropRoutingTests: XCTestCase {
             XCTAssertTrue(store.appleMusic.webViewForDisplay().registeredDraggedTypes.isEmpty,
                           "透明な再生接続用WebViewをドロップの受付候補に残さない")
         }
-        let drag = PlayerRoutingDrag(window: window, url: url)
+        let drag = PlayerRoutingDrag(window: window, urls: [url])
         var view = host.hitTest(NSPoint(x: 430, y: 400))
         var registeredAncestor: NSView?
         while let candidate = view {
@@ -70,6 +80,7 @@ final class PlayerDropRoutingTests: XCTestCase {
             view = candidate.superview
         }
         let destination = try XCTUnwrap(registeredAncestor, "ドラッグ位置からウインドウまでにファイルを受け取るビューが必要")
+        XCTAssertTrue(destination is PlayerFileDropHostingView, "ガラス背景ではなく実プレイヤーのビューが受け付けること")
         XCTAssertEqual(destination.draggingEntered(drag), .copy)
         XCTAssertEqual(destination.draggingUpdated(drag), .copy)
         XCTAssertEqual(store.tracks.count, appleMusicActive ? 1 : 0, "ドロップ確定前には追加しない")
@@ -91,16 +102,89 @@ final class PlayerDropRoutingTests: XCTestCase {
             XCTAssertEqual(store.currentTrack?.url, url)
         }
     }
+
+    @MainActor
+    private func verifyLyricDrop(includesAudio: Bool) async throws {
+        _ = NSApplication.shared
+        let queue = try? Data(contentsOf: QueuePersistence.file)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let audio = directory.appendingPathComponent("歌詞と読み込む曲.wav")
+        let lyrics = directory.appendingPathComponent("歌詞.txt")
+        let text = "ドロップした歌詞\n次の行も読み込む"
+        try text.write(to: lyrics, atomically: true, encoding: .utf8)
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 8_000, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16_000))
+        buffer.frameLength = 16_000
+        buffer.floatChannelData![0].initialize(repeating: 0, count: 16_000)
+        do {
+            let writer = try AVAudioFile(forWriting: audio, settings: format.settings)
+            try writer.write(from: buffer)
+        }
+        let store = PlayerStore(lyricDirectory: directory.appendingPathComponent("Lyrics"),
+                                appleMusicAnalysisDirectory: directory.appendingPathComponent("AppleMusic"))
+        if !includesAudio {
+            store.tracks = [Track(url: audio)]
+            store.select(0, autoplay: false)
+        }
+        let generation = store.playbackGeneration
+        let host = NSHostingView(rootView: PlayerGlassContainer(store: store, appearance: .dark))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 800),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.orderOut(nil); window.contentView = nil; store.shutdown()
+            if let queue { try? queue.write(to: QueuePersistence.file) }
+            else { try? FileManager.default.removeItem(at: QueuePersistence.file) }
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        let drag = PlayerRoutingDrag(window: window, urls: includesAudio ? [audio, lyrics] : [lyrics])
+        var candidate = host.hitTest(NSPoint(x: 430, y: 400))
+        while let view = candidate, !view.registeredDraggedTypes.contains(.fileURL) {
+            candidate = view.superview
+        }
+        let destination = try XCTUnwrap(candidate, "プレイヤー上のファイル受付まで到達すること")
+        XCTAssertTrue(destination is PlayerFileDropHostingView)
+        XCTAssertEqual(destination.draggingEntered(drag), .copy)
+        XCTAssertEqual(destination.draggingUpdated(drag), .copy)
+        XCTAssertTrue(destination.prepareForDragOperation(drag))
+        XCTAssertTrue(destination.performDragOperation(drag))
+        func editor(in view: NSView) -> LyricDropTextView? {
+            if let editor = view as? LyricDropTextView { return editor }
+            return view.subviews.compactMap(editor).first
+        }
+        var importedEditor: LyricDropTextView?
+        for _ in 0..<150 {
+            importedEditor = NSApp.windows.compactMap { $0.contentView }.compactMap(editor)
+                .first(where: { $0.string == text })
+            if importedEditor != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(store.tracks.count, 1)
+        XCTAssertEqual(store.currentTrack?.url, audio)
+        XCTAssertEqual(importedEditor?.string, text, "受付した歌詞本文が実際の編集欄まで届くこと")
+        XCTAssertEqual(store.lyricText, "", "適用ボタンを押すまでは保存済み歌詞へ反映しないこと")
+        XCTAssertNil(store.playbackError)
+        XCTAssertFalse(store.isPlaying)
+        if includesAudio {
+            XCTAssertGreaterThan(store.playbackGeneration, generation)
+        } else {
+            XCTAssertEqual(store.playbackGeneration, generation, "歌詞だけのドロップでは選曲を変えないこと")
+        }
+    }
 }
 
 @MainActor
 private final class PlayerRoutingDrag: NSObject, NSDraggingInfo {
     let draggingPasteboard = NSPasteboard.withUniqueName()
     let draggingDestinationWindow: NSWindow?
-    init(window: NSWindow, url: URL) {
+    init(window: NSWindow, urls: [URL]) {
         draggingDestinationWindow = window
         super.init()
-        draggingPasteboard.writeObjects([url as NSURL])
+        draggingPasteboard.writeObjects(urls.map { $0 as NSURL })
     }
     deinit { draggingPasteboard.releaseGlobally() }
     var draggingSourceOperationMask: NSDragOperation { .copy }

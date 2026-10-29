@@ -12,7 +12,7 @@ struct PlayerGlassContainer: NSViewRepresentable {
         let glass = PlayerGlassEffectView()
         glass.style = .clear
         glass.cornerRadius = 20
-        let hosting = NSHostingView(rootView: PlayerView(store: store, fileDropSession: context.coordinator))
+        let hosting = PlayerFileDropHostingView(rootView: PlayerView(store: store, fileDropSession: context.coordinator))
         hosting.sizingOptions = []
         glass.contentView = PlayerGlassBackdropView(hosting: hosting)
         updateNSView(glass, context: context)
@@ -21,13 +21,13 @@ struct PlayerGlassContainer: NSViewRepresentable {
 
     func updateNSView(_ nsView: PlayerGlassEffectView, context: Context) {
         let session = context.coordinator
-        nsView.onFileTargetChanged = { session.isTargeted = $0 }
-        nsView.onFileDrop = { urls in
-            session.request = PlayerFileDrop.Request(urls: urls, generation: store.playbackGeneration)
-        }
         nsView.appearance = appearance.nsAppearance(systemColorScheme: systemColorScheme)
         if let content = nsView.contentView as? PlayerGlassBackdropView,
-           let hosting = content.hosting as? NSHostingView<PlayerView> {
+           let hosting = content.hosting as? PlayerFileDropHostingView {
+            hosting.onFileTargetChanged = { session.isTargeted = $0 }
+            hosting.onFileDrop = { urls in
+                session.request = PlayerFileDrop.Request(urls: urls, generation: store.playbackGeneration)
+            }
             hosting.rootView = PlayerView(store: store, fileDropSession: session)
         }
     }

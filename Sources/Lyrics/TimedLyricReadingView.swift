@@ -4,8 +4,9 @@ enum LyricReadingPosition {
     static func currentID(in lines: [TimedLyricLine], at time: Double,
                           displayStarts: [Int: Double] = [:]) -> String? {
         guard time.isFinite else { return nil }
-        return lines.last(where: { (displayStarts[$0.ordinal] ?? $0.start) <= time })?.id
-            ?? lines.first?.id
+        return lines.last(where: {
+            (displayStarts[$0.ordinal] ?? $0.start) <= time && time < $0.end
+        })?.id
     }
 }
 
@@ -36,7 +37,9 @@ struct TimedLyricReadingView: View {
                         Button { onSeek(line.start) } label: {
                             LyricMotionLineView(line: line,
                                 colourTimings: current && line.hasValidCharacterTimings
-                                    ? LyricMotion.colourTimings(for: line, displayStart: displayStarts[line.ordinal]) : [],
+                                    ? LyricMotion.colourTimings(for: line,
+                                        displayStart: usesEstimatedProgress ? line.start : displayStarts[line.ordinal],
+                                        anchorsRecognizedPrefixToRow: usesEstimatedProgress) : [],
                                 motion: LyricMotionParameters(opacity: 1, scale: 1, blur: 0, x: 0, y: 0,
                                     progress: 0, glowOpacity: 0, glowRadius: 0),
                                 time: time, viewport: viewport, font: font,

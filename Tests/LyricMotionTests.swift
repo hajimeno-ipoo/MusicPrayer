@@ -101,7 +101,11 @@ final class LyricMotionTests: XCTestCase {
                        "2つの国と", "あの時感じた", "不満の声", "あなたの声聞きたくて", "金のハンドルで街を飛びまわれ", "胸の鼓動焼きつけろ", "AH AHいくつかの場面", "２つの国と",
                        "そんな1日でもいいでしょう", "そんな１日でもいいでしょう", "Oh 人生楽ありゃ苦あり", "大きな声で 自由に歌っているの",
                        "もっと楽に生きていきたい", "今朝もミニのスカートで 人ゴミの中走ってく", "ゴミの中走っていく", "走っていく", "candy pretty doll",
-                       "あぁ、愛で全部抱きしめて愛して", "受け入れて", "終わんないで 見続けてる 逃さないで"]
+                       "あぁ、愛で全部抱きしめて愛して", "受け入れて", "終わんないで 見続けてる 逃さないで",
+                       "赤く染めた砂遥か越えて行く", "胸の糸激しく掻き鳴らして", "手のひらの記憶遥か",
+                       "やわらかな額に残された", "Prototype boy 心奪われてく",
+                       "来ぬ人の嘆きに星は落ちて", "消さないで灯火", "shelter",
+                       "乱す風に負けぬ様に", "欲しいのは 抱き上げる手を 手を", "ずっと傍にいてあげるよ", "Prototype boy 明日の理想だけで"]
         let plan = try await LyricReadingResolver().prepare(sourceText: sources.joined(separator: "\n"), lines: sources)
         let viewport = CGSize(width: 800, height: 160)
         for (index, source) in sources.enumerated() {

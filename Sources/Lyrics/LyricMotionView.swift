@@ -135,16 +135,20 @@ enum LyricMotion {
 
     /// Presentation colour starts with the prepared row; native Speech times stay saved.
     /// Missing leading spelling uses the pre-Speech gap as one shared interval.
-    static func colourTimings(for line: TimedLyricLine, displayStart: Double?) -> [LyricCharacterTiming] {
+    static func colourTimings(for line: TimedLyricLine, displayStart: Double?,
+                              anchorsRecognizedPrefixToRow: Bool = false) -> [LyricCharacterTiming] {
         guard line.hasValidCharacterTimings, let start = displayStart,
-              start.isFinite, start >= 0, start < line.start,
+              start.isFinite, start >= 0,
+              start < line.start || (anchorsRecognizedPrefixToRow && start == line.start),
               let missing = line.unrecognizedLeadingCharacters else { return line.characterTimings }
         let original = Array(line.text)
         let weighted = original.indices.filter { LyricParser.characterWeight(original[$0]) > 0 }
         let firstRecognized = weighted[missing]
         let first = line.characterTimings[firstRecognized]
         // Preserve the existing correction for a pause inside a long first token.
-        guard first.start == line.start else { return line.characterTimings }
+        guard first.start == line.start || (anchorsRecognizedPrefixToRow && start == line.start) else {
+            return line.characterTimings
+        }
         var result = line.characterTimings
         if missing > 0 {
             for index in weighted.prefix(missing) {
