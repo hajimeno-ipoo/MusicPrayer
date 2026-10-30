@@ -62,7 +62,7 @@ enum PlayerFileDrop {
         await store.add(urls: [audio], selectFirst: false)
         guard generation == store.playbackGeneration, store.lyricsAcceptingRequests,
               let index = store.tracks.firstIndex(where: { $0.url == audio }) else { return nil }
-        store.select(index, autoplay: false)
+        await store.selectForLyricImport(index)
         guard store.playbackGeneration != generation, store.currentTrack?.url == audio else { return nil }
         return text
     }

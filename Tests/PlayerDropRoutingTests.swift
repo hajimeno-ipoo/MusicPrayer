@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import SwiftUI
+import WebKit
 import XCTest
 @testable import MusicPrayer
 
@@ -21,8 +22,65 @@ final class PlayerDropRoutingTests: XCTestCase {
     }
 
     @MainActor
+    func testAppleMusicPlayerRoutesAudioAndLyricsTogetherIntoLocalSongAndEditor() async throws {
+        try await verifyLyricDrop(includesAudio: true, appleMusicActive: true)
+    }
+
+    @MainActor
+    func testLocalPlayerWithRegisteredAppleMusicSongRoutesAudioAndLyricsIntoNewSongAndEditor() async throws {
+        try await verifyLyricDrop(includesAudio: true, appleMusicRegistered: true)
+    }
+
+    @MainActor
     func testSelectedLocalSongRoutesLyricFileIntoEditor() async throws {
         try await verifyLyricDrop(includesAudio: false)
+    }
+
+    @MainActor
+    func testInvisibleAppleMusicWebViewsStayOutsidePlayerDropAreaAndBrowserCanStillOpen() async throws {
+        _ = NSApplication.shared
+        let queue = try? Data(contentsOf: QueuePersistence.file)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = PlayerStore(lyricDirectory: directory.appendingPathComponent("Lyrics"),
+                                appleMusicAnalysisDirectory: directory.appendingPathComponent("AppleMusic"))
+        store.appleMusic.preanalysis.operation = { _ in return .complete }
+        let song = AppleMusicSong(id: "123456", title: "配信曲", artist: "", album: "", duration: 180)
+        store.tracks = [Track(appleMusicSong: song)]
+        store.isAppleMusicActive = true
+        let playback = store.appleMusic.webViewForDisplay()
+        let browser = store.appleMusicBrowser.webViewForDisplay()
+        playback.stopLoading()
+        browser.stopLoading()
+        let host = NSHostingView(rootView: PlayerGlassContainer(store: store, appearance: .dark))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 800),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        window.orderBack(nil)
+        defer {
+            window.orderOut(nil); window.contentView = nil; store.shutdown()
+            if let queue { try? queue.write(to: QueuePersistence.file) }
+            else { try? FileManager.default.removeItem(at: QueuePersistence.file) }
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        func assertOutsidePlayerDropArea(_ view: WKWebView, _ message: String) {
+            XCTAssertTrue(view.isDescendant(of: host), "WebViewを初期化したプレイヤーの階層で確認すること")
+            let rect = view.convert(view.bounds, to: host)
+            XCTAssertTrue(rect.isEmpty || !host.bounds.intersects(rect), message)
+        }
+        assertOutsidePlayerDropArea(playback, "透明な再生用WebViewがプレイヤーのドロップ領域を覆わないこと")
+        assertOutsidePlayerDropArea(browser, "非表示の公式ブラウザーがプレイヤーのドロップ領域を覆わないこと")
+
+        store.isAppleMusicBrowserVisible = true
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        XCTAssertGreaterThan(browser.bounds.width, 0, "公式ブラウザーを開いたら表示幅が戻ること")
+        XCTAssertGreaterThan(browser.bounds.height, 0, "公式ブラウザーを開いたら表示高さが戻ること")
+        XCTAssertTrue(host.bounds.intersects(browser.convert(browser.bounds, to: host)),
+                      "開いた公式ブラウザーはプレイヤー内に表示されること")
+        assertOutsidePlayerDropArea(playback, "公式ブラウザーを表示しても再生用WebViewは領域を覆わないこと")
     }
 
     @MainActor
@@ -70,16 +128,7 @@ final class PlayerDropRoutingTests: XCTestCase {
                           "透明な再生接続用WebViewをドロップの受付候補に残さない")
         }
         let drag = PlayerRoutingDrag(window: window, urls: [url])
-        var view = host.hitTest(NSPoint(x: 430, y: 400))
-        var registeredAncestor: NSView?
-        while let candidate = view {
-            if candidate.registeredDraggedTypes.contains(.fileURL) {
-                registeredAncestor = candidate
-                break
-            }
-            view = candidate.superview
-        }
-        let destination = try XCTUnwrap(registeredAncestor, "ドラッグ位置からウインドウまでにファイルを受け取るビューが必要")
+        let destination = try fileDragDestination(in: host, at: drag.draggingLocation)
         XCTAssertTrue(destination is PlayerFileDropHostingView, "ガラス背景ではなく実プレイヤーのビューが受け付けること")
         XCTAssertEqual(destination.draggingEntered(drag), .copy)
         XCTAssertEqual(destination.draggingUpdated(drag), .copy)
@@ -104,7 +153,8 @@ final class PlayerDropRoutingTests: XCTestCase {
     }
 
     @MainActor
-    private func verifyLyricDrop(includesAudio: Bool) async throws {
+    private func verifyLyricDrop(includesAudio: Bool, appleMusicActive: Bool = false,
+                                 appleMusicRegistered: Bool = false) async throws {
         _ = NSApplication.shared
         let queue = try? Data(contentsOf: QueuePersistence.file)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -123,10 +173,26 @@ final class PlayerDropRoutingTests: XCTestCase {
         }
         let store = PlayerStore(lyricDirectory: directory.appendingPathComponent("Lyrics"),
                                 appleMusicAnalysisDirectory: directory.appendingPathComponent("AppleMusic"))
-        if !includesAudio {
+        store.appleMusic.preanalysis.operation = { _ in return .complete }
+        if appleMusicActive || appleMusicRegistered {
+            let song = AppleMusicSong(id: "123456", title: "配信曲", artist: "", album: "", duration: 180)
+            store.tracks = [Track(appleMusicSong: song)]
+        }
+        let previousAudio = directory.appendingPathComponent("先に選択していた曲.wav")
+        if appleMusicActive {
+            store.isAppleMusicActive = true
+            store.position = 33; store.duration = 180
+            store.appleMusic.webViewForDisplay().stopLoading()
+            store.appleMusicBrowser.webViewForDisplay().stopLoading()
+        } else if appleMusicRegistered {
+            try FileManager.default.copyItem(at: audio, to: previousAudio)
+            store.tracks.append(Track(url: previousAudio))
+            store.select(1, autoplay: false)
+        } else if !includesAudio {
             store.tracks = [Track(url: audio)]
             store.select(0, autoplay: false)
         }
+        let initialTrackCount = store.tracks.count
         let generation = store.playbackGeneration
         let host = NSHostingView(rootView: PlayerGlassContainer(store: store, appearance: .dark))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 800),
@@ -142,11 +208,7 @@ final class PlayerDropRoutingTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(150))
         host.layoutSubtreeIfNeeded()
         let drag = PlayerRoutingDrag(window: window, urls: includesAudio ? [audio, lyrics] : [lyrics])
-        var candidate = host.hitTest(NSPoint(x: 430, y: 400))
-        while let view = candidate, !view.registeredDraggedTypes.contains(.fileURL) {
-            candidate = view.superview
-        }
-        let destination = try XCTUnwrap(candidate, "プレイヤー上のファイル受付まで到達すること")
+        let destination = try fileDragDestination(in: host, at: drag.draggingLocation)
         XCTAssertTrue(destination is PlayerFileDropHostingView)
         XCTAssertEqual(destination.draggingEntered(drag), .copy)
         XCTAssertEqual(destination.draggingUpdated(drag), .copy)
@@ -163,7 +225,14 @@ final class PlayerDropRoutingTests: XCTestCase {
             if importedEditor != nil { break }
             try await Task.sleep(for: .milliseconds(20))
         }
-        XCTAssertEqual(store.tracks.count, 1)
+        XCTAssertEqual(store.tracks.count, initialTrackCount + (includesAudio ? 1 : 0))
+        if appleMusicActive || appleMusicRegistered {
+            XCTAssertEqual(store.tracks.first?.appleMusicSong?.id, "123456", "登録済みのApple Music曲を残すこと")
+        }
+        if appleMusicRegistered {
+            XCTAssertTrue(store.tracks.contains { $0.url == previousAudio }, "先に選択していたローカル曲も残すこと")
+        }
+        XCTAssertFalse(store.isAppleMusicActive, "同時にドロップしたローカル曲へ切り替わること")
         XCTAssertEqual(store.currentTrack?.url, audio)
         XCTAssertEqual(importedEditor?.string, text, "受付した歌詞本文が実際の編集欄まで届くこと")
         XCTAssertEqual(store.lyricText, "", "適用ボタンを押すまでは保存済み歌詞へ反映しないこと")
@@ -174,6 +243,20 @@ final class PlayerDropRoutingTests: XCTestCase {
         } else {
             XCTAssertEqual(store.playbackGeneration, generation, "歌詞だけのドロップでは選曲を変えないこと")
         }
+    }
+
+    @MainActor
+    private func fileDragDestination(in view: NSView, at point: NSPoint) throws -> NSView {
+        // Test AppKit's drag-specific hit testing; ordinary hitTest misses WebKit's drag override.
+        // This private selector is used only by the test target.
+        let selector = NSSelectorFromString("_hitTest:dragTypes:")
+        let implementation = try XCTUnwrap(view.method(for: selector))
+        typealias DragHitTest = @convention(c) (AnyObject, Selector, UnsafeMutablePointer<NSPoint>, NSSet) -> Unmanaged<AnyObject>?
+        let hitTest = unsafeBitCast(implementation, to: DragHitTest.self)
+        var location = point
+        let types = NSSet(object: NSPasteboard.PasteboardType.fileURL.rawValue)
+        return try XCTUnwrap(hitTest(view, selector, &location, types)?.takeUnretainedValue() as? NSView,
+                             "AppKitのドラッグ専用判定でファイルの受付先が見つかること")
     }
 }
 

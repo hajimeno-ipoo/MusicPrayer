@@ -165,6 +165,30 @@ final class LyricAlignerTests: XCTestCase {
         XCTAssertEqual(result.lines[0].end, 12.4, accuracy: 1e-9)
     }
 
+    func testContinuousMisrecognizedLeadingTokenAtSameOccurrenceKeepsNativeStart() throws {
+        let result = try LyricAligner.align(sourceText: "言えなかったひと言も", analysis: analysis(),
+            transcription: ambiguousLeadingWordTokens(prefixEnd: 85.38))
+        XCTAssertEqual(result.lines[0].start, 84.72, accuracy: 1e-9)
+        XCTAssertEqual(result.lines[0].end, 88.8, accuracy: 1e-9)
+        XCTAssertEqual(result.lines[0].text, "言えなかったひと言も")
+        XCTAssertTrue(result.lines[0].hasValidCharacterTimings)
+    }
+
+    func testSeparateMisrecognizedLeadingTokenCannotHideStartAmbiguity() {
+        assertFailure(.ambiguousMatch, source: "言えなかったひと言も",
+                      transcription: ambiguousLeadingWordTokens(prefixEnd: 85.2))
+    }
+
+    private func ambiguousLeadingWordTokens(prefixEnd: Double) -> [RecognizedLyricToken] {
+        let ranges: [(String, Double, Double)] = [
+            ("見", 84.72, prefixEnd), ("え", 85.38, 85.56), ("な", 85.56, 85.92),
+            ("か", 85.92, 86.28), ("っ", 86.28, 86.46), ("た", 86.46, 86.64),
+            ("。", 86.64, 86.94), ("ど", 87.78, 87.96), ("こ", 87.96, 88.26),
+            ("と", 88.26, 88.5), ("も", 88.5, 88.8)
+        ]
+        return ranges.map { RecognizedLyricToken(text: $0.0, start: $0.1, end: $0.2, confidence: 0.9) }
+    }
+
     func testReadingPrefixAcrossSeparateRecognitionRangesCannotHideStartAmbiguity() {
         let speech = tokens("混", start: 10) + tokens("ざえる場所", start: 40)
         assertFailure(.ambiguousMatch, source: "また会える場所へ", transcription: speech)

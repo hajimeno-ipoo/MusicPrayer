@@ -448,20 +448,24 @@ final class AppleMusicStore: NSObject {
         catch is CancellationError { throw CancellationError() }
         catch { lyricError = error.localizedDescription }
         try Task.checkCancellation()
+        var result: AppleMusicWorkerResult
         if let existingAnalysis, lyrics == nil || lyrics?.lines.isEmpty == true ||
             (lyrics?.lines.allSatisfy(\.hasValidCharacterTimings) == true) {
-            return AppleMusicWorkerResult(analysis: existingAnalysis,
+            result = AppleMusicWorkerResult(analysis: existingAnalysis,
                 lyricTiming: AppleMusicLyricTiming(songID: song.id, duration: song.duration,
                     sourceText: lyrics?.text ?? "", timeline: nil, errorMessage: lyricError,
                     hasLyrics: lyricError == nil ? (lyrics != nil) : nil,
                     usesOfficialWordTimings: lyrics?.lines.isEmpty == false,
                     hasOfficialUntimedLyrics: lyrics?.lines.isEmpty == true))
+        } else {
+            result = try await analyzeSilently(song, lyrics: lyrics, existingAnalysis: existingAnalysis, onReady: onReady)
         }
-        var result = try await analyzeSilently(song, lyrics: lyrics, existingAnalysis: existingAnalysis, onReady: onReady)
         if let lyricError {
             result.lyricTiming.errorMessage = lyricError
             result.lyricTiming.hasLyrics = nil
         }
+        // The worker owns the fetched document; the parent may be playing a local file with no WebView.
+        result.lyricTiming = try await preparingReadings(for: result.lyricTiming, song: song, source: lyrics)
         return result
     }
 

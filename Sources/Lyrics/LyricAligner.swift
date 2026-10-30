@@ -472,8 +472,8 @@ enum LyricAligner {
         }
     }
 
-    /// Interns row occurrences: spelling starts, or the first shared spelling for
-    /// reading-supported prefixes. Their boundary alternatives share one identity.
+    /// Interns row occurrences by the first matched character when an unmatched
+    /// prefix belongs to connected Speech ranges. Boundary variants share one identity.
     private struct OccurrenceKey: Hashable {
         let previous: Int
         let start: Int
@@ -518,7 +518,7 @@ enum LyricAligner {
     }
 
     private static func solve(_ lines: [LyricLine], characters: [AudioCharacter],
-                              useReading: Bool, anchorOnly: Bool = false) throws -> [Candidate] {
+                              useReading: Bool) throws -> [Candidate] {
         var previous = [Path(candidate: nil, previous: nil,
                              score: PathScore(readingFallbacks: 0, edits: 0, unmatched: 0, readingEdits: 0),
                              occurrenceID: 0, boundaryDeviation: 0, rank: 0)]
@@ -544,7 +544,8 @@ enum LyricAligner {
                 }
                 for parent in prefix {
                     var occurrenceStart = candidate.readingOccurrenceStart ?? candidate.start
-                    if anchorOnly, let first = candidate.firstMatch,
+                    // Connected prefix variants before the same matched character are one utterance.
+                    if let first = candidate.firstMatch,
                        zip(characters[candidate.start...first],
                            characters[candidate.start...first].dropFirst()).allSatisfy({
                                $1.start <= $0.end + epsilon
@@ -604,9 +605,9 @@ enum LyricAligner {
         let characters = try prepare(transcription, duration: duration)
         guard !characters.isEmpty else { throw LyricAlignmentError.noRecognizedWords }
         let placements: [Candidate]
-        do { placements = try solve(lines, characters: characters, useReading: false, anchorOnly: true) }
+        do { placements = try solve(lines, characters: characters, useReading: false) }
         catch LyricAlignmentError.unmatchedLine {
-            placements = try solve(lines, characters: characters, useReading: true, anchorOnly: true)
+            placements = try solve(lines, characters: characters, useReading: true)
         }
         return placements.map {
             LyricCharacterTiming(start: characters[$0.firstMatch ?? $0.start].start,

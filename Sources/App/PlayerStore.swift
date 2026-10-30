@@ -218,6 +218,12 @@ final class PlayerStore {
         } catch { playbackError = error.localizedDescription; isPlaying = engine.isPlaying }
     }
 
+    func selectForLyricImport(_ index: Int) async {
+        select(index, autoplay: false)
+        // Apple Music hands off to the local engine after its playback has stopped.
+        if isAppleMusicActive { await appleMusicTask?.value }
+    }
+
     func togglePlayback() {
         if isAppleMusicActive {
             if appleMusicSelectionPending { selectAppleMusic(currentIndex, autoplay: true, resumeTime: position); return }

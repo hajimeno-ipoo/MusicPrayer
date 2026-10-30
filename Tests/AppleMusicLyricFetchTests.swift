@@ -131,6 +131,58 @@ final class AppleMusicLyricFetchTests: XCTestCase {
         XCTAssertEqual(requests, [song.id], "移行後に公式歌詞を繰り返し取得しない")
     }
 
+    func testWorkerPreparesOfficialWordReadingsBeforeReturningToUninitializedParent() async throws {
+        try await verifyWorkerReadingsReturnToUninitializedParent(responseMode: "native", completion: .complete,
+            sourceText: "取得した歌詞", displayedLines: ["取得した歌詞"])
+    }
+
+    func testWorkerPreparesUntimedReadingsBeforeReturningToUninitializedParent() async throws {
+        try await verifyWorkerReadingsReturnToUninitializedParent(responseMode: "untimed", completion: .untimedLyrics,
+            sourceText: "First line\nSecond line", displayedLines: [])
+    }
+
+    private func verifyWorkerReadingsReturnToUninitializedParent(responseMode: String,
+        completion: AppleMusicPreanalysis.Completion, sourceText: String, displayedLines: [String]) async throws {
+        let fixture = try await makeFixture()
+        defer { fixture.close() }
+        let song = fixture.songs[0]
+        _ = try await fixture.view.evaluateJavaScript("window.responseMode='\(responseMode)'")
+        let cached = await fixture.cache.load(id: song.id, duration: song.duration)
+        let analysis = try XCTUnwrap(cached)
+        let result = try await fixture.store.analyzeInWorker(song, existingAnalysis: analysis) { _ in
+            XCTFail("保存済み音楽解析と公式歌詞を使う場合は音声の取得を始めないこと")
+        }
+        XCTAssertEqual(result.lyricTiming.sourceText, sourceText)
+        XCTAssertEqual(result.lyricTiming.completion, completion)
+        XCTAssertTrue(result.lyricTiming.readings?.isCurrent(sourceText: sourceText) == true,
+                      "workerで取得した本文の読みを返却前に準備すること")
+        XCTAssertNotNil(result.lyricTiming.readings?.readings(for: sourceText))
+        for line in displayedLines {
+            XCTAssertNotNil(result.lyricTiming.readings?.readings(for: line), "表示行の読みも返却結果に含めること")
+        }
+
+        let parentDirectory = fixture.directory.appendingPathComponent("Parent")
+        let parentCache = AppleMusicAnalysisCache(directory: parentDirectory)
+        try await parentCache.retainSongs([song.id])
+        let issuedTicket = await parentCache.ticket(for: song.id)
+        let ticket = try XCTUnwrap(issuedTicket)
+        try await parentCache.save(result.analysis, id: song.id, ticket: ticket)
+        try await parentCache.saveLyricTiming(result.lyricTiming, ticket: ticket)
+        let parent = AppleMusicStore(analysisDirectory: parentDirectory, websiteDataStore: .nonPersistent())
+        defer { parent.stop() }
+        parent.setQueueSongs([song])
+        await parent.musicAnalysis.queueRegistration?.value
+        XCTAssertFalse(parent.isInitialized, "ローカル曲の再生中は親のApple Music再生接続がなくてもよい")
+        let operation = try XCTUnwrap(parent.preanalysis.operation)
+        let parentCompletion = try await operation(song)
+        XCTAssertEqual(parentCompletion, completion)
+        XCTAssertFalse(parent.isInitialized, "workerが準備した読みの保存で親のWebViewを要求しないこと")
+        let saved = await parentCache.loadLyricTiming(for: song)
+        XCTAssertEqual(saved?.readings, result.lyricTiming.readings)
+        let requests = try await fixture.view.evaluateJavaScript("window.lyricRequests") as? [String]
+        XCTAssertEqual(requests, [song.id], "読みの準備で取得済みの公式歌詞を再取得しないこと")
+    }
+
     func testPreanalysisKeepsTimedPartialCacheWithoutOfficialRefetch() async throws {
         let fixture = try await makeFixture(usesAnalysisWorkers: true)
         defer { fixture.close() }

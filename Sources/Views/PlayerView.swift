@@ -33,6 +33,8 @@ struct PlayerView: View {
             ZStack {
                 if store.isAppleMusicActive || store.appleMusic.isInitialized {
                     AppleMusicWebView(store: store.appleMusic)
+                        // A transparent WKWebView still participates in native drag hit testing.
+                        .frame(width: 0, height: 0)
                         .opacity(0)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -128,6 +130,8 @@ struct PlayerView: View {
                         store.addAppleMusicSong(song, selectIfEmpty: false)
                     }, onReturnToPlayer: store.showAppleMusicPlayer)
                         .ignoresSafeArea(.container, edges: .top)
+                        .frame(width: store.isAppleMusicBrowserVisible ? nil : 0,
+                               height: store.isAppleMusicBrowserVisible ? nil : 0)
                         .opacity(store.isAppleMusicBrowserVisible ? 1 : 0)
                         .allowsHitTesting(store.isAppleMusicBrowserVisible)
                         .accessibilityHidden(!store.isAppleMusicBrowserVisible)
