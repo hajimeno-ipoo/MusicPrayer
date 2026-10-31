@@ -13,7 +13,7 @@ struct TapeUniforms {
     float4 layout;
     float4 viewportProgress;
     float4 phasesPresence;
-    float4 transport; // x: track duration; y: floor/background opacity.
+    float4 transport; // duration, floor/background opacity, clock offset, clock width.
 };
 struct TapeVertex { float4 position; float4 normal; float4 surface; };
 struct TapeVarying {
@@ -307,7 +307,7 @@ fragment float4 tapeSpectrumFragment(TapeVarying in [[stage_in]], constant TapeU
 }
 vertex TapeVarying tapeTimeVertex(uint id [[vertex_id]], uint side [[instance_id]], constant TapeUniforms &u [[buffer(0)]]) {
     float2 q=tapeQuad[id];
-    float3 p=float3((side==0?-3.38:3.38)+(q.x-0.5)*2.0,0.014,(q.y-0.5)*0.72);
+    float3 p=float3((side==0?-u.transport.z:u.transport.z)+(q.x-0.5)*u.transport.w,0.014,(q.y-0.5)*0.72);
     TapeVarying out;
     out.position=u.viewProjection*float4(p,1); out.world=p; out.normal=float3(0,1,0);
     out.surface=float3(q.x,q.y*0.5+(side==0?0.5:0.0),0);

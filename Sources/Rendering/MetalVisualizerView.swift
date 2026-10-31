@@ -5,15 +5,18 @@ import SwiftUI
 struct MetalVisualizerView: NSViewRepresentable {
     let source: VisualFrameSource
     let backgroundOpacity: Float
+    var columnPresentation = false
 
     func makeNSView(context: Context) -> VisualizerHostView {
         let view = VisualizerHostView(source: source)
         view.setBackgroundOpacity(backgroundOpacity)
+        view.setColumnPresentation(columnPresentation)
         return view
     }
 
     func updateNSView(_ nsView: VisualizerHostView, context: Context) {
         nsView.setBackgroundOpacity(backgroundOpacity)
+        nsView.setColumnPresentation(columnPresentation)
     }
 }
 
@@ -75,6 +78,12 @@ final class VisualizerHostView: NSView {
     func setBackgroundOpacity(_ opacity: Float) {
         guard let renderer, renderer.backgroundOpacity != opacity else { return }
         renderer.backgroundOpacity = opacity
+        renderer.resumeIfNeeded(in: metalView)
+    }
+
+    func setColumnPresentation(_ enabled: Bool) {
+        guard let renderer, renderer.columnPresentation != enabled else { return }
+        renderer.columnPresentation = enabled
         renderer.resumeIfNeeded(in: metalView)
     }
 

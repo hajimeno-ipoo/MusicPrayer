@@ -465,17 +465,20 @@ final class LyricMotionTests: XCTestCase {
     }
 
     @MainActor
-    func testPlayerLyricRegionUsesArtworkColumnOrWideReadingAreaAboveControls() throws {
+    func testPlayerRegionsSeparateVisualizerFromLyricsAboveControls() throws {
         _ = NSApplication.shared
         let store = offscreenStore(source: "誰かのために 僕は歌う")
         defer { store.engine.stop() }
         let artwork = try XCTUnwrap(NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?.tiffRepresentation)
-        for height in [800.0, 850.0, 1000.0] {
-            let size = CGSize(width: 1000, height: height)
-            for (hasArtwork, showsArtwork) in [(false, true), (true, true), (true, false)] {
+        for size in [CGSize(width: 860, height: 800), CGSize(width: 1000, height: 850), CGSize(width: 1600, height: 1000)] {
+            for (hasArtwork, display) in [(false, PlayerContentDisplay.artworkAndLyrics), (true, .artworkAndLyrics),
+                                          (false, .lyricsOnly), (true, .lyricsOnly)] {
                 store.tracks[0].artwork = hasArtwork ? artwork : nil
-                let hosting = NSHostingView(rootView: PlayerLyricRegion(store: store, size: size, headerHeight: 58,
-                                                                        showsArtwork: showsArtwork)
+                let hosting = NSHostingView(rootView: ZStack {
+                    PlayerVisualizerRegion(source: store.visualSource, display: display, size: size,
+                                           headerHeight: 58, backgroundOpacity: 0)
+                    PlayerLyricRegion(store: store, size: size, headerHeight: 58, display: display)
+                }
                     .frame(width: size.width, height: size.height))
                 let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
                                       styleMask: [.titled], backing: .buffered, defer: false)
@@ -485,16 +488,38 @@ final class LyricMotionTests: XCTestCase {
                 let scroll = try XCTUnwrap(findScrollView(in: hosting))
                 let frame = hosting.convert(scroll.bounds, from: scroll)
                 XCTAssertGreaterThan(frame.minY, 58, "歌詞欄をヘッダーの下へ置くこと")
-                XCTAssertLessThan(frame.maxY, height - 200, "歌詞欄を下部の操作領域へ重ねないこと")
-                if hasArtwork && showsArtwork {
-                    XCTAssertGreaterThan(frame.minX, size.width * 0.5, "カバーがある曲では右の歌詞欄を使うこと")
+                XCTAssertLessThan(frame.maxY, size.height - 200, "歌詞欄を下部の操作領域へ重ねないこと")
+                if hasArtwork || display == .lyricsOnly {
+                    XCTAssertGreaterThan(frame.minX, size.width * 0.5, "カバーまたはビジュアライザーの右に歌詞を置くこと")
                 } else {
-                    XCTAssertGreaterThan(frame.width, size.width * 0.7, "カバーなし・歌詞のみでは広い歌詞欄を使うこと")
+                    XCTAssertGreaterThan(frame.width, size.width * 0.7, "カバーなしの両方表示では広い歌詞欄を維持すること")
                     XCTAssertEqual(frame.midX, size.width / 2, accuracy: 1)
+                }
+                if display == .lyricsOnly {
+                    let visualizer = try XCTUnwrap(findVisualizer(in: hosting))
+                    let visualizerFrame = hosting.convert(visualizer.bounds, from: visualizer)
+                    XCTAssertGreaterThan(visualizerFrame.width, size.width * 0.55,
+                                         "ビジュアライザーを左半分の小さな枠に縮めないこと")
+                    XCTAssertGreaterThan(frame.minX, size.width * 0.62,
+                                         "歌詞欄を画面中央から右へ離すこと")
+                    XCTAssertEqual(frame.midX, size.width * 0.80, accuracy: 1)
+                    XCTAssertLessThan(visualizerFrame.maxX, frame.minX, "描画領域と歌詞欄は重ならないこと")
+                    XCTAssertGreaterThan(visualizerFrame.minY, 58)
+                    XCTAssertLessThan(visualizerFrame.maxY, size.height - 200)
+                    XCTAssertLessThanOrEqual(visualizerFrame.minY, frame.minY)
+                    XCTAssertGreaterThanOrEqual(visualizerFrame.maxY, frame.maxY)
+                } else {
+                    XCTAssertNil(findVisualizer(in: hosting), "カバーと歌詞の表示ではビジュアライザーを描画しないこと")
                 }
                 window.close()
             }
         }
+    }
+
+    @MainActor
+    private func findVisualizer(in view: NSView) -> VisualizerHostView? {
+        if let visualizer = view as? VisualizerHostView { return visualizer }
+        return view.subviews.compactMap { findVisualizer(in: $0) }.first
     }
 
     @MainActor

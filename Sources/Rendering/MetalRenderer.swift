@@ -50,15 +50,17 @@ struct RenderInputs {
     private let frame: VisualFrame
     private let size: CGSize
     private let groups: [SIMD4<Float>]
+    private let columnPresentation: Bool
 
-    init(frame: VisualFrame, size: CGSize, backgroundOpacity: Float = 1) {
+    init(frame: VisualFrame, size: CGSize, backgroundOpacity: Float = 1, columnPresentation: Bool = false) {
         self.frame = frame
         self.size = size
+        self.columnPresentation = columnPresentation
         groups = RenderUniforms(frame: frame, size: size, backgroundOpacity: backgroundOpacity).groups
     }
 
     func matches(_ other: RenderInputs) -> Bool {
-        guard size == other.size, frame.time == other.frame.time,
+        guard size == other.size, columnPresentation == other.columnPresentation, frame.time == other.frame.time,
               frame.trackID == other.frame.trackID,
               frame.style == other.frame.style,
               frame.duration == other.frame.duration,
@@ -104,6 +106,7 @@ final class WaterRenderActivity {
 
 final class MetalRenderer: NSObject, MTKViewDelegate {
     var backgroundOpacity: Float = 1
+    var columnPresentation = false
     var onError: ((String) -> Void)?
     private let device: MTLDevice
     private let source: VisualFrameSource
@@ -212,7 +215,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     func resumeIfNeeded(in view: MTKView) {
         guard view.isPaused, !hasReportedError else { return }
         let snapshot = source.snapshot()
-        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize, backgroundOpacity: backgroundOpacity)
+        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize, backgroundOpacity: backgroundOpacity,
+                                  columnPresentation: columnPresentation)
         if (lastRenderedInputs.map({ !inputs.matches($0) }) ?? true) ||
             (snapshot.style == .ribbons && source.waterInteractions.hasPendingPulses) {
             previousRenderTime = nil
@@ -255,7 +259,8 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
     func draw(in view: MTKView) {
         guard !hasReportedError, view.drawableSize.width > 0, view.drawableSize.height > 0 else { return }
         let snapshot = source.snapshot()
-        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize, backgroundOpacity: backgroundOpacity)
+        let inputs = RenderInputs(frame: snapshot, size: view.drawableSize, backgroundOpacity: backgroundOpacity,
+                                  columnPresentation: columnPresentation)
         if snapshot.style != .ribbons { _ = source.waterInteractions.drain() }
         if let previous = lastRenderedInputs, inputs.matches(previous), !source.waterInteractions.hasPendingPulses {
             if snapshot.style != .ribbons {
@@ -290,7 +295,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             do {
                 if city == nil { city = try CitySceneRenderer(device: device) }
                 try city?.encode(command: command, descriptor: finalPass, frame: snapshot, size: view.drawableSize,
-                                 backgroundOpacity: backgroundOpacity)
+                                 backgroundOpacity: backgroundOpacity, columnPresentation: columnPresentation)
             } catch { report(error); return }
             command.label = "Spectrum city · 64 towers · Quarter-resolution bloom"
             command.present(drawable)
@@ -315,7 +320,7 @@ final class MetalRenderer: NSObject, MTKViewDelegate {
             do {
                 if tape == nil { tape = try TapeSceneRenderer(device: device) }
                 try tape?.encode(command: command, target: scene, frame: snapshot, size: view.drawableSize,
-                                 backgroundOpacity: backgroundOpacity)
+                                 backgroundOpacity: backgroundOpacity, columnPresentation: columnPresentation)
                 try tape?.encodePresentation(command: command, descriptor: finalPass, scene: scene)
             } catch { report(error); return }
             command.label = "Cassette · Spectrum · Floor · Depth of field"

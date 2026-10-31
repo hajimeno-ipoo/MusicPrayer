@@ -16,7 +16,7 @@ final class TapeSceneRenderer {
         var viewportProgress: SIMD4<Float>
         var phasesPresence: SIMD4<Float>
         var transport: SIMD4<Float>
-        init(frame: VisualFrame, size: CGSize) {
+        init(frame: VisualFrame, size: CGSize, columnPresentation: Bool) {
             let breathing = sin(frame.phraseProgress * .pi * 2)
             let barBreathing = (1 - cos(frame.barPhase * .pi * 2)) * 0.008
             let distance: Float = 1 - frame.vocal * 0.055 + frame.sectionDepth * 0.05 + breathing * 0.012 + barBreathing
@@ -34,7 +34,50 @@ final class TapeSceneRenderer {
             let f: Float = 1 / tan(0.66 / 2)
             let projection = simd_float4x4(columns: (SIMD4(f / aspect, 0, 0, 0), SIMD4(0, f, 0, 0),
                                                    SIMD4(0, 0, far / (near - far), -1), SIMD4(0, 0, near * far / (near - far), 0)))
-            viewProjection = projection * view
+            let baseProjection = projection * view
+            viewProjection = baseProjection
+            let clockOffset: Float = columnPresentation ? 2.6 : 3.38
+            let clockWidth: Float = columnPresentation ? 1.2 : 2.0
+            if columnPresentation {
+                // Fit the cassette, spectrum, progress and both clocks together.
+                // Recenter their projected bounds rather than cropping a scaled image.
+                var points: [SIMD3<Float>] = []
+                for x: Float in [-2.05, 2.05] {
+                    for y: Float in [0, 1] {
+                        for z: Float in [-1.7, 1.7] { points.append(SIMD3(x, y, z)) }
+                    }
+                }
+                for side: Float in [-1, 1] {
+                    for edge: Float in [-0.5, 0.5] {
+                        for z: Float in [-0.36, 0.36] {
+                            points.append(SIMD3(side * clockOffset + edge * clockWidth, 0.014, z))
+                        }
+                    }
+                }
+                // Include the live spectrum's upper envelope, including its beat accents.
+                let signal = sqrt(min(1, max(0, frame.spectrum.prefix(64).max() ?? 0)))
+                let pulse = frame.beat * (0.10 + frame.drums * 0.24) + frame.bar * 0.16
+                let beatBreathing = 1 + sin(frame.beatPhase * 2 * .pi) * 0.025 * frame.hasAnalysis
+                let spectrumHeight = 0.025 + signal * (0.62 + frame.loudness * 0.30 + frame.rms * 0.30)
+                    * (1 + pulse + frame.bassInstrument * 0.20)
+                    * (1 + abs(frame.pace) * 0.18) * 1.06 * beatBreathing
+                let spectrumWidth = (4.2 + frame.other * 0.3 + frame.sectionSeparation * 0.12) / 2
+                for x in [-spectrumWidth, spectrumWidth] {
+                    points.append(SIMD3(x, spectrumHeight + 0.012, -2))
+                }
+                let projected = points.map { point -> SIMD2<Float> in
+                    let clip = baseProjection * SIMD4(point, 1)
+                    return SIMD2(clip.x, clip.y) / clip.w
+                }
+                let lower = projected.reduce(SIMD2<Float>(repeating: .greatestFiniteMagnitude), simd_min)
+                let upper = projected.reduce(SIMD2<Float>(repeating: -.greatestFiniteMagnitude), simd_max)
+                let center = (lower + upper) / 2
+                let zoom = min(1.8, 1.88 / (upper.x - lower.x), 1.76 / (upper.y - lower.y))
+                let framing = simd_float4x4(columns: (
+                    SIMD4(zoom, 0, 0, 0), SIMD4(0, zoom, 0, 0), SIMD4(0, 0, 1, 0),
+                    SIMD4(-center.x * zoom, -center.y * zoom, 0, 1)))
+                viewProjection = framing * viewProjection
+            }
             clockAudio = SIMD4(frame.time, frame.rms, frame.peak, frame.bass)
             bandsBeat = SIMD4(frame.mid, frame.treble, frame.beat, frame.bar)
             rhythm = SIMD4(frame.tempo, frame.pace, frame.vocal, frame.drums)
@@ -45,7 +88,7 @@ final class TapeSceneRenderer {
                                      frame.duration > 0 ? min(1, frame.time / Float(frame.duration)) : 0,
                                      frame.hasAnalysis > 0 ? frame.hue + frame.modeBias * 0.035 : 0.48)
             phasesPresence = SIMD4(frame.beatPhase, frame.barPhase, frame.presence, frame.hasAnalysis)
-            transport = SIMD4(Float(frame.duration), 0, 0, 0)
+            transport = SIMD4(Float(frame.duration), 0, clockOffset, clockWidth)
         }
     }
     private let device: MTLDevice
@@ -219,7 +262,7 @@ final class TapeSceneRenderer {
     }
 
     func encode(command: MTLCommandBuffer, target: MTLTexture, frame: VisualFrame, size: CGSize,
-                backgroundOpacity: Float = 1) throws {
+                backgroundOpacity: Float = 1, columnPresentation: Bool = false) throws {
         try updateLabels(frame)
         if depth?.width != target.width || depth?.height != target.height {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .depth32Float, width: target.width, height: target.height, mipmapped: false)
@@ -227,7 +270,7 @@ final class TapeSceneRenderer {
             depth = device.makeTexture(descriptor: descriptor)
         }
         guard let depth else { throw RenderFailure.message("カセットの深度textureを作成できません。") }
-        var uniforms = Uniforms(frame: frame, size: size)
+        var uniforms = Uniforms(frame: frame, size: size, columnPresentation: columnPresentation)
         let backgroundAlpha = min(1, max(0, backgroundOpacity))
         uniforms.transport.y = backgroundAlpha
         currentUniforms = uniforms

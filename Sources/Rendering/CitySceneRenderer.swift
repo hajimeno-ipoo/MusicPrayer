@@ -18,12 +18,13 @@ final class CitySceneRenderer {
         var colorViewport: SIMD4<Float>
         var presentation: SIMD4<Float>
 
-        init(frame: VisualFrame, size: CGSize, backgroundOpacity: Float) {
+        init(frame: VisualFrame, size: CGSize, backgroundOpacity: Float, columnPresentation: Bool) {
             let aspect = Float(max(1, size.width) / max(1, size.height))
             let eye3 = SIMD3<Float>(-30, 21.4, 30.6)
             let target = SIMD3<Float>(0, 1.0, 0)
             let near: Float = 0.1, far: Float = 100
-            let f: Float = 1 / tan(0.235 / 2)
+            // Keep the column's horizontal framing while using its full height.
+            let f: Float = (columnPresentation ? 1.3 * aspect / (16.0 / 9.0) : 1) / tan(0.235 / 2)
             let projection = simd_float4x4(columns: (
                 SIMD4(f / aspect, 0, 0, 0), SIMD4(0, f, 0, 0),
                 SIMD4(0, -0.10, far / (near - far), -1), SIMD4(0, 0, near * far / (near - far), 0)))
@@ -236,13 +237,13 @@ final class CitySceneRenderer {
     }
 
     func encode(command: MTLCommandBuffer, descriptor: MTLRenderPassDescriptor, frame: VisualFrame, size: CGSize,
-                backgroundOpacity: Float = 1) throws {
+                backgroundOpacity: Float = 1, columnPresentation: Bool = false) throws {
         guard let target = descriptor.colorAttachments[0].texture else {
             throw RenderFailure.message("都市の表示先textureがありません。")
         }
-        // The reference composition is 16:9. Fit it inside the existing player without stretching or cropping.
-        let compositionWidth = max(1, min(target.width, Int(Double(target.height) * 16 / 9)))
-        let compositionHeight = max(1, min(target.height, Int(Double(target.width) * 9 / 16)))
+        // Keep 16:9 in the full player; the lyric column needs its full vertical space for tall towers.
+        let compositionWidth = columnPresentation ? target.width : max(1, min(target.width, Int(Double(target.height) * 16 / 9)))
+        let compositionHeight = columnPresentation ? target.height : max(1, min(target.height, Int(Double(target.width) * 9 / 16)))
         try resize(width: compositionWidth, height: compositionHeight)
         guard let scene, let multisampleColor, let depth, let bright, let bloom, let reflection, let reflectionFiltered,
               let reflectionMultisampleColor, let reflectionDepth else {
@@ -250,7 +251,7 @@ final class CitySceneRenderer {
         }
         let backgroundOpacity = min(1, max(0, backgroundOpacity))
         var uniforms = Uniforms(frame: frame, size: CGSize(width: compositionWidth, height: compositionHeight),
-                                backgroundOpacity: backgroundOpacity)
+                                backgroundOpacity: backgroundOpacity, columnPresentation: columnPresentation)
         // AudioFeatureAnalyzer supplies 0...1 for a fixed -80...0 dBFS range.
         let spectrum = CityMesh.displaySpectrum(frame.spectrum)
         func inputs(_ encoder: MTLRenderCommandEncoder) {

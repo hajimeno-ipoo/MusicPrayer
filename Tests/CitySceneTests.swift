@@ -6,6 +6,34 @@ import XCTest
 
 final class CitySceneTests: XCTestCase {
     @MainActor
+    func testColumnPresentationEnlargesCityWithoutClippingComposition() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else { throw XCTSkip("Metal unavailable") }
+        let queue = try XCTUnwrap(device.makeCommandQueue())
+        let renderer = try CitySceneRenderer(device: device)
+        for (width, height) in [(500, 462), (820, 570)] {
+            var frame = musicalFrame()
+            frame.spectrum = Array(repeating: 1, count: 64)
+            let standard = try render(renderer, device: device, queue: queue, frame: frame,
+                                      width: width, height: height, backgroundOpacity: 0).pixels
+            let column = try render(renderer, device: device, queue: queue, frame: frame,
+                                    width: width, height: height, backgroundOpacity: 0,
+                                    columnPresentation: true).pixels
+            func opaqueCoverage(_ image: [UInt8]) -> Int {
+                stride(from: 3, to: image.count, by: 4).filter { image[$0] > 250 }.count
+            }
+            XCTAssertGreaterThan(Double(opaqueCoverage(column)), Double(opaqueCoverage(standard)) * 1.15,
+                                 "Visible city geometry must enlarge in the lyric column at \(width)x\(height).")
+            // Column presentation uses the entire target rather than a 16:9
+            // letterbox. Inspect its real edges for clipped towers or foundation.
+            let perimeter = (0..<width).map { $0 } + (0..<width).map { (height - 1) * width + $0 }
+                + (0..<height).map { $0 * width } + (0..<height).map { $0 * width + width - 1 }
+            XCTAssertTrue(perimeter.allSatisfy { column[$0 * 4 + 3] < 240 },
+                          "Opaque towers and the foundation must remain inside the composition at \(width)x\(height).")
+            try saveEvidence(column, width: width, height: height, name: "city-column-\(width)")
+        }
+    }
+
+    @MainActor
     func testCityGlassSeparatesBackgroundFromOpaqueGeometryWithoutFadingColor() throws {
         guard let device = MTLCreateSystemDefaultDevice() else { throw XCTSkip("Metal unavailable") }
         let queue = try XCTUnwrap(device.makeCommandQueue())
@@ -451,7 +479,8 @@ final class CitySceneTests: XCTestCase {
 
     private func render(_ renderer: CitySceneRenderer, device: MTLDevice, queue: MTLCommandQueue,
                         frame: VisualFrame, width: Int = 640, height: Int = 384,
-                        readPixels: Bool = true, backgroundOpacity: Float = 1) throws -> (pixels: [UInt8], gpuMilliseconds: Double) {
+                        readPixels: Bool = true, backgroundOpacity: Float = 1,
+                        columnPresentation: Bool = false) throws -> (pixels: [UInt8], gpuMilliseconds: Double) {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm_srgb,
                                                                   width: width, height: height, mipmapped: false)
         descriptor.storageMode = .private; descriptor.usage = [.renderTarget]
@@ -461,7 +490,7 @@ final class CitySceneTests: XCTestCase {
         pass.colorAttachments[0].texture = output
         pass.colorAttachments[0].loadAction = .clear; pass.colorAttachments[0].storeAction = .store
         try renderer.encode(command: command, descriptor: pass, frame: frame, size: CGSize(width: width, height: height),
-                            backgroundOpacity: backgroundOpacity)
+                            backgroundOpacity: backgroundOpacity, columnPresentation: columnPresentation)
         var buffer: MTLBuffer?
         if readPixels {
             buffer = try XCTUnwrap(device.makeBuffer(length: width * height * 4, options: .storageModeShared))

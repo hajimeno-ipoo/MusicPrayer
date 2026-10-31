@@ -8,6 +8,47 @@ final class TapeSceneTests: XCTestCase {
     private var width = 640
     private var height = 480
 
+    @MainActor
+    func testColumnPresentationEnlargesCassetteWithoutClippingClocksOrProgress() throws {
+        let (device, queue) = try environment()
+        let renderer = try TapeSceneRenderer(device: device)
+        let originalSize = (width, height)
+        defer { (width, height) = originalSize }
+        for size in [(500, 462), (820, 570)] {
+            (width, height) = size
+            let frame = musicalFrame()
+            let standard = try render(renderer, device: device, queue: queue, frame: frame, backgroundOpacity: 0)
+            let column = try render(renderer, device: device, queue: queue, frame: frame,
+                                    backgroundOpacity: 0, columnPresentation: true)
+            // Clock glyphs are translucent. Opaque coverage primarily measures the
+            // cassette itself, rather than accepting newly positioned clocks as enlargement.
+            func opaqueCoverage(_ image: [UInt8]) -> Int {
+                stride(from: 3, to: image.count, by: 4).filter { image[$0] > 250 }.count
+            }
+            XCTAssertGreaterThan(Double(opaqueCoverage(column)), Double(opaqueCoverage(standard)) * 1.15,
+                                 "The cassette body must visibly enlarge in the lyric column at \(width)x\(height).")
+            let perimeter = (0..<width).map { $0 } + (0..<width).map { (height - 1) * width + $0 }
+                + (0..<height).map { $0 * width } + (0..<height).map { $0 * width + width - 1 }
+            XCTAssertTrue(perimeter.allSatisfy { column[$0 * 4 + 3] < 16 },
+                          "The cassette, both clock labels, spectrum and progress must leave clear screen edges.")
+            try saveEvidence(column, name: "cassette-column-\(width)")
+            var strong = frame
+            strong.spectrum = Array(repeating: 1, count: 64)
+            strong.rms = 1; strong.peak = 1
+            strong.bass = 1; strong.mid = 1; strong.treble = 1
+            strong.beat = 1; strong.bar = 1; strong.pace = 1
+            strong.vocal = 1; strong.drums = 1; strong.bassInstrument = 1; strong.other = 1
+            strong.loudness = 1; strong.density = 1
+            strong.sectionSeparation = 1; strong.sectionThickness = 1; strong.sectionDepth = 1
+            strong.sectionTransition = 1; strong.barPhase = 0.5
+            let strongColumn = try render(renderer, device: device, queue: queue, frame: strong,
+                                          backgroundOpacity: 0, columnPresentation: true)
+            XCTAssertTrue(perimeter.allSatisfy { strongColumn[$0 * 4 + 3] < 16 },
+                          "Strong spectrum peaks must remain inside the lyric column at \(width)x\(height).")
+            try saveEvidence(strongColumn, name: "cassette-column-strong-\(width)")
+        }
+    }
+
     func testCassetteHasThicknessFiniteNormalsAndOpenReelHoles() throws {
         let vertices = TapeMesh.makeVertices()
         XCTAssertGreaterThan(vertices.count, 1_000)
@@ -522,7 +563,8 @@ final class TapeSceneTests: XCTestCase {
     }
 
     private func render(_ renderer: TapeSceneRenderer, device: MTLDevice, queue: MTLCommandQueue,
-                        frame: VisualFrame, backgroundOpacity: Float = 1) throws -> [UInt8] {
+                        frame: VisualFrame, backgroundOpacity: Float = 1,
+                        columnPresentation: Bool = false) throws -> [UInt8] {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
         descriptor.storageMode = .private
         descriptor.usage = [.renderTarget, .shaderRead]
@@ -534,7 +576,7 @@ final class TapeSceneTests: XCTestCase {
         let buffer = try XCTUnwrap(device.makeBuffer(length: width * height * 4, options: .storageModeShared))
         let command = try XCTUnwrap(queue.makeCommandBuffer())
         try renderer.encode(command: command, target: scene, frame: frame, size: CGSize(width: width, height: height),
-                            backgroundOpacity: backgroundOpacity)
+                            backgroundOpacity: backgroundOpacity, columnPresentation: columnPresentation)
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = output
         pass.colorAttachments[0].loadAction = .clear

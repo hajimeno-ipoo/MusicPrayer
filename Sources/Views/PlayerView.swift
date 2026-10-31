@@ -41,12 +41,13 @@ struct PlayerView: View {
                         .accessibilityHidden(true)
                 }
                 ZStack {
-                    MetalVisualizerView(source: store.visualSource, backgroundOpacity: reduceTransparency ? 1 : 0)
-                        .ignoresSafeArea()
+                    PlayerVisualizerRegion(source: store.visualSource, display: contentDisplay,
+                                           size: geometry.size, headerHeight: headerHeight,
+                                           backgroundOpacity: reduceTransparency ? 1 : 0)
                     if contentDisplay.showsArtwork && presentation.usesArtworkColumn {
                         Group {
                             if store.isAppleMusicActive {
-                                appleMusicArtwork
+                                appleMusicArtwork()
                             } else if let image = presentation.localArtwork {
                                 Image(nsImage: image).resizable().scaledToFill()
                                     .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -62,7 +63,7 @@ struct PlayerView: View {
                     }
                     if contentDisplay.showsLyrics {
                         PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont,
-                                          showsArtwork: contentDisplay.showsArtwork)
+                                          display: contentDisplay)
                             .environment(\.colorScheme, .dark)
                     }
                     VStack(spacing: 0) {
@@ -335,23 +336,35 @@ struct PlayerView: View {
         HStack(alignment: .bottom, spacing: 16) {
             if store.isAppleMusicActive {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(appleMusicTitle)
-                        .font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
-                    if !appleMusicArtist.isEmpty {
-                        Text(appleMusicArtist).font(.system(size: 15)).foregroundStyle(.white.opacity(0.8))
+                    HStack(spacing: 18) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(appleMusicTitle)
+                                .font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
+                            if !appleMusicArtist.isEmpty {
+                                Text(appleMusicArtist).font(.system(size: 15)).foregroundStyle(.white.opacity(0.8))
+                            }
+                        }
+                        if contentDisplay.showsCompactArtwork {
+                            appleMusicArtwork(compact: true).frame(width: 60, height: 60)
+                        }
                     }
                     analysisInformation
                 }
                 Spacer(minLength: 20)
                 activityIndicators
             } else if let track = store.currentTrack {
-                if contentDisplay.showsArtwork && !lyricPresentation.usesArtworkColumn,
-                   let data = track.artwork, let image = NSImage(data: data) {
-                    Image(nsImage: image).resizable().scaledToFill().frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 10))
-                }
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(track.title).font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
-                    if !track.artist.isEmpty { Text(track.artist).font(.system(size: 13)).foregroundStyle(.white.opacity(0.65)) }
+                    HStack(spacing: 18) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(track.title).font(.system(size: 27, weight: .medium)).lineLimit(1).textSelection(.enabled)
+                            if !track.artist.isEmpty { Text(track.artist).font(.system(size: 13)).foregroundStyle(.white.opacity(0.65)) }
+                        }
+                        if contentDisplay.showsCompactArtwork, let image = lyricPresentation.localArtwork {
+                            Image(nsImage: image).resizable().scaledToFill()
+                                .frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 10))
+                                .accessibilityLabel("曲のカバーアート")
+                        }
+                    }
                     analysisInformation
                 }
                 Spacer(minLength: 20)
@@ -402,16 +415,16 @@ struct PlayerView: View {
         return store.appleMusic.playback.artworkURL
     }
 
-    private var appleMusicArtwork: some View {
+    private func appleMusicArtwork(compact: Bool = false) -> some View {
         AsyncImage(url: appleMusicArtworkURL.flatMap(URL.init(string:))) { image in
             image.resizable().scaledToFill()
         } placeholder: {
             ZStack {
-                RoundedRectangle(cornerRadius: 18).fill(.white.opacity(0.07))
-                Image(systemName: "music.note").font(.system(size: 72, weight: .light)).foregroundStyle(.white.opacity(0.5))
+                RoundedRectangle(cornerRadius: compact ? 10 : 18).fill(.white.opacity(0.07))
+                Image(systemName: "music.note").font(.system(size: compact ? 24 : 72, weight: .light)).foregroundStyle(.white.opacity(0.5))
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .clipShape(RoundedRectangle(cornerRadius: compact ? 10 : 18))
         .accessibilityLabel("Apple Musicのジャケット")
     }
 
@@ -589,25 +602,53 @@ struct PlayerView: View {
     }
 }
 
+/// Lyrics-only mode gives the visualizer its own left column above the controls.
+struct PlayerVisualizerRegion: View {
+    let source: VisualFrameSource
+    let display: PlayerContentDisplay
+    let size: CGSize
+    let headerHeight: CGFloat
+    let backgroundOpacity: Float
+
+    var body: some View {
+        if display.showsVisualizer {
+            if display == .lyricsOnly {
+                let left = size.width * 0.02
+                let right = size.width * 0.60
+                let top = headerHeight + 50
+                let bottom = size.height - 230
+                MetalVisualizerView(source: source, backgroundOpacity: backgroundOpacity, columnPresentation: true)
+                    .frame(width: max(0, right - left), height: max(0, bottom - top))
+                    .clipped()
+                    .position(x: (left + right) / 2, y: (top + bottom) / 2)
+            } else {
+                MetalVisualizerView(source: source, backgroundOpacity: backgroundOpacity)
+                    .ignoresSafeArea()
+            }
+        }
+    }
+}
+
 /// The artwork and lyric reading area sit above the unchanged bottom controls.
 struct PlayerLyricRegion: View {
     let store: PlayerStore
     let size: CGSize
     let headerHeight: CGFloat
     var font: LyricFont = .system
-    var showsArtwork = true
+    var display = PlayerContentDisplay.initial
 
     var body: some View {
         let presentation = PlayerLyricPresentation(store: store)
-        let usesArtworkColumn = showsArtwork && presentation.usesArtworkColumn
+        let usesLeadingColumn = display == .lyricsOnly || (display.showsArtwork && presentation.usesArtworkColumn)
         if presentation.hasLyrics {
-            let left = usesArtworkColumn
+            let left = display == .lyricsOnly ? size.width * 0.63 : usesLeadingColumn
                 ? max(size.width * 0.52, max(24, size.width * 0.05) + min(600, max(390, size.width * 0.43)) + 20)
                 : max(24, size.width * 0.12)
-            let right = size.width - max(24, size.width * (usesArtworkColumn ? 0.05 : 0.12))
+            let right = display == .lyricsOnly ? size.width * 0.97
+                : size.width - max(24, size.width * (usesLeadingColumn ? 0.05 : 0.12))
             let top = headerHeight + 50
             let bottom = size.height - 230
-            LyricMotionView(store: store, font: font, centersLyrics: !usesArtworkColumn)
+            LyricMotionView(store: store, font: font, centersLyrics: display == .lyricsOnly || !usesLeadingColumn)
                 .frame(width: max(0, right - left), height: max(0, bottom - top))
                 .position(x: (left + right) / 2, y: (top + bottom) / 2)
         } else {

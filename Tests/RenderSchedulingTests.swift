@@ -86,6 +86,8 @@ final class RenderSchedulingTests: XCTestCase {
             XCTAssertFalse(RenderInputs(frame: updated, size: size).matches(presented))
         }
         XCTAssertFalse(RenderInputs(frame: frame, size: CGSize(width: 641, height: 360)).matches(presented))
+        XCTAssertFalse(RenderInputs(frame: frame, size: size, columnPresentation: true).matches(presented),
+                       "歌詞との左右表示へ変えたときは、一時停止中も新しい倍率で描き直すこと")
     }
 
     func testWaterWaitsForGPUAndIgnoresOlderCompletion() {

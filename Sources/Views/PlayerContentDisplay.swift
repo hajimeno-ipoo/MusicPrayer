@@ -4,6 +4,8 @@ enum PlayerContentDisplay {
 
     var showsArtwork: Bool { self != .lyricsOnly && self != .visualizerOnly }
     var showsLyrics: Bool { self == .initial || self == .artworkAndLyrics || self == .lyricsOnly }
+    var showsVisualizer: Bool { self == .lyricsOnly || self == .visualizerOnly }
+    var showsCompactArtwork: Bool { self == .lyricsOnly || self == .visualizerOnly }
 
     var next: Self {
         switch self {
