@@ -6,8 +6,8 @@ final class PlayerContentDisplayTests: XCTestCase {
         var display = PlayerContentDisplay.initial
         XCTAssertTrue(display.showsArtwork)
         XCTAssertTrue(display.showsLyrics)
-        let expected = [(true, false), (true, true), (false, false),
-                        (true, false), (true, true), (false, false)]
+        let expected = [(true, false), (true, true), (false, true), (false, false),
+                        (true, false), (true, true), (false, true), (false, false)]
         for (artwork, lyrics) in expected {
             display = display.next
             XCTAssertEqual(display.showsArtwork, artwork)

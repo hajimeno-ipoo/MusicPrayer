@@ -185,7 +185,7 @@ private struct LyricEstimatedProgressAttribute: TextAttribute {
 private struct LyricTextRenderer: TextRenderer {
     var time: Double
     var estimatedProgress: Double?
-    private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
+    var highlightColour: Color
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
@@ -203,7 +203,7 @@ private struct LyricTextRenderer: TextRenderer {
                     if emphasis > 0 {
                         var highlight = context
                         highlight.opacity *= emphasis
-                        highlight.addFilter(.colorMultiply(cyan))
+                        highlight.addFilter(.colorMultiply(highlightColour))
                         highlight.draw(slice)
                     }
                 }
@@ -270,7 +270,7 @@ struct LyricMotionLineView: View {
     var readings: [LyricReading] = []
     var columnStyle = false
     var centersColumnText = false
-    private let cyan = Color(red: 0.24, green: 0.87, blue: 1)
+    @Environment(\.lyricHighlightColour) private var highlightColour
 
     private func lyricText(size: CGFloat, breakOffset: Int? = nil) -> Text {
         let total = max(1, line.text.reduce(0.0) { $0 + LyricParser.characterWeight($1) })
@@ -304,7 +304,8 @@ struct LyricMotionLineView: View {
             .lineSpacing(6)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: columnStyle && !centersColumnText ? .leading : .center)
-            .textRenderer(LyricTextRenderer(time: time, estimatedProgress: estimatedProgress))
+            .textRenderer(LyricTextRenderer(time: time, estimatedProgress: estimatedProgress,
+                                           highlightColour: highlightColour.color))
             .accessibilityHidden(true)
     }
 
@@ -333,7 +334,7 @@ struct LyricMotionLineView: View {
             }
         }
         .frame(width: viewport.width, height: viewport.height)
-        .shadow(color: cyan.opacity(motion.glowOpacity), radius: motion.glowRadius)
+        .shadow(color: highlightColour.color.opacity(motion.glowOpacity), radius: motion.glowRadius)
         .blur(radius: motion.blur)
         .scaleEffect(motion.scale)
         .offset(x: motion.x, y: motion.y)
@@ -402,7 +403,7 @@ struct LyricMotionView: View {
                             TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !store.isPlaying)) { _ in
                                 TimedLyricReadingView(lines: lyrics.lines, time: store.position, viewport: viewport,
                                     font: font, readings: lyrics.readings, analysis: store.analysis,
-                                    usesEstimatedProgress: true, onSeek: store.seek)
+                                    usesEstimatedProgress: true, centersLyrics: centersLyrics, onSeek: store.seek)
                             }
                             .id(lyrics.songID)
                         }

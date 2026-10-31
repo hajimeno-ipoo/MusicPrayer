@@ -8,7 +8,7 @@ struct LyricReading: Codable, Sendable, Equatable {
 }
 
 struct LyricReadings: Codable, Sendable, Equatable {
-    static let currentVersion = "rubifont-0.6.23-1"
+    static let currentVersion = "rubifont-0.6.23-morphology-1"
     var version = currentVersion
     var sourceTextHash: String
     /// An empty array is a completed selection with no font override.
@@ -68,13 +68,15 @@ actor LyricReadingResolver {
         var selected: [String: [LyricReading]] = [:]
         for text in lines where selected[text] == nil {
             try Task.checkCancellation()
-            selected[text] = select(in: text, lists: lists!)
+            selected[text] = try select(in: text, lists: lists!)
         }
         return LyricReadings(sourceTextHash: LyricHash.text(sourceText), lines: selected)
     }
 
-    private func select(in text: String, lists: ReadingLists) -> [LyricReading] {
+    private func select(in text: String, lists: ReadingLists) throws -> [LyricReading] {
         var result: [LyricReading] = []
+        // Pair matches, including an ambiguous/default pair, take precedence over OS guesses.
+        var protectedRanges: [Range<Int>] = []
         for match in runs.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
             guard let range = Range(match.range, in: text) else { continue }
             let run = String(text[range])
@@ -87,8 +89,10 @@ actor LyricReadingResolver {
                     else { suffixes[ending] = reading }
                 }
             }
-            guard let suffix = suffixes.keys.filter({ after.hasPrefix($0) }).max(by: { $0.utf16.count < $1.utf16.count }),
-                  let reading = suffixes[suffix], !reading.isEmpty else { continue }
+            guard let suffix = suffixes.keys.filter({ after.hasPrefix($0) }).max(by: { $0.utf16.count < $1.utf16.count }) else { continue }
+            let start = text.distance(from: text.startIndex, to: range.lowerBound)
+            protectedRanges.append(start..<(start + run.count))
+            guard let reading = suffixes[suffix], !reading.isEmpty else { continue }
             let candidates: [String]?
             if run.count > 1 {
                 candidates = lists.words[run]?.map { notation in
@@ -108,7 +112,73 @@ actor LyricReadingResolver {
                 reading.start < override.start + override.count && override.start < reading.start + reading.count
             }
         }
-        return (result + contextual).sorted { $0.start < $1.start }
+        let explicit = result + contextual
+        protectedRanges += contextual.map { $0.start..<($0.start + $0.count) }
+        let inferred = try selectMorphology(in: text, lists: lists, protectedRanges: protectedRanges)
+        return (explicit + inferred).sorted { $0.start < $1.start }
+    }
+
+    private func selectMorphology(in text: String, lists: ReadingLists, protectedRanges: [Range<Int>]) throws -> [LyricReading] {
+        let characters = Array(text)
+        var selected: [LyricReading] = []
+        for token in try LyricMorphology.tokens(in: text) {
+            try Task.checkCancellation()
+            let word = Array(token.text)
+            // A bare spelling supplies no extra context; retain the font's ordinary reading.
+            // Evaluate this per line so preparing a whole source and its display lines agrees.
+            if word.allSatisfy({ $0.unicodeScalars.allSatisfy(LyricMorphology.isHan) }) {
+                var lower = token.start
+                var upper = token.start + word.count
+                while lower > 0 && !characters[lower - 1].isNewline { lower -= 1 }
+                while upper < characters.count && !characters[upper].isNewline { upper += 1 }
+                if String(characters[lower..<upper]).trimmingCharacters(in: .whitespaces) == token.text { continue }
+            }
+            var parts: [LyricReadingAlignment.Part] = []
+            var at = 0
+            var supported = true
+            while at < word.count {
+                let start = at
+                if word[at].unicodeScalars.allSatisfy(LyricMorphology.isHan) {
+                    while at < word.count && word[at].unicodeScalars.allSatisfy(LyricMorphology.isHan) { at += 1 }
+                    let run = String(word[start..<at])
+                    let choices: [(reading: String, salt: Int)]
+                    if at - start == 1 {
+                        choices = (lists.kanji[run] ?? []).prefix(15).enumerated().map {
+                            ($0.element, lists.lone[run] == $0.element ? 0 : $0.offset + 1)
+                        }
+                    } else {
+                        // A registered whole word already has a deliberate default. The correspondence
+                        // tables may choose an alternate; OS guesses do not replace that default.
+                        guard let notation = lists.words[run]?.first else { supported = false; break }
+                        let reading = ruby.matches(in: notation, range: NSRange(notation.startIndex..., in: notation)).compactMap {
+                            Range($0.range(at: 1), in: notation).map { String(notation[$0]) }
+                        }.joined()
+                        choices = reading.isEmpty ? [] : [(reading, 0)]
+                    }
+                    guard !choices.isEmpty else { supported = false; break }
+                    parts.append(.init(start: token.start + start, count: at - start, choices: choices))
+                } else {
+                    let kana = String(word[at]).applyingTransform(.hiraganaToKatakana, reverse: true) ?? String(word[at])
+                    guard kana.unicodeScalars.allSatisfy({ (0x3041...0x3096).contains($0.value) }) else { supported = false; break }
+                    parts.append(.init(start: token.start + at, count: 1, choices: [(kana, 0)]))
+                    at += 1
+                }
+            }
+            guard supported, let aligned = LyricReadingAlignment.match(reading: token.reading, parts: parts) else { continue }
+            for reading in aligned {
+                let range = reading.start..<(reading.start + reading.count)
+                guard !protectedRanges.contains(where: { $0.overlaps(range) }) else { continue }
+                // salt_first can clear a later override within a continuous Han run. Do not save
+                // a per-character guess that this font cannot display independently.
+                let beforeIsHan = range.lowerBound > 0 && characters[range.lowerBound - 1].unicodeScalars.allSatisfy(LyricMorphology.isHan)
+                let afterIsHan = range.upperBound < characters.count && characters[range.upperBound].unicodeScalars.allSatisfy(LyricMorphology.isHan)
+                let besideNumber = (range.lowerBound > 0 && characters[range.lowerBound - 1].isNumber)
+                    || (range.upperBound < characters.count && characters[range.upperBound].isNumber)
+                guard !beforeIsHan && !afterIsHan && !besideNumber else { continue }
+                selected.append(reading)
+            }
+        }
+        return selected
     }
 
     private func selectContexts(in text: String) -> [LyricReading] {

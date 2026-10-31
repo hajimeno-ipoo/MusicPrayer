@@ -105,7 +105,7 @@ final class LyricMotionTests: XCTestCase {
                        "赤く染めた砂遥か越えて行く", "胸の糸激しく掻き鳴らして", "手のひらの記憶遥か",
                        "やわらかな額に残された", "Prototype boy 心奪われてく",
                        "来ぬ人の嘆きに星は落ちて", "消さないで灯火", "shelter",
-                       "乱す風に負けぬ様に", "欲しいのは 抱き上げる手を 手を", "ずっと傍にいてあげるよ", "Prototype boy 明日の理想だけで"]
+                       "乱す風に負けぬ様に", "欲しいのは 抱き上げる手を 手を", "ずっと傍にいてあげるよ", "Prototype boy 明日の理想だけで", "傍で歌う", "静かな声", "抱き寄せた", "語り継がれる", "入る", "行った"]
         let plan = try await LyricReadingResolver().prepare(sourceText: sources.joined(separator: "\n"), lines: sources)
         let viewport = CGSize(width: 800, height: 160)
         for (index, source) in sources.enumerated() {
@@ -472,9 +472,10 @@ final class LyricMotionTests: XCTestCase {
         let artwork = try XCTUnwrap(NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?.tiffRepresentation)
         for height in [800.0, 850.0, 1000.0] {
             let size = CGSize(width: 1000, height: height)
-            for hasArtwork in [false, true] {
+            for (hasArtwork, showsArtwork) in [(false, true), (true, true), (true, false)] {
                 store.tracks[0].artwork = hasArtwork ? artwork : nil
-                let hosting = NSHostingView(rootView: PlayerLyricRegion(store: store, size: size, headerHeight: 58)
+                let hosting = NSHostingView(rootView: PlayerLyricRegion(store: store, size: size, headerHeight: 58,
+                                                                        showsArtwork: showsArtwork)
                     .frame(width: size.width, height: size.height))
                 let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
                                       styleMask: [.titled], backing: .buffered, defer: false)
@@ -485,10 +486,10 @@ final class LyricMotionTests: XCTestCase {
                 let frame = hosting.convert(scroll.bounds, from: scroll)
                 XCTAssertGreaterThan(frame.minY, 58, "歌詞欄をヘッダーの下へ置くこと")
                 XCTAssertLessThan(frame.maxY, height - 200, "歌詞欄を下部の操作領域へ重ねないこと")
-                if hasArtwork {
+                if hasArtwork && showsArtwork {
                     XCTAssertGreaterThan(frame.minX, size.width * 0.5, "カバーがある曲では右の歌詞欄を使うこと")
                 } else {
-                    XCTAssertGreaterThan(frame.width, size.width * 0.7, "カバーなしでも広い歌詞欄を使うこと")
+                    XCTAssertGreaterThan(frame.width, size.width * 0.7, "カバーなし・歌詞のみでは広い歌詞欄を使うこと")
                     XCTAssertEqual(frame.midX, size.width / 2, accuracy: 1)
                 }
                 window.close()

@@ -9,6 +9,7 @@ struct PlayerView: View {
     @Environment(\.colorScheme) private var glassColorScheme
     @AppStorage("musicPrayer.appearance") private var appearance: PlayerAppearance = .system
     @AppStorage(LyricFont.preferenceKey) private var lyricFont = LyricFont.system
+    @AppStorage(LyricHighlightColour.preferenceKey) private var lyricHighlightColour = LyricHighlightColour.cyan
     @State private var showQueue = false
     @State private var showQueueAfterSearch = false
     @State private var showAnalysis = false
@@ -60,7 +61,8 @@ struct PlayerView: View {
                                       y: headerHeight + 108 + lyricArtworkSize / 2)
                     }
                     if contentDisplay.showsLyrics {
-                        PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont)
+                        PlayerLyricRegion(store: store, size: geometry.size, headerHeight: headerHeight, font: lyricFont,
+                                          showsArtwork: contentDisplay.showsArtwork)
                             .environment(\.colorScheme, .dark)
                     }
                     VStack(spacing: 0) {
@@ -139,6 +141,7 @@ struct PlayerView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 800)
+        .environment(\.lyricHighlightColour, lyricHighlightColour)
         .allowsHitTesting(!store.isAppleMusicSearchVisible)
         .accessibilityHidden(store.isAppleMusicSearchVisible)
         // macOS sheets are opaque; keep search in the window so glass can sample the player.
@@ -240,6 +243,19 @@ struct PlayerView: View {
                             Text(font.title).tag(font)
                         }
                     }.pickerStyle(.inline)
+                    Divider()
+                    Menu("歌詞の変化色") {
+                        Picker("歌詞の変化色", selection: $lyricHighlightColour) {
+                            ForEach(LyricHighlightColour.allCases) { colour in
+                                Label {
+                                    Text(colour.title)
+                                } icon: {
+                                    Image(nsImage: colour.menuImage)
+                                        .renderingMode(.original)
+                                }.tag(colour)
+                            }
+                        }.pickerStyle(.inline)
+                    }
                 } label: {
                     Image(systemName: "textformat")
                         .foregroundStyle(.primary)
@@ -248,8 +264,8 @@ struct PlayerView: View {
                 .environment(\.colorScheme, glassColorScheme)
                 .menuStyle(.borderlessButton)
                 .tint(.primary)
-                .accessibilityLabel("歌詞フォント：\(lyricFont.title)")
-                .help("歌詞フォントを選びます")
+                .accessibilityLabel("歌詞の表示設定：\(lyricFont.title)、変化色：\(lyricHighlightColour.title)")
+                .help("歌詞フォントと変化色を選びます")
                 Menu {
                     Picker("ビジュアライザー", selection: $store.visualizerStyle) {
                         ForEach(VisualizerStyle.allCases) { style in
@@ -579,17 +595,19 @@ struct PlayerLyricRegion: View {
     let size: CGSize
     let headerHeight: CGFloat
     var font: LyricFont = .system
+    var showsArtwork = true
 
     var body: some View {
         let presentation = PlayerLyricPresentation(store: store)
+        let usesArtworkColumn = showsArtwork && presentation.usesArtworkColumn
         if presentation.hasLyrics {
-            let left = presentation.usesArtworkColumn
+            let left = usesArtworkColumn
                 ? max(size.width * 0.52, max(24, size.width * 0.05) + min(600, max(390, size.width * 0.43)) + 20)
                 : max(24, size.width * 0.12)
-            let right = size.width - max(24, size.width * (presentation.usesArtworkColumn ? 0.05 : 0.12))
+            let right = size.width - max(24, size.width * (usesArtworkColumn ? 0.05 : 0.12))
             let top = headerHeight + 50
             let bottom = size.height - 230
-            LyricMotionView(store: store, font: font, centersLyrics: !presentation.usesArtworkColumn)
+            LyricMotionView(store: store, font: font, centersLyrics: !usesArtworkColumn)
                 .frame(width: max(0, right - left), height: max(0, bottom - top))
                 .position(x: (left + right) / 2, y: (top + bottom) / 2)
         } else {
