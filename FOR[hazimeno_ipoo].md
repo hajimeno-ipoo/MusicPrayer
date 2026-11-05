@@ -1,5 +1,27 @@
 # Music Prayerの仕組み
 
+## Liquid Glass アイコン素材：ほどける音符（2026-11-05）
+
+`Design/AppIcon/MusicPrayer.icon` のデザインを、ディスクと再生マークから、利用者が選択した「A：ほどける音符」へ変更しました。青緑から青へ変わる八分音符の旗が、橙・ピンク・紫の帯としてほどける形です。通常表示は淡いラベンダー、ダーク表示は暗い紫の背景です。
+
+部品は `Assets/NoteBody.svg`（符頭と符幹）と `Ribbon.svg`（旗から先端まで続く帯）の2つです。すべて1024×1024の透明な共通キャンバスを使います。帯の色はSVG内の多段グラデーション、それ以外の背景・音符の色・屈折・反射・透け具合・影は `icon.json` が担当します。Icon Composerで2部品を個別に編集できます。
+
+初稿では帯を3つに分けて別々のガラスグループにしていたため、接続部分の縁取りと影が目立ちました。利用者の指摘を受け、帯は1つの連続した輪郭とグラデーションに変更しました。音符本体と帯も同じグループに入れ、`lighting: "combined"` で一体のガラスとして描いています。通常・ダーク・色付きの3種類で境界線が出ないことを画像で確認しました。
+
+compose-app-icon 2.0.1 のスキーマ検証・素材参照確認に成功しました。Icon Composer 27.2 の `ictool` で通常・ダーク・色付きのmacOSプレビューを描画し、3種類の出力画像を確認しました。画像は `Design/AppIcon/Previews/` に保存しています。以前の検証で `color-space-for-untagged-svg-colors: "srgb"` はスキーマ上有効でもこの環境の描画ツールが読み込めなかったため、任意設定は省略したままです。スキーマ検証に加えて実際の描画も確認するのが注意点です。
+
+利用者が修正版を確認し、設定を依頼したため、`script/build_and_run.sh` にアプリアイコンの組み込みを追加しました。`actool` で `.icon` をコンパイルして、アプリのResourcesへ `Assets.car` と `MusicPrayer.icns` を生成します。同時に出力する `.build/app-icon-info.plist` の設定をアプリの `Info.plist` へマージしてから署名します。これにより、今後のビルドでも手作業なしで同じアイコンが組み込まれます。
+
+`actool` の `--output-partial-info-plist` は必須です。省略すると警告だけで終了し、アイコンデータが生成されないことを確認しました。`.icon` をそのままコピーするだけではなく、コンパイル済みデータと参照設定の両方が必要です。
+
+`./script/build_and_run.sh --verify` によるReleaseビルド・署名・起動と、厳密な署名検証に成功しました。`assetutil` でベクターとレイヤーを含むアイコンデータを確認し、`NSWorkspace.icon(forFile:)` から取得した画像が修正版の音符であることも確認しました。初回のファイル用画像確認だけでは不十分で、利用者からDockとステージマネージャーが標準のグリッドアイコンのままだという指摘と画像を受け取りました。
+
+実行中プロセスを調べると、アプリのパス・`Bundle.main` のアイコン設定・`NSRunningApplication.icon`・AppKitの `applicationIconImage` はすべて正しい状態でした。登録の強制更新だけ、およびAppKitの標準アイコン復元だけでは実表示は変わりませんでした。`.app` 自体の更新日時が9月30日のままだったため、`touch` で更新日時を変更して再登録し、Dockを一度再起動しました。その後、利用者がDockとステージマネージャーの両方で音符の表示を確認しました。アプリ情報と更新日時、Dockの表示を別々に確認する必要があります。
+
+Appleの[Launch Services Concepts](https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/LaunchServicesConcepts/LSCConcepts/LSCConcepts.html)は、アプリ情報変更後に明示的な再登録、または更新日時の変更を行うよう案内しています。ビルドスクリプトには、署名後の `touch "$APP_BUNDLE"` を追加しました。既存の表示を読み直すために行ったDock再起動は、毎回のビルドには含めていません。実行中のアイコンを別画像で上書きするコードも追加していません。
+
+戻す場合はビルドスクリプトの `actool`・`PlistBuddy`・`touch` の追加を外し、生成済みアプリの `Assets.car`・`MusicPrayer.icns` を削除して再ビルドします。素材一式も取り除く場合は `Design/AppIcon/` とこの節を削除します。詳しい部品一覧と編集方法は `Design/AppIcon/README.md` に記載しています。
+
 ## 歌詞のみのカセット・都市を大きく描く（2026-10-31）
 
 左右の枠を広げるだけでは、カセットの固定カメラと都市の16:9構図に余白が残りました。`PlayerVisualizerRegion`からMetalへ`columnPresentation`を渡し、歌詞のみの左欄で使う3D描画を調整しています。カバー表示、ビジュアライザーのみの全面描画、リボンの描画内容、歌詞と下部操作部の配置は維持します。

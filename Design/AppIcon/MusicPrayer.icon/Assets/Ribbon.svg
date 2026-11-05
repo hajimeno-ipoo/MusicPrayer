@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+  <linearGradient id="ribbon" gradientUnits="userSpaceOnUse" x1="541" y1="270" x2="820" y2="550">
+    <stop offset="0" stop-color="#69EBDD"/>
+    <stop offset="0.24" stop-color="#FFC184"/>
+    <stop offset="0.50" stop-color="#ED7DA5"/>
+    <stop offset="0.78" stop-color="#A28CEB"/>
+    <stop offset="1" stop-color="#F3A1B4"/>
+  </linearGradient>
+</defs>
+<path d="M541 227 C581 247 620 249 673 263 C768 288 811 351 781 411 C761 449 718 470 674 488 C650 501 699 532 750 514 C802 505 840 458 846 394 C865 465 827 534 764 551 C702 570 627 539 615 489 C609 466 625 443 645 434 C687 414 722 393 716 366 C708 333 649 324 605 307 C574 295 554 275 541 254 Z" fill="url(#ribbon)"/>
+</svg>

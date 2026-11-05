@@ -12,6 +12,11 @@ BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 APP_BUNDLE="$ROOT_DIR/dist/$APP_NAME.app"
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+xcrun actool "$ROOT_DIR/Design/AppIcon/MusicPrayer.icon" \
+  --compile "$APP_BUNDLE/Contents/Resources" \
+  --platform macosx --minimum-deployment-target 27.0 \
+  --output-partial-info-plist "$ROOT_DIR/.build/app-icon-info.plist" \
+  --app-icon "$APP_NAME" --output-format human-readable-text
 cp "$BIN_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 if [[ -d "$BIN_DIR/MusicPrayer_MusicPrayer.bundle" ]]; then
   /usr/bin/ditto "$BIN_DIR/MusicPrayer_MusicPrayer.bundle" "$APP_BUNDLE/Contents/Resources/MusicPrayer_MusicPrayer.bundle"
@@ -38,7 +43,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 </dict></array>
 </dict></plist>
 PLIST
+/usr/libexec/PlistBuddy -c "Merge '$ROOT_DIR/.build/app-icon-info.plist'" "$APP_BUNDLE/Contents/Info.plist"
 codesign --force --deep --sign - "$APP_BUNDLE"
+touch "$APP_BUNDLE"
 case "$MODE" in
   run) /usr/bin/open -n "$APP_BUNDLE" ;;
   --verify) /usr/bin/open -n "$APP_BUNDLE"; sleep 1; pgrep -x "$APP_NAME" >/dev/null ;;

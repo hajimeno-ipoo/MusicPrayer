@@ -1,0 +1,102 @@
+{
+  "features": [
+    "refractivity",
+    "specular-location"
+  ],
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.96,0.96,0.99,1",
+          "srgb:0.82,0.86,0.94,1"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.15,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.85,
+            "y": 1
+          }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "srgb:0.07,0.08,0.14,1",
+          "srgb:0.14,0.10,0.20,1"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.15,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.85,
+            "y": 1
+          }
+        }
+      }
+    },
+    {
+      "appearance": "tinted",
+      "value": "automatic"
+    }
+  ],
+  "groups": [
+    {
+      "blur-material": 0.08,
+      "layers": [
+        {
+          "fill": {
+            "linear-gradient": [
+              "srgb:0.41,0.94,0.88,1",
+              "srgb:0.13,0.47,0.85,1"
+            ],
+            "orientation": {
+              "start": {
+                "x": 0.15,
+                "y": 0
+              },
+              "stop": {
+                "x": 0.85,
+                "y": 1
+              }
+            }
+          },
+          "glass": true,
+          "image-name": "NoteBody.svg",
+          "name": "厚いガラスの音符"
+        },
+        {
+          "glass": true,
+          "image-name": "Ribbon.svg",
+          "name": "旗から先端まで続く帯"
+        }
+      ],
+      "lighting": "combined",
+      "name": "音符と帯の一体ガラス",
+      "refractivity": {
+        "depth": 0.72,
+        "enabled": true,
+        "strength": 0.6
+      },
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.24
+      },
+      "specular": true,
+      "specular-highlight-placement": "inside",
+      "translucency": {
+        "enabled": true,
+        "value": 0.23
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}
