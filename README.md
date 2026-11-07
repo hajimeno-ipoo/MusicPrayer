@@ -102,7 +102,7 @@ Apple Musicが歌詞の未配信を明示した曲は「解析済み・歌詞な
 
 ### 歌詞フォント
 
-右上の歌詞フォントメニューで「システムフォント」「Furifont Sans VF」「Rubifont Sans VF」を切り替えられます。選択は保存され、ローカル曲とApple Musicの歌詞に共通で使われます。Rubifont Sans VF 0.6.23は、日本語の読みと、収録された英単語のカタカナ読みを表示します。
+右上の歌詞フォントメニューで「システムフォント」「Furifont Sans VF」「Rubifont Sans VF」を切り替えられます。選択は保存され、ローカル曲とApple Musicの歌詞に共通で使われます。Rubifont Sans VF 0.7.0は、日本語の読みと、収録された英単語のカタカナ読みを表示します。
 
 Rubifontでは、歌詞の解析・準備中に送り仮名と文脈の対応表を照合し、さらにmacOS標準の単語分割と読み推定で不足箇所を補います。「傍で」の「そば」、「抱き寄せた」の「だ」、「行った」の「い」などを、フォントにある候補へ一意に対応できた場合に選んで保存します。これまで指定した読みを優先するため、「あの娘＝あのこ」や「来ぬ＝こぬ」は標準辞書の別の読みで上書きしません。再生中は保存結果を使い、読みの解析は行いません。既存の解析に読み指定がない場合や辞書の版が古い場合は、有効な歌詞時刻を再利用して読み指定を更新します。「あの娘」は「あのこ」、「1つ・１つ」は「ひとつ」、「2人・２人」は「ふたり」を選びます。「街と人が」の「人＝ひと」、「想い出を」の「出＝で」にも対応します。「2つ・２つ＝ふたつ」「不満の声＝ふまんのこえ」「金のハンドル＝きんのハンドル」も対応表で選びます。「胸の鼓動焼きつけろ」「あの時感じた」と、AHの「アー」は同梱フォントの辞書を更新しています。本文と文字時刻は変更しません。
 
@@ -151,9 +151,9 @@ Apple Musicの検索・再生・歌詞取得は公式サイトの構成に依存
 
 ## 同梱フォントのライセンス
 
-Rubifont Sans VF 0.6.23は、添付の配布フォルダから未改変で同梱しています。フォント・日本語の読み規則のライセンス原文と出典、英語一覧・日本語追加辞書のCC0 1.0通知は [Rubifont-LICENSES.txt](Sources/Resources/Fonts/Rubifont-LICENSES.txt) に収録しています。「Music Prayer」→「フォントのライセンス…」の画面上部で「Rubifont Sans VF」を選ぶと読めます。
+Rubifont Sans VF 0.7.0は、Rubifontプロジェクトの生成物を未改変で同梱しています。フォント・日本語の読み規則のライセンス原文と出典、英語一覧・日本語追加辞書のCC0 1.0通知は [Rubifont-LICENSES.txt](Sources/Resources/Fonts/Rubifont-LICENSES.txt) に収録しています。「Music Prayer」→「フォントのライセンス…」の画面上部で「Rubifont Sans VF」を選ぶと読めます。
 
-歌詞表示の切り替え用に、[Furifont](https://furifont.antfu.me/)（Anthony Fu and contributors）の **Furifont Sans VF v0.6.2** を未改変で同梱しています。フォントは Adobe の Source Han Sans JP を基にした **SIL Open Font License 1.1** の配布物です。アプリへの同梱・再配布・商用利用は認められていますが、著作権表示とライセンスを保持する必要があり、フォント単体での販売はできません。フォント自体を改変する場合は、予約されたフォント名などの条件も確認してください。
+歌詞表示の切り替え用に、[Furifont](https://furifont.antfu.me/)（Anthony Fu and contributors）の **Furifont Sans VF v0.7.0** を未改変で同梱しています。フォントは Adobe の Source Han Sans JP を基にした **SIL Open Font License 1.1** の配布物です。アプリへの同梱・再配布・商用利用は認められていますが、著作権表示とライセンスを保持する必要があり、フォント単体での販売はできません。フォント自体を改変する場合は、予約されたフォント名などの条件も確認してください。
 
 フォント内の辞書由来の読み規則には **CC BY-SA 4.0**、Tatoeba 由来の資料には **CC BY 2.0 France** の通知があります。JMdict・JMnedict・KANJIDIC2（EDRDG）、JmdictFurigana、yomitan-jlpt-vocab、Tatoeba などの出典を、公式配布の通知のまま保持しています。上流のビルド用コードのMITライセンスを、フォントのライセンスとして扱いません。
 
